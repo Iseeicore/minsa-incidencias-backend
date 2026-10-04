@@ -1,0 +1,16 @@
+export const JSON_BODY_LIMIT = "100kb";
+export const CORS_MAX_AGE_SECONDS = 600;
+export const CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+export const CORS_ALLOWED_HEADERS = ["Content-Type"];
+export const CORS_EXPOSED_HEADERS = ["Retry-After", "RateLimit-Limit", "RateLimit-Remaining"];
+export const HEALTH_PATH = "/salud";
+export const HEALTH_READY_PATH = "/salud/listo";
+export const MIN_SECRET_LENGTH = 32;
+export const MAX_EMAIL_LENGTH = 254;
+export const RATE_LIMIT_SWEEP_INTERVAL_MS = 60_000;
+export const RATE_LIMIT_MAX_KEYS = 100_000;
+export const DB_POOL_MAX = 10;
+export const DB_IDLE_TIMEOUT_MS = 30_000;
+export const DB_CONNECTION_TIMEOUT_MS = 5_000;
+export const DB_STATEMENT_TIMEOUT_MS = 15_000;
+export const SHUTDOWN_TIMEOUT_MS = 10_000;

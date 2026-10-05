@@ -154,6 +154,9 @@ El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así
 | `RATE_LIMIT_LOGIN_CAPACITY` | `5` | Intentos de login por ventana y **por correo** |
 | `SESSION_IDLE_MINUTES` | `30` | Minutos sin actividad tras los cuales la sesión deja de servir |
 | `SESSION_ABSOLUTE_HOURS` | `8` | Horas máximas de una sesión, aunque haya actividad |
+| `PLAZO_ATENCION_DIAS` | `3` | Días que tiene un caso para atenderse, contados **desde que llega**. Pasado el plazo, el caso se archiva solo |
+| `VIGENCIA_RESOLUCION_DIAS` | `3` | Días que dura una resolución antes de archivarse sola, contados **desde que se resuelve** |
+| `PLAZO_AVISO_HORAS` | `24` | Horas antes de vencer el plazo de atención desde las que un caso cuenta como "por vencer" |
 | `HOST_PORT` | `3033` | Solo Docker: puerto publicado en el servidor |
 
 Una variable inválida o ausente detiene el arranque con el detalle de lo que falló (validación con `zod` en `src/config/env.ts`).

@@ -49,6 +49,9 @@ const schema = z.object({
   RATE_LIMIT_LOGIN_CAPACITY: positiveInt.default(5),
   SESSION_IDLE_MINUTES: positiveInt.default(30),
   SESSION_ABSOLUTE_HOURS: positiveInt.default(8),
+  PLAZO_ATENCION_DIAS: positiveInt.default(3),
+  VIGENCIA_RESOLUCION_DIAS: positiveInt.default(3),
+  PLAZO_AVISO_HORAS: positiveInt.default(24),
 });
 
 export type Env = z.infer<typeof schema>;

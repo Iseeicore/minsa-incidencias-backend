@@ -52,6 +52,26 @@ describe("loadEnv", () => {
     },
   );
 
+  it("los plazos por defecto son 3 días de atención, 3 de vigencia y 24 horas de aviso", () => {
+    const env = loadEnv(base);
+    expect(env.PLAZO_ATENCION_DIAS).toBe(3);
+    expect(env.VIGENCIA_RESOLUCION_DIAS).toBe(3);
+    expect(env.PLAZO_AVISO_HORAS).toBe(24);
+  });
+
+  it("los plazos se pueden cambiar por variable de entorno", () => {
+    const env = loadEnv({ ...base, PLAZO_ATENCION_DIAS: "5", VIGENCIA_RESOLUCION_DIAS: "7", PLAZO_AVISO_HORAS: "48" });
+    expect(env.PLAZO_ATENCION_DIAS).toBe(5);
+    expect(env.VIGENCIA_RESOLUCION_DIAS).toBe(7);
+    expect(env.PLAZO_AVISO_HORAS).toBe(48);
+  });
+
+  it.each(["0", "-1", "abc", "1.5"])("rechaza un plazo que no es un entero positivo: %s", (valor) => {
+    expect(() => loadEnv({ ...base, PLAZO_ATENCION_DIAS: valor })).toThrow();
+    expect(() => loadEnv({ ...base, VIGENCIA_RESOLUCION_DIAS: valor })).toThrow();
+    expect(() => loadEnv({ ...base, PLAZO_AVISO_HORAS: valor })).toThrow();
+  });
+
   it("rechaza una capacidad que no es un entero positivo", () => {
     expect(() => loadEnv({ ...base, RATE_LIMIT_ANON_CAPACITY: "0" })).toThrow();
     expect(() => loadEnv({ ...base, RATE_LIMIT_AUTH_CAPACITY: "abc" })).toThrow();

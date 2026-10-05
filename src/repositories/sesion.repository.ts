@@ -5,7 +5,7 @@ export interface SesionConUsuario {
   usuarioId: string;
   correo: string;
   nombreCompleto: string;
-  modulos: string[];
+  roles: string[];
   debeTocar: boolean;
 }
 
@@ -26,8 +26,8 @@ export class SesionRepository {
 
   /**
    * Devuelve la sesión solo si sigue abierta (no revocada, dentro de su vigencia absoluta y de la
-   * inactividad permitida) y su usuario está activo, junto con los módulos que abren los roles del
-   * usuario. Todo en una consulta y con el reloj de la base.
+   * inactividad permitida) y su usuario está activo, junto con los roles activos del usuario. Todo en
+   * una consulta y con el reloj de la base. Un rol desactivado no cuenta.
    */
   async buscarVigente(
     sesionId: string,
@@ -40,14 +40,12 @@ export class SesionRepository {
               u.correo,
               u.nombre_completo AS "nombreCompleto",
               ARRAY(
-                SELECT DISTINCT m.codigo
+                SELECT DISTINCT r.codigo
                   FROM gestion.usuario_rol ur
                   JOIN gestion.rol r ON r.id = ur.rol_id AND r.activo
-                  JOIN gestion.rol_modulo rm ON rm.rol_id = r.id
-                  JOIN gestion.modulo m ON m.id = rm.modulo_id AND m.activo
                  WHERE ur.usuario_interno_id = u.id
-                 ORDER BY m.codigo
-              ) AS modulos,
+                 ORDER BY r.codigo
+              ) AS roles,
               (now() - s.ultima_actividad_en) > make_interval(secs => $3) AS "debeTocar"
          FROM gestion.sesion_usuario s
          JOIN gestion.usuario_interno u ON u.id = s.usuario_interno_id

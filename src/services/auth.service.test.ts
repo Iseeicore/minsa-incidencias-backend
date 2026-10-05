@@ -81,7 +81,7 @@ describe("AuthService.resolverSesion", () => {
     usuarioId: "u-1",
     correo: "ana@minsa.gob.pe",
     nombreCompleto: "Ana Prueba",
-    modulos: ["INCIDENCIAS", "MODULO_INVENTADO", "REVISION"],
+    roles: ["GESTOR"],
     debeTocar: false,
   };
 
@@ -89,12 +89,29 @@ describe("AuthService.resolverSesion", () => {
     expect(await build(ANA, null).service.resolverSesion("s-1")).toBeNull();
   });
 
-  it("devuelve la sesión sin módulos desconocidos y sin tocar la actividad si es reciente", async () => {
+  it("devuelve las vistas de los roles y no toca la actividad si es reciente", async () => {
     const { service, sesiones } = build(ANA, vigente);
     const sesion = await service.resolverSesion("s-1");
-    expect(sesion?.modulos).toEqual(["INCIDENCIAS", "REVISION"]);
+    expect(sesion?.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
     expect(sesiones.buscarVigente).toHaveBeenCalledWith("s-1", 30, 60);
     expect(sesiones.tocarActividad).not.toHaveBeenCalled();
+  });
+
+  it("no expone los roles en la sesión que viaja por la petición", async () => {
+    const sesion = await build(ANA, vigente).service.resolverSesion("s-1");
+    expect(Object.keys(sesion ?? {}).sort()).toEqual(["correo", "nombreCompleto", "sesionId", "usuarioId", "vistas"]);
+  });
+
+  it("ignora los roles que no conoce, incluido el revisor retirado", async () => {
+    const { service } = build(ANA, { ...vigente, roles: ["REVISOR", "ROL_INVENTADO"] });
+    expect((await service.resolverSesion("s-1"))?.vistas).toEqual([]);
+  });
+
+  it("una persona sin ningún rol activo tiene sesión válida y ninguna vista", async () => {
+    const { service } = build(ANA, { ...vigente, roles: [] });
+    const sesion = await service.resolverSesion("s-1");
+    expect(sesion).not.toBeNull();
+    expect(sesion?.vistas).toEqual([]);
   });
 
   it("renueva la actividad cuando pasó el intervalo", async () => {
@@ -107,7 +124,7 @@ describe("AuthService.resolverSesion", () => {
 describe("AuthService.cerrarSesion", () => {
   it("revoca la sesión con el actor de la persona", async () => {
     const { service, sesiones } = build();
-    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", modulos: [] });
+    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", vistas: [] });
     expect(sesiones.revocar).toHaveBeenCalledWith("usuario:ana@minsa.gob.pe", "s-1");
   });
 });

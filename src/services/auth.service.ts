@@ -2,11 +2,11 @@ import { SESSION_TOUCH_INTERVAL_SECONDS } from "@/constants/limits.js";
 import { actorUsuarioInterno } from "@/database/actor.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
 import { HttpStatus } from "@/enums/http-status.enum.js";
-import { ModuloCodigo } from "@/enums/modulo-codigo.enum.js";
 import { AppError } from "@/errors/app-error.js";
 import type { SesionRepository } from "@/repositories/sesion.repository.js";
 import type { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import type { PasswordHasher } from "@/utils/password-hasher.js";
+import { vistasDeRoles } from "@/utils/vistas-de-roles.js";
 import type { SesionActual } from "./auth.types.js";
 
 export interface AuthSettings {
@@ -15,7 +15,6 @@ export interface AuthSettings {
 }
 
 const CLAVE_FALSA = "clave-falsa-para-igualar-los-tiempos-de-respuesta";
-const MODULOS_CONOCIDOS = new Set<string>(Object.values(ModuloCodigo));
 
 export const normalizarCorreo = (correo: string): string => correo.trim().toLowerCase();
 
@@ -60,7 +59,7 @@ export class AuthService {
       usuarioId: fila.usuarioId,
       correo: fila.correo,
       nombreCompleto: fila.nombreCompleto,
-      modulos: fila.modulos.filter((codigo): codigo is ModuloCodigo => MODULOS_CONOCIDOS.has(codigo)),
+      vistas: vistasDeRoles(fila.roles),
     };
   }
 

@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import type { Env } from "@/config/env.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
 import { HttpStatus } from "@/enums/http-status.enum.js";
-import type { ModuloCodigo } from "@/enums/modulo-codigo.enum.js";
+import type { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { AppError } from "@/errors/app-error.js";
 import type { AuthService } from "@/services/auth.service.js";
 import { clearSessionCookie, readSessionId } from "@/utils/session-cookie.js";
@@ -43,13 +43,13 @@ export const requireSession: RequestHandler = (req, res, next) => {
   next(new AppError(HttpStatus.UNAUTHORIZED, code));
 };
 
-export function requireModulo(modulo: ModuloCodigo): RequestHandler {
+export function requireVista(vista: VistaCodigo): RequestHandler {
   return (req, res, next) => {
     if (!req.sesion) {
       requireSession(req, res, next);
       return;
     }
-    if (!req.sesion.modulos.includes(modulo)) {
+    if (!req.sesion.vistas.includes(vista)) {
       next(new AppError(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN));
       return;
     }

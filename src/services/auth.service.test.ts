@@ -97,9 +97,10 @@ describe("AuthService.resolverSesion", () => {
     expect(sesiones.tocarActividad).not.toHaveBeenCalled();
   });
 
-  it("no expone los roles en la sesión que viaja por la petición", async () => {
+  it("la sesión de la petición lleva los roles para el servidor, que nunca los envía al navegador", async () => {
     const sesion = await build(ANA, vigente).service.resolverSesion("s-1");
-    expect(Object.keys(sesion ?? {}).sort()).toEqual(["correo", "nombreCompleto", "sesionId", "usuarioId", "vistas"]);
+    expect(Object.keys(sesion ?? {}).sort()).toEqual(["correo", "nombreCompleto", "roles", "sesionId", "usuarioId", "vistas"]);
+    expect(sesion?.roles).toEqual(["GESTOR"]);
   });
 
   it("ignora los roles que no conoce, incluido el revisor retirado", async () => {
@@ -124,7 +125,7 @@ describe("AuthService.resolverSesion", () => {
 describe("AuthService.cerrarSesion", () => {
   it("revoca la sesión con el actor de la persona", async () => {
     const { service, sesiones } = build();
-    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", vistas: [] });
+    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", roles: [], vistas: [] });
     expect(sesiones.revocar).toHaveBeenCalledWith("usuario:ana@minsa.gob.pe", "s-1");
   });
 });

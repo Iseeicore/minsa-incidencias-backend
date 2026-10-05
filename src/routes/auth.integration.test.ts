@@ -169,7 +169,11 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
 
       expect((await agente.post("/auth/logout")).status).toBe(204);
 
-      const filas = await contexto.database.query<{ revocada_en: Date | null }>("SELECT revocada_en FROM gestion.sesion_usuario");
+      const filas = await contexto.database.query<{ revocada_en: Date | null }>(
+        `SELECT s.revocada_en FROM gestion.sesion_usuario s
+           JOIN gestion.usuario_interno u ON u.id = s.usuario_interno_id
+          WHERE u.correo = 'ana@minsa.gob.pe'`,
+      );
       expect(filas).toHaveLength(1);
       expect(filas[0]?.revocada_en).not.toBeNull();
 
@@ -224,13 +228,15 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
 
+      const deAna = "usuario_interno_id = (SELECT id FROM gestion.usuario_interno WHERE correo = 'ana@minsa.gob.pe')";
       await contexto.client.query("ALTER TABLE gestion.sesion_usuario DISABLE TRIGGER USER");
-      await contexto.client.query("UPDATE gestion.sesion_usuario SET ultima_actividad_en = now() - interval '5 minutes'");
+      await contexto.client.query(`UPDATE gestion.sesion_usuario SET ultima_actividad_en = now() - interval '5 minutes' WHERE ${deAna}`);
       await contexto.client.query("ALTER TABLE gestion.sesion_usuario ENABLE TRIGGER USER");
 
       expect((await agente.get("/auth/me")).status).toBe(200);
       const [fila] = await contexto.database.query<{ renovada: boolean; version_fila: number; usuario_modificacion: string }>(
-        "SELECT ultima_actividad_en > now() - interval '1 minute' AS renovada, version_fila, usuario_modificacion FROM gestion.sesion_usuario",
+        `SELECT ultima_actividad_en > now() - interval '1 minute' AS renovada, version_fila, usuario_modificacion
+           FROM gestion.sesion_usuario WHERE ${deAna}`,
       );
       expect(fila).toEqual({ renovada: true, version_fila: 2, usuario_modificacion: "usuario:ana@minsa.gob.pe" });
     });
@@ -289,7 +295,8 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
         `SELECT u.correo, u.usuario_creacion, r.codigo AS rol, u.password_hash
            FROM gestion.usuario_interno u
            JOIN gestion.usuario_rol ur ON ur.usuario_interno_id = u.id
-           JOIN gestion.rol r ON r.id = ur.rol_id`,
+           JOIN gestion.rol r ON r.id = ur.rol_id
+          WHERE u.correo = 'admin@minsa.gob.pe'`,
       );
       expect(filas).toHaveLength(1);
       expect(filas[0]).toMatchObject({ correo: "admin@minsa.gob.pe", usuario_creacion: "sistema:crear-admin", rol: "ADMINISTRADOR" });

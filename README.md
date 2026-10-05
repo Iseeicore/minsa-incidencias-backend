@@ -125,7 +125,64 @@ En el MVP los permisos son una **tabla fija en el código** (`src/constants/perm
 - **Varios roles:** se unen sus vistas, sin repetir y en el orden del menú (`vistasDeRoles`).
 - **Revisor retirado:** el rol `REVISOR` sigue en el catálogo de la base pero desactivado; solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista.
 - **Sin ningún rol activo** (por ejemplo, un rol desactivado después): la sesión es válida y `GET /auth/me` devuelve `vistas: []`; cualquier ruta con `requireVista` responde `403`. No se rechaza la sesión porque la persona sí se autenticó; lo que no tiene es acceso.
-- **Qué ve cada rol dentro de las vistas** (categorías) y **qué puede hacer** (acciones) no se decide aquí todavía: llegará con los endpoints de incidencias.
+- **Qué ve cada rol dentro de las vistas** (categorías) lo decide la base (`gestion.rol_categoria`) y **qué puede hacer** (acciones) lo decide la misma tabla fija; ver [Incidencias](#incidencias-casos).
+- **La sesión de la petición sí lleva los roles** (`req.sesion.roles`), pero solo dentro del servidor: `GET /auth/me` responde nombre, correo y vistas, nunca los roles.
+
+## Incidencias (casos)
+
+Cada caso se identifica por su **código legible** (`MINSA-AAAA-NNNNNN`, columna `codigo`, lo asigna la base). El `id` interno (UUID) y el `trace_id` del chat nunca salen de la API. Todas las rutas piden sesión y la vista `CASOS`, salvo `por-vencer`, que solo pide sesión (la campana de avisos).
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /incidencias` | Lista paginada. Query: `pagina` (1 por defecto), `tamano` (20 por defecto, máximo 100), `estado`, `categoria` (o `sin-categoria`), `texto` (código o relato, búsqueda literal, máximo 100), `orden` (`fecha`, `codigo`, `categoria`, `estado`, `confianza`) y `direccion` (`asc` por defecto: lo más antiguo primero). Responde `{ casos, pagina, tamano, total }` con el resumen de cada caso |
+| `GET /incidencias/por-vencer` | La campana: `{ total, porVencer, vencidos, casos }`. Cuenta los casos abiertos cuyo plazo de atención vence dentro de `PLAZO_AVISO_HORAS` o ya venció, **y que a esa persona le toca atender** (los que cumplen alguna regla de acción de sus roles): el gestor cuenta lo clasificado que aún no revisó o derivó, y cada área lo derivado o en gestión que aún no resolvió. **El contador baja** cuando el gestor deriva (el caso pasa al área) y cuando el área resuelve. El administrador, que no actúa, cuenta todos los abiertos que ve. `casos` trae hasta 10, los más antiguos primero |
+| `GET /incidencias/:codigo` | Detalle: el resumen más `resolucion`, `descripcion`, `reclamante`, `evidencias` e `historial` |
+| `POST /incidencias/:codigo/confirmar` | Confirma la categoría de la IA (una sola vez) |
+| `POST /incidencias/:codigo/corregir` | Cuerpo `{ "categoria": "denuncia-corrupcion" \| "queja" \| "reclamo" \| "otro" }`. Corrige la categoría (una sola vez, y nunca después de confirmar) |
+| `POST /incidencias/:codigo/derivar` | Pasa a `derivado`; el área sigue a la categoría |
+| `POST /incidencias/:codigo/tomar` | Pasa a `en-gestion` |
+| `POST /incidencias/:codigo/resolver` | Cuerpo `{ "resolucion": "texto" }` (obligatorio, máximo 4000). La base registra la resolución una sola vez y pone `resuelto` |
+
+Las acciones responden `200 { mensaje, caso }`. Si la corrección saca el caso de la vista de quien la hizo (por ejemplo, el gestor lo corrige a corrupción), `caso` es `null` y el `mensaje` lo avisa; a partir de ahí el caso responde `404` para esa persona.
+
+**Resumen de un caso** (compatible con el tipo `Caso` del frontend donde la base tiene el dato):
+
+| Campo | Contenido |
+|---|---|
+| `codigo` | `MINSA-2026-000001` |
+| `categoria`, `categoriaIa` | `denuncia-corrupcion`, `queja`, `reclamo`, `otro` o `null` (aún sin clasificar) |
+| `confianzaIa` | 0 a 100, o `null` |
+| `estado` | `registrado`, `clasificado`, `derivado`, `en-gestion`, `resuelto`, `archivado` |
+| `area` | Nombre del área de la categoría; `null` para `otro` y sin categoría |
+| `responsable` | Nombre de quien derivó, o si no de quien corrigió, o si no de quien confirmó; `"Sistema"` si lo hizo el sistema; `null` si nadie |
+| `revisadoPorHumano`, `corregida` | Si una persona confirmó o corrigió; si la corrigió |
+| `horasDesdeLlegada`, `horasDesdeResolucion` | Horas completas, con la hora de la base |
+| `plazo` | `{ tipo, estado, venceEn, horasRestantes }`. Caso abierto: `tipo: "atencion"` (`PLAZO_ATENCION_DIAS` desde que llega) y `estado` `en-plazo`, `por-vencer` (quedan `PLAZO_AVISO_HORAS` o menos) o `vencido`. Caso resuelto: `tipo: "vigencia"` (`VIGENCIA_RESOLUCION_DIAS` desde que se resuelve), `en-plazo` o `vencido`. Archivado: todo `null`. Las horas pueden ser negativas si ya venció |
+| `acciones` | Acciones que **esta persona** puede ejecutar ahora: `confirmar`, `corregir`, `derivar`, `tomar`, `resolver` |
+| `etiquetas`, `prioridad`, `organismo` | Aún no existen en la base: `[]`, `null` y `null`. No se inventan datos |
+
+El detalle agrega:
+
+- `descripcion` y `resolucion`.
+- `reclamante`: nombre abreviado y solo los últimos 4 dígitos del documento (`Luis A. · DNI ••••1907`); `Anónimo` si el reporte lo es.
+- `evidencias`: `{ nombre, tipo, fecha, sensible, verificada }`. **Solo metadatos**: nunca la ruta, el id de Meta ni el contenido. `sensible` es verdadero en las de corrupción; `verificada` cuando ya hay huella SHA-256 del archivo.
+- `historial`: `{ titulo, detalle, hora, fecha }` por cada hito (recibido, clasificado por la IA, categoría confirmada o corregida, derivado, tomado, resuelto, archivado), con el **nombre** de quien actuó. Nunca copia el relato, el documento ni el correo.
+
+**Qué ve cada rol.** Un caso es visible si su categoría está entre las de algún rol **activo** de la persona (`gestion.rol_categoria`) o, si aún no tiene categoría, si algún rol los ve (administrador y gestor). Con varios roles se une. Un caso que la persona no ve responde `404`, igual que uno que no existe.
+
+**Qué puede hacer cada rol** (`src/constants/permisos-por-rol.ts`; con varios roles se unen las acciones, y cada regla vale solo para su categoría):
+
+| Rol | Ve | Acciones |
+|---|---|---|
+| `ADMINISTRADOR` | Todo | Ninguna: solo mira |
+| `GESTOR` | Queja, reclamo, otro y sin categoría | `confirmar` o `corregir` en `clasificado` sin revisar; `derivar` en `clasificado` ya revisado y con área (no `otro`) |
+| `AREA_DENUNCIA_CORRUPCION` | Solo corrupción | `confirmar` o `corregir` sin revisar; `tomar` directo desde `clasificado` ya revisado (sin derivar); `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
+| `AREA_QUEJA` | Solo quejas | `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
+| `AREA_RECLAMO` | Solo reclamos | `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
+
+**Errores.** `401` sin sesión; `403` si la persona no tiene la vista o la acción no le corresponde en el estado actual del caso (el cálculo es el mismo de `acciones`); `404` si el código no existe o la persona no lo ve; `400` si la consulta o el cuerpo no son válidos; `422` si la categoría nueva es igual a la actual; `409` si la base rechaza el cambio por una regla (ya se corrigió una vez, ya se confirmó, transición no permitida), por ejemplo cuando dos personas actúan a la vez: el servicio bloquea el caso (`FOR UPDATE`) y la base sigue siendo la última barrera. El mensaje de la base nunca se repite tal cual.
+
+**Cada acción firma a quien la hace.** Corre en una transacción con el actor `usuario:{correo}` y la base llena quién y cuándo (`categoria_corregida_por`, `categoria_confirmada_por`, `resuelto_por`, historial). Confirmar y corregir copian el caso a `ia.entrenamiento_categoria`. El archivado por vencimiento **no** lo dispara este servicio todavía.
 
 ### Crear el primer administrador
 
@@ -212,16 +269,17 @@ src/
   config/              env.ts (variables validadas) y logger.ts
   constants/           Mensajes de error, límites (sin números mágicos) y permisos-por-rol (vistas de cada rol)
   database/            Puerto Database, adaptador PostgreSQL (pg) y actores de auditoría
-  enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo
+  enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo y los de incidencias (acción, categoría, estado, plazo, orden)
   errors/app-error.ts  AppError (estado HTTP, código interno y mensaje)
   middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
-  repositories/        Acceso a la base: usuario.repository, sesion.repository
-  services/            auth.service (login, sesión, cierre) y administrador.service
-  routes/              salud.routes y auth.routes
+  repositories/        Acceso a la base: usuario, sesion e incidencia (consultas parametrizadas)
+  services/            auth.service (login, sesión, cierre), administrador.service e incidencia.service (casos y acciones)
+  routes/              salud, auth e incidencias
   scripts/             crear-admin (primer administrador)
   types/               Ampliación de Request con la sesión actual
-  utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles
-  test-utils/          Ayudas de pruebas (no entra al build)
+  utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,
+                       plazo-incidencia, historial-incidencia, reclamante
+  test-utils/          Ayudas de pruebas: base de pruebas con retroceso, usuarios y casos sintéticos (no entra al build)
 ```
 
 Imports con el alias `@/` (apunta a `src/`); el build lo reescribe a rutas relativas con `tsc-alias`.
@@ -252,11 +310,14 @@ TEST_DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:5432/NOMBRE_DE_LA_BASE npm tes
 
 Por seguridad, esas pruebas **se niegan a correr** si el nombre de la base no termina en `_desechable`, `_dev` o `_local` (el mensaje de error nunca incluye la clave de la URL).
 
+Las pruebas de incidencias **crean sus propios casos y usuarios sintéticos** dentro de la transacción (con las mismas operaciones que usa la aplicación, para que la base aplique sus reglas), así que no dependen de que la base tenga datos ni se ven afectadas por los que ya tenga. Solo exigen la base armada con las migraciones del repo del bot.
+
 ## Siguientes pasos
 
 1. **Rol de base de datos propio** con permisos mínimos (lo crea OGTI) y `sslmode` hacia su servidor.
 2. **Endurecimiento posterior** (no hace falta en la primera etapa): cabecera anti-CSRF propia, cambio de contraseña, prefijo `__Host-` de la cookie, rotación del `COOKIE_SECRET` y un límite adicional por IP más correo.
-3. Visor y revisión de incidencias, indicadores, entrenamiento de la IA y portal de carga (fases siguientes, sobre vistas SQL del repo del bot).
+3. **Disparo de los archivados** (resueltas y vencidas) con `VIGENCIA_RESOLUCION_DIAS` y `PLAZO_ATENCION_DIAS`: todavía no lo dispara este servicio.
+4. Indicadores, entrenamiento de la IA y portal de carga (fases siguientes, sobre vistas SQL del repo del bot).
 
 ## Documentación relacionada
 

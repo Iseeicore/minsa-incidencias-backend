@@ -12,11 +12,14 @@ import { createCors } from "@/middleware/cors.js";
 import { errorHandler, notFoundHandler } from "@/middleware/error-handler.js";
 import { createGeneralResolver, createLoginResolver, rateLimit } from "@/middleware/rate-limit.js";
 import { attachSession } from "@/middleware/session.js";
+import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
 import { SesionRepository } from "@/repositories/sesion.repository.js";
 import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
+import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
 import { AuthService } from "@/services/auth.service.js";
+import { IncidenciaService, plazosDeEntorno } from "@/services/incidencia.service.js";
 import { ArgonPasswordHasher, type PasswordHasher } from "@/utils/password-hasher.js";
 import { TokenBucketLimiter } from "@/utils/token-bucket.js";
 
@@ -43,6 +46,7 @@ export function createApp(
   setInterval(() => limiter.sweep(), RATE_LIMIT_SWEEP_INTERVAL_MS).unref();
 
   const auth = new AuthService(new UsuarioRepository(database), new SesionRepository(database), hasher, env);
+  const incidencias = new IncidenciaService(new IncidenciaRepository(database), database, plazosDeEntorno(env));
 
   const app = express();
   app.disable("x-powered-by");
@@ -57,6 +61,7 @@ export function createApp(
   app.use(rateLimit(limiter, createGeneralResolver(env, (req) => req.sesion?.usuarioId ?? null)));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
+  app.use(createIncidenciasRouter(incidencias));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

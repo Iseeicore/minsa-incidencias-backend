@@ -1,0 +1,273 @@
+import express from "express";
+import cookieParser from "cookie-parser";
+import request from "supertest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { createApp } from "@/app.js";
+import { createLogger } from "@/config/logger.js";
+import { ModuloCodigo } from "@/enums/modulo-codigo.enum.js";
+import { RolCodigo } from "@/enums/rol-codigo.enum.js";
+import { errorHandler } from "@/middleware/error-handler.js";
+import { attachSession, requireModulo } from "@/middleware/session.js";
+import { SesionRepository } from "@/repositories/sesion.repository.js";
+import { UsuarioRepository } from "@/repositories/usuario.repository.js";
+import { AuthService } from "@/services/auth.service.js";
+import { crearAdministrador } from "@/services/administrador.service.js";
+import { testEnv, TEST_COOKIE_SECRET } from "@/test-utils/env.js";
+import { withRollbackDatabase, type RollbackContext } from "@/test-utils/rollback-database.js";
+import { ArgonPasswordHasher } from "@/utils/password-hasher.js";
+
+const url = process.env["TEST_DATABASE_URL"];
+const hasher = new ArgonPasswordHasher();
+const CLAVE = "clave-de-prueba-123";
+
+let huella = "";
+
+async function crearUsuario(
+  { database }: RollbackContext,
+  correo: string,
+  roles: string[],
+  nombre = "Persona de Prueba",
+): Promise<void> {
+  await database.transaction("usuario:admin-prueba", async (tx) => {
+    const filas = await tx.query<{ id: string }>(
+      `INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash) VALUES ($1, $2, $3) RETURNING id`,
+      [nombre, correo, huella],
+    );
+    for (const rol of roles) {
+      await tx.query(
+        `INSERT INTO gestion.usuario_rol (usuario_interno_id, rol_id) SELECT $1, id FROM gestion.rol WHERE codigo = $2`,
+        [(filas[0] as { id: string }).id, rol],
+      );
+    }
+  });
+}
+
+const construir = (contexto: RollbackContext, overrides: Record<string, string> = {}) =>
+  createApp(testEnv(overrides), contexto.database, createLogger(testEnv()), hasher);
+
+describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
+  const usar = (prueba: (contexto: RollbackContext) => Promise<void>) => withRollbackDatabase(url as string, prueba);
+
+  beforeAll(async () => {
+    huella = await hasher.hash(CLAVE);
+  });
+
+  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo y módulos, sin id ni roles", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.ADMINISTRADOR], "Ana Prueba");
+      const agente = request.agent(construir(contexto));
+
+      const login = await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect(login.status).toBe(204);
+      const cookie = (login.headers["set-cookie"] as unknown as string[])[0] as string;
+      expect(cookie).toContain("gestion_sid=s%3A");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Max-Age=28800");
+
+      const me = await agente.get("/auth/me");
+      expect(me.status).toBe(200);
+      expect(Object.keys(me.body).sort()).toEqual(["correo", "modulos", "nombreCompleto"]);
+      expect(me.body.nombreCompleto).toBe("Ana Prueba");
+      expect(me.body.modulos).toEqual(["ENTRENAMIENTO_IA", "INCIDENCIAS", "INDICADORES", "REVISION", "USUARIOS"]);
+    });
+  });
+
+  it("los módulos salen de los roles del usuario, consultados en la base", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "rev@minsa.gob.pe", password: CLAVE });
+      expect((await agente.get("/auth/me")).body.modulos).toEqual(["ENTRENAMIENTO_IA", "INCIDENCIAS", "REVISION"]);
+    });
+  });
+
+  it("clave incorrecta y correo inexistente responden exactamente lo mismo", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const app = construir(contexto);
+      const mala = await request(app).post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: "incorrecta" });
+      const inexistente = await request(app).post("/auth/login").send({ correo: "nadie@minsa.gob.pe", password: "incorrecta" });
+      expect(mala.status).toBe(401);
+      expect(inexistente.status).toBe(401);
+      expect(mala.body.errorCode).toBe("INVALID_CREDENTIALS");
+      expect(inexistente.body.errorCode).toBe(mala.body.errorCode);
+      expect(inexistente.body.message).toBe(mala.body.message);
+      expect(mala.headers["set-cookie"]).toBeUndefined();
+    });
+  });
+
+  it("un cuerpo inválido responde 400 con el detalle por campo", async () => {
+    await usar(async (contexto) => {
+      const res = await request(construir(contexto)).post("/auth/login").send({ correo: "no-es-correo" });
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(res.body.details.map((d: { path: string }) => d.path).sort()).toEqual(["correo", "password"]);
+    });
+  });
+
+  it("sin cookie o con una cookie alterada, /auth/me responde 401", async () => {
+    await usar(async (contexto) => {
+      const app = construir(contexto);
+      expect((await request(app).get("/auth/me")).status).toBe(401);
+      const falsa = await request(app).get("/auth/me").set("Cookie", "gestion_sid=s%3A0190b0c2-7e1a-7c3e-8f2b-1a2b3c4d5e6f.firma-falsa");
+      expect(falsa.status).toBe(401);
+      expect(falsa.body.errorCode).toBe("UNAUTHORIZED");
+    });
+  });
+
+  it("logout revoca la sesión en la base y la cookie vieja deja de servir", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const app = construir(contexto);
+      const agente = request.agent(app);
+      const login = await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      const cookieVieja = login.headers["set-cookie"] as unknown as string[];
+      expect((await agente.get("/auth/me")).status).toBe(200);
+
+      expect((await agente.post("/auth/logout")).status).toBe(204);
+
+      const filas = await contexto.database.query<{ revocada_en: Date | null }>("SELECT revocada_en FROM gestion.sesion_usuario");
+      expect(filas).toHaveLength(1);
+      expect(filas[0]?.revocada_en).not.toBeNull();
+
+      const conCookieVieja = await request(app).get("/auth/me").set("Cookie", cookieVieja);
+      expect(conCookieVieja.status).toBe(401);
+      expect(conCookieVieja.body.errorCode).toBe("INVALID_SESSION");
+    });
+  });
+
+  it("al desactivar al usuario su sesión deja de servir y el login se rechaza", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+
+      await contexto.client.query(
+        "UPDATE gestion.usuario_interno SET activo = false, eliminado_en = now(), eliminado_por = 'usuario:admin-prueba' WHERE correo = 'ana@minsa.gob.pe'",
+      );
+
+      const me = await agente.get("/auth/me");
+      expect(me.status).toBe(401);
+      expect(me.body.errorCode).toBe("INVALID_SESSION");
+      expect((me.headers["set-cookie"] as unknown as string[])[0]).toContain("Expires=Thu, 01 Jan 1970");
+
+      const login = await request(construir(contexto)).post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect(login.status).toBe(401);
+    });
+  });
+
+  it("una sesión inactiva más de 30 minutos o pasada de sus 8 horas deja de servir", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect((await agente.get("/auth/me")).status).toBe(200);
+
+      await contexto.client.query("ALTER TABLE gestion.sesion_usuario DISABLE TRIGGER USER");
+      await contexto.client.query("UPDATE gestion.sesion_usuario SET ultima_actividad_en = now() - interval '31 minutes'");
+      const inactiva = await agente.get("/auth/me");
+      expect(inactiva.status).toBe(401);
+      expect(inactiva.body.errorCode).toBe("INVALID_SESSION");
+
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      await contexto.client.query("UPDATE gestion.sesion_usuario SET vence_en = now() - interval '1 minute' WHERE revocada_en IS NULL");
+      expect((await agente.get("/auth/me")).status).toBe(401);
+    });
+  });
+
+  it("renueva la actividad cuando pasó más de un minuto y firma quién la renovó", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+
+      await contexto.client.query("ALTER TABLE gestion.sesion_usuario DISABLE TRIGGER USER");
+      await contexto.client.query("UPDATE gestion.sesion_usuario SET ultima_actividad_en = now() - interval '5 minutes'");
+      await contexto.client.query("ALTER TABLE gestion.sesion_usuario ENABLE TRIGGER USER");
+
+      expect((await agente.get("/auth/me")).status).toBe(200);
+      const [fila] = await contexto.database.query<{ renovada: boolean; version_fila: number; usuario_modificacion: string }>(
+        "SELECT ultima_actividad_en > now() - interval '1 minute' AS renovada, version_fila, usuario_modificacion FROM gestion.sesion_usuario",
+      );
+      expect(fila).toEqual({ renovada: true, version_fila: 2, usuario_modificacion: "usuario:ana@minsa.gob.pe" });
+    });
+  });
+
+  it("requireModulo responde 403 si el usuario no tiene el módulo y deja pasar si lo tiene", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR]);
+      await crearUsuario(contexto, "adm@minsa.gob.pe", [RolCodigo.ADMINISTRADOR]);
+      const env = testEnv();
+      const auth = new AuthService(new UsuarioRepository(contexto.database), new SesionRepository(contexto.database), hasher, env);
+      const mini = express();
+      mini.use(cookieParser(TEST_COOKIE_SECRET));
+      mini.use(attachSession(auth, env));
+      mini.get("/indicadores", requireModulo(ModuloCodigo.INDICADORES), (_req, res) => {
+        res.json({ ok: true });
+      });
+      mini.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+        Object.assign(req, { log: { error: () => undefined } });
+        errorHandler(error, req, res, next);
+      });
+
+      const app = construir(contexto);
+      const revisor = request.agent(app);
+      const admin = request.agent(app);
+      const cookieRevisor = (await revisor.post("/auth/login").send({ correo: "rev@minsa.gob.pe", password: CLAVE })).headers["set-cookie"] as unknown as string[];
+      const cookieAdmin = (await admin.post("/auth/login").send({ correo: "adm@minsa.gob.pe", password: CLAVE })).headers["set-cookie"] as unknown as string[];
+
+      const prohibido = await request(mini).get("/indicadores").set("Cookie", cookieRevisor);
+      expect(prohibido.status).toBe(403);
+      expect(prohibido.body.errorCode).toBe("FORBIDDEN");
+      expect((await request(mini).get("/indicadores").set("Cookie", cookieAdmin)).status).toBe(200);
+      expect((await request(mini).get("/indicadores")).status).toBe(401);
+    });
+  });
+
+  it("limita el login a 5 intentos por correo, aunque cambie la IP", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const app = construir(contexto);
+      for (let i = 0; i < 5; i += 1) {
+        const res = await request(app).post("/auth/login").set("X-Forwarded-For", `10.0.0.${i}`).send({ correo: "ana@minsa.gob.pe", password: "mala" });
+        expect(res.status).toBe(401);
+      }
+      const sexto = await request(app).post("/auth/login").set("X-Forwarded-For", "10.0.9.9").send({ correo: "ANA@minsa.gob.pe", password: CLAVE });
+      expect(sexto.status).toBe(429);
+      expect(sexto.headers["retry-after"]).toBe("180");
+    });
+  });
+
+  it("crearAdministrador crea un usuario con el rol ADMINISTRADOR y rechaza un correo repetido", async () => {
+    await usar(async (contexto) => {
+      await crearAdministrador(contexto.database, hasher, { nombreCompleto: "Admin Inicial", correo: "Admin@Minsa.gob.pe", password: CLAVE });
+
+      const filas = await contexto.database.query<{ correo: string; usuario_creacion: string; rol: string; password_hash: string }>(
+        `SELECT u.correo, u.usuario_creacion, r.codigo AS rol, u.password_hash
+           FROM gestion.usuario_interno u
+           JOIN gestion.usuario_rol ur ON ur.usuario_interno_id = u.id
+           JOIN gestion.rol r ON r.id = ur.rol_id`,
+      );
+      expect(filas).toHaveLength(1);
+      expect(filas[0]).toMatchObject({ correo: "admin@minsa.gob.pe", usuario_creacion: "sistema:crear-admin", rol: "ADMINISTRADOR" });
+      expect(filas[0]?.password_hash.startsWith("$argon2id$")).toBe(true);
+
+      const agente = request.agent(construir(contexto));
+      expect((await agente.post("/auth/login").send({ correo: "admin@minsa.gob.pe", password: CLAVE })).status).toBe(204);
+
+      await expect(
+        crearAdministrador(contexto.database, hasher, { nombreCompleto: "Otro", correo: "admin@minsa.gob.pe", password: CLAVE }),
+      ).rejects.toMatchObject({ statusCode: 409, errorCode: "CONFLICT" });
+    });
+  });
+
+  it("los enums de módulos y roles coinciden con los catálogos de la base", async () => {
+    await usar(async ({ database }) => {
+      const modulos = await database.query<{ codigo: string }>("SELECT codigo FROM gestion.modulo");
+      const roles = await database.query<{ codigo: string }>("SELECT codigo FROM gestion.rol");
+      expect(modulos.map((m) => m.codigo).sort()).toEqual(Object.values(ModuloCodigo).sort());
+      expect(roles.map((r) => r.codigo).sort()).toEqual(Object.values(RolCodigo).sort());
+    });
+  });
+});

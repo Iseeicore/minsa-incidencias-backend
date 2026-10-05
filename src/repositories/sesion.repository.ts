@@ -1,0 +1,81 @@
+import type { Database } from "@/database/database.js";
+
+export interface SesionConUsuario {
+  sesionId: string;
+  usuarioId: string;
+  correo: string;
+  nombreCompleto: string;
+  modulos: string[];
+  debeTocar: boolean;
+}
+
+export class SesionRepository {
+  constructor(private readonly database: Database) {}
+
+  async crear(actor: string, usuarioId: string, horasAbsolutas: number): Promise<string> {
+    return this.database.transaction(actor, async (tx) => {
+      const filas = await tx.query<{ id: string }>(
+        `INSERT INTO gestion.sesion_usuario (usuario_interno_id, vence_en)
+         VALUES ($1, now() + make_interval(hours => $2))
+         RETURNING id`,
+        [usuarioId, horasAbsolutas],
+      );
+      return (filas[0] as { id: string }).id;
+    });
+  }
+
+  /**
+   * Devuelve la sesión solo si sigue abierta (no revocada, dentro de su vigencia absoluta y de la
+   * inactividad permitida) y su usuario está activo, junto con los módulos que abren los roles del
+   * usuario. Todo en una consulta y con el reloj de la base.
+   */
+  async buscarVigente(
+    sesionId: string,
+    minutosInactividad: number,
+    segundosParaTocar: number,
+  ): Promise<SesionConUsuario | null> {
+    const filas = await this.database.query<SesionConUsuario>(
+      `SELECT s.id AS "sesionId",
+              u.id AS "usuarioId",
+              u.correo,
+              u.nombre_completo AS "nombreCompleto",
+              ARRAY(
+                SELECT DISTINCT m.codigo
+                  FROM gestion.usuario_rol ur
+                  JOIN gestion.rol r ON r.id = ur.rol_id AND r.activo
+                  JOIN gestion.rol_modulo rm ON rm.rol_id = r.id
+                  JOIN gestion.modulo m ON m.id = rm.modulo_id AND m.activo
+                 WHERE ur.usuario_interno_id = u.id
+                 ORDER BY m.codigo
+              ) AS modulos,
+              (now() - s.ultima_actividad_en) > make_interval(secs => $3) AS "debeTocar"
+         FROM gestion.sesion_usuario s
+         JOIN gestion.usuario_interno u ON u.id = s.usuario_interno_id
+        WHERE s.id = $1
+          AND s.revocada_en IS NULL
+          AND s.vence_en > now()
+          AND s.ultima_actividad_en > now() - make_interval(mins => $2)
+          AND u.activo`,
+      [sesionId, minutosInactividad, segundosParaTocar],
+    );
+    return filas[0] ?? null;
+  }
+
+  async tocarActividad(actor: string, sesionId: string): Promise<void> {
+    await this.database.transaction(actor, async (tx) => {
+      await tx.query(
+        `UPDATE gestion.sesion_usuario SET ultima_actividad_en = now() WHERE id = $1 AND revocada_en IS NULL`,
+        [sesionId],
+      );
+    });
+  }
+
+  async revocar(actor: string, sesionId: string): Promise<void> {
+    await this.database.transaction(actor, async (tx) => {
+      await tx.query(
+        `UPDATE gestion.sesion_usuario SET revocada_en = now() WHERE id = $1 AND revocada_en IS NULL`,
+        [sesionId],
+      );
+    });
+  }
+}

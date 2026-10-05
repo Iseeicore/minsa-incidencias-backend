@@ -4,6 +4,7 @@ export const DEFAULT_ERROR_MESSAGES: Record<ErrorCode, string> = {
   [ErrorCode.VALIDATION_FAILED]: "Los datos enviados no son válidos.",
   [ErrorCode.PAYLOAD_TOO_LARGE]: "El cuerpo de la petición supera el tamaño permitido.",
   [ErrorCode.UNAUTHORIZED]: "Debes iniciar sesión.",
+  [ErrorCode.INVALID_CREDENTIALS]: "Correo o contraseña incorrectos.",
   [ErrorCode.INVALID_SESSION]: "La sesión no es válida o ya terminó.",
   [ErrorCode.FORBIDDEN]: "No tienes permisos para esta acción.",
   [ErrorCode.NOT_FOUND]: "El recurso solicitado no existe.",

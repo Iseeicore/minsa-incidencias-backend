@@ -2,7 +2,7 @@
 
 API de la plataforma de gestión de incidencias: visor de incidencias, revisión, entrenamiento de la IA, indicadores y portal de carga de archivos. Está construida con Express 5 y TypeScript. Comparte la base PostgreSQL del chatbot (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones: este repo nunca las ejecuta. El frontend es `minsa-incidencias-frontend`.
 
-> **Estado (v0.1.0):** base del servidor (CORS, límite de peticiones por cubeta de tokens, errores estandarizados, cookie de sesión firmada, logs, conexión a PostgreSQL, cierre ordenado, `GET /salud` y `GET /salud/listo`). Todavía no hay autenticación ni módulos de negocio: ver [Siguientes pasos](#siguientes-pasos).
+> **Estado:** base del servidor (CORS, límite de peticiones por cubeta de tokens, errores estandarizados, logs, conexión a PostgreSQL, cierre ordenado y salud) y **autenticación por correo con sesión opaca y acceso por módulo** (ver [Autenticación y sesiones](#autenticación-y-sesiones)). Todavía no hay módulos de negocio: ver [Siguientes pasos](#siguientes-pasos).
 
 ## Inicio rápido
 
@@ -90,17 +90,39 @@ DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:PUERTO/NOMBRE_DE_LA_BASE
 - El código habla con un puerto `Database` (`src/database/database.ts`), no con el driver: cambiar de driver u ORM solo toca `pg-database.ts`.
 - La clave nunca se registra: los errores de la base se enmascaran como `503` o `500` genéricos.
 
-## Sesiones y autorización (diseño)
+## Autenticación y sesiones
 
-No se usa JWT. La sesión es **opaca y vive en la base**, y el navegador solo guarda su identificador:
+No se usa JWT. La sesión es **opaca y vive en la base**, y el navegador solo guarda su identificador. Se inicia sesión **solo con el correo** y la clave.
 
-1. Al iniciar sesión se crea una fila en `gestion.sesion_usuario` y se envía su `id` en una cookie **firmada**, `HttpOnly` y `SameSite=Strict`. La cookie **no lleva roles, módulos ni datos de la persona**.
-2. En cada petición el backend lee la cookie con `readSessionId` (valida firma y formato), busca la sesión, comprueba que no esté revocada ni vencida y que el usuario siga activo, y **consulta sus roles y módulos en la base**. Nada de eso viaja al navegador.
-3. El acceso se da **por módulo**: `gestion.rol_modulo` dice qué módulos abre cada rol (incidencias, revisión, indicadores, entrenamiento de la IA, usuarios) y `gestion.rol_categoria` qué categorías ve. Un usuario abre la unión de los módulos de sus roles.
-4. Cerrar sesión y desactivar a un usuario revocan la sesión **en el servidor** (la base cierra todas las sesiones de un usuario desactivado): la cookie deja de servir aunque el navegador la conserve.
-5. Las credenciales son `usuario` o `correo` más la huella `password_hash` (**Argon2id**, formato PHC; la base rechaza cualquier otro formato). La clave nunca se guarda.
+| Ruta | Qué hace | Respuesta |
+|---|---|---|
+| `POST /auth/login` | Cuerpo `{ "correo", "password" }`. Normaliza el correo, verifica la clave (Argon2id) y crea la sesión. Límite: 5 intentos por 15 minutos por correo | `204` con la cookie de sesión; `401 INVALID_CREDENTIALS` si el correo o la clave no sirven (el mismo error para un correo inexistente, una clave mala o un usuario desactivado); `400` si el cuerpo es inválido; `429` si se agotaron los intentos |
+| `GET /auth/me` | Quién soy: nombre, correo y los módulos que puedo abrir | `200 { nombreCompleto, correo, modulos }`; `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
+| `POST /auth/logout` | Revoca la sesión en la base y borra la cookie | `204` (siempre, aunque no hubiera sesión) |
 
-Estas tablas las crea el repo del bot (migración `credenciales_sesiones_modulos`). El módulo de autenticación de este backend es el siguiente paso.
+Cómo funciona:
+
+1. Al iniciar sesión se crea una fila en `gestion.sesion_usuario` y se envía su `id` en una cookie **firmada**, `HttpOnly` y `SameSite=Strict` (con `Secure` en producción), con la vigencia máxima de 8 horas. La cookie **no lleva roles, módulos ni datos de la persona**.
+2. En cada petición `attachSession` lee la cookie con `readSessionId` (valida firma y formato) y consulta **en una sola consulta** si la sesión sigue abierta: no revocada, dentro de sus 8 horas y de los 30 minutos de inactividad, y con el usuario activo. De paso trae los módulos que abren los roles del usuario. Si la sesión ya no sirve, borra la cookie.
+3. La actividad se renueva como mucho una vez por minuto (no se escribe en cada petición).
+4. El acceso se da **por módulo**: `requireModulo(ModuloCodigo.REVISION)` responde `403` si el usuario no lo tiene. Un usuario abre la unión de los módulos de sus roles (`gestion.rol_modulo`).
+5. **Interruptor de apagado:** cerrar sesión revoca la fila; desactivar a un usuario hace que la base cierre todas sus sesiones (disparador); la cookie deja de servir aunque el navegador la conserve.
+6. Cada login crea una sesión nueva (si traía otra abierta, la cierra): el identificador se rota.
+7. **Tiempos:** si el correo no existe se verifica igualmente una clave falsa, para que el tiempo de respuesta no delate qué correos están registrados.
+
+### Crear el primer administrador
+
+Nadie puede iniciar sesión hasta que exista un usuario, y la migración no los crea. El primer administrador se crea con un comando aparte, con la base ya migrada. En Docker:
+
+```bash
+docker compose run --rm \
+  -e ADMIN_NOMBRE="Nombre Apellido" \
+  -e ADMIN_CORREO="persona@minsa.gob.pe" \
+  -e ADMIN_PASSWORD="una-clave-de-12-o-mas-caracteres" \
+  minsa-incidencias-backend node dist/scripts/crear-admin.js
+```
+
+Guarda la huella Argon2id (nunca la clave), asigna el rol `ADMINISTRADOR` y firma con el actor `sistema:crear-admin`. Rechaza un correo repetido y una clave de menos de 12 caracteres. La clave queda en el historial de tu terminal: úsalo solo para el primer acceso y cámbiala cuando exista esa pantalla.
 
 ## Conexión con el frontend (CORS)
 
@@ -130,6 +152,8 @@ El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así
 | `RATE_LIMIT_ANON_CAPACITY` | `100` | Peticiones por ventana para un cliente anónimo (por IP) |
 | `RATE_LIMIT_LOGIN_WINDOW_SECONDS` | `900` | Ventana de los intentos de login, en segundos |
 | `RATE_LIMIT_LOGIN_CAPACITY` | `5` | Intentos de login por ventana y **por correo** |
+| `SESSION_IDLE_MINUTES` | `30` | Minutos sin actividad tras los cuales la sesión deja de servir |
+| `SESSION_ABSOLUTE_HOURS` | `8` | Horas máximas de una sesión, aunque haya actividad |
 | `HOST_PORT` | `3033` | Solo Docker: puerto publicado en el servidor |
 
 Una variable inválida o ausente detiene el arranque con el detalle de lo que falló (validación con `zod` en `src/config/env.ts`).
@@ -168,11 +192,15 @@ src/
   config/              env.ts (variables validadas) y logger.ts
   constants/           Mensajes de error y límites (sin números mágicos)
   database/            Puerto Database, adaptador PostgreSQL (pg) y actores de auditoría
-  enums/               ErrorCode, HttpStatus
+  enums/               ErrorCode, HttpStatus, ModuloCodigo, RolCodigo
   errors/app-error.ts  AppError (estado HTTP, código interno y mensaje)
-  middleware/          cors, rate-limit, error-handler (y el 404)
-  routes/              Rutas por recurso (hoy solo salud)
-  utils/               token-bucket, session-cookie
+  middleware/          cors, rate-limit, session (attachSession, requireSession, requireModulo), error-handler
+  repositories/        Acceso a la base: usuario.repository, sesion.repository
+  services/            auth.service (login, sesión, cierre) y administrador.service
+  routes/              salud.routes y auth.routes
+  scripts/             crear-admin (primer administrador)
+  types/               Ampliación de Request con la sesión actual
+  utils/               token-bucket, session-cookie, password-hasher (Argon2id)
   test-utils/          Ayudas de pruebas (no entra al build)
 ```
 
@@ -184,7 +212,7 @@ Las reglas del backend (capas, errores, cookies, CORS, límites) están en el va
 
 - Un rol de base de datos propio; declarar el actor (`set_config('app.actor', ..., true)`) en cada transacción que escriba.
 - Las reglas de negocio de la incidencia las hace cumplir la base, no este código.
-- La cookie de sesión solo lleva un identificador opaco, firmado, `HttpOnly`, `SameSite=Strict`; se lee siempre con `readSessionId` y el estado vive en el servidor para poder revocarla.
+- La cookie de sesión solo lleva un identificador opaco, firmado, `HttpOnly`, `SameSite=Strict`; se lee siempre con `readSessionId` y el estado vive en la base para poder revocarla. Nunca viajan roles ni el id del usuario.
 - No registrar DNI, nombres, tokens ni texto de incidencias en los logs: cada petición solo registra id, método, ruta **sin query**, IP, estado y duración; nunca cabeceras ni cookies.
 - Ningún secreto en el repositorio: el `.env` está ignorado y solo se versiona `.env.example`.
 
@@ -196,7 +224,7 @@ npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
 ```
 
-Las pruebas contra PostgreSQL real (`src/database/pg-database.integration.test.ts`) se omiten salvo que definas `TEST_DATABASE_URL` con una base ya migrada por el repo del bot. Solo leen los catálogos y comprueban el actor; no escriben datos:
+Las pruebas contra PostgreSQL real (`*.integration.test.ts`: base de datos y autenticación de punta a punta) se omiten salvo que definas `TEST_DATABASE_URL` con una base ya migrada por el repo del bot. **No dejan datos:** cada prueba corre dentro de una transacción que se revierte al final (la base impide borrar usuarios y sesiones, por eso no se limpian a mano):
 
 ```bash
 TEST_DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:5432/NOMBRE_DE_LA_BASE npm test
@@ -204,8 +232,8 @@ TEST_DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:5432/NOMBRE_DE_LA_BASE npm tes
 
 ## Siguientes pasos
 
-1. **Autenticación:** login, logout y renovación de sesión; `requireSession` y `requireModulo(...)`; creación del primer administrador (con un procedimiento aparte, no una migración); cabecera anti-CSRF; enchufar el límite de login (`createLoginResolver`) a la ruta.
-2. **Rol de base de datos propio** con permisos mínimos (lo crea OGTI) y `sslmode` hacia su servidor.
+1. **Rol de base de datos propio** con permisos mínimos (lo crea OGTI) y `sslmode` hacia su servidor.
+2. **Endurecimiento posterior** (no hace falta en la primera etapa): cabecera anti-CSRF propia, cambio de contraseña, prefijo `__Host-` de la cookie, rotación del `COOKIE_SECRET` y un límite adicional por IP más correo.
 3. Visor y revisión de incidencias, indicadores, entrenamiento de la IA y portal de carga (fases siguientes, sobre vistas SQL del repo del bot).
 
 ## Documentación relacionada

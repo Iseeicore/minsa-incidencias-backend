@@ -11,10 +11,12 @@
     "format": "prettier --write src",
     "docker:up": "docker compose up -d --build --wait --wait-timeout 180",
     "docker:logs": "docker compose logs -f",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "crear-admin": "node --env-file=.env dist/scripts/crear-admin.js"
   },
   "type": "module",
   "dependencies": {
+    "argon2": "0.45.1",
     "cookie-parser": "1.4.7",
     "cors": "2.8.6",
     "express": "5.2.1",

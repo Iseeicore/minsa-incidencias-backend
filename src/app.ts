@@ -10,8 +10,14 @@ import { JSON_BODY_LIMIT, RATE_LIMIT_SWEEP_INTERVAL_MS } from "@/constants/limit
 import type { Database } from "@/database/database.js";
 import { createCors } from "@/middleware/cors.js";
 import { errorHandler, notFoundHandler } from "@/middleware/error-handler.js";
-import { createGeneralResolver, rateLimit } from "@/middleware/rate-limit.js";
+import { createGeneralResolver, createLoginResolver, rateLimit } from "@/middleware/rate-limit.js";
+import { attachSession } from "@/middleware/session.js";
+import { SesionRepository } from "@/repositories/sesion.repository.js";
+import { UsuarioRepository } from "@/repositories/usuario.repository.js";
+import { createAuthRouter } from "@/routes/auth.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
+import { AuthService } from "@/services/auth.service.js";
+import { ArgonPasswordHasher, type PasswordHasher } from "@/utils/password-hasher.js";
 import { TokenBucketLimiter } from "@/utils/token-bucket.js";
 
 function serializeRequest(req: IncomingMessage & { id?: unknown }) {
@@ -27,9 +33,16 @@ function serializeResponse(res: ServerResponse) {
   return { statusCode: res.statusCode };
 }
 
-export function createApp(env: Env, database: Database, logger: Logger = createLogger(env)): Express {
+export function createApp(
+  env: Env,
+  database: Database,
+  logger: Logger = createLogger(env),
+  hasher: PasswordHasher = new ArgonPasswordHasher(),
+): Express {
   const limiter = new TokenBucketLimiter();
   setInterval(() => limiter.sweep(), RATE_LIMIT_SWEEP_INTERVAL_MS).unref();
+
+  const auth = new AuthService(new UsuarioRepository(database), new SesionRepository(database), hasher, env);
 
   const app = express();
   app.disable("x-powered-by");
@@ -39,9 +52,11 @@ export function createApp(env: Env, database: Database, logger: Logger = createL
   app.use(helmet());
   app.use(createCors(env));
   app.use(createSaludRouter(database));
-  app.use(rateLimit(limiter, createGeneralResolver(env)));
-  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(cookieParser(env.COOKIE_SECRET));
+  app.use(attachSession(auth, env));
+  app.use(rateLimit(limiter, createGeneralResolver(env, (req) => req.sesion?.usuarioId ?? null)));
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

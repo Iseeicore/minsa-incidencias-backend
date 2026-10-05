@@ -1,0 +1,58 @@
+import type { RequestHandler } from "express";
+import type { Env } from "@/config/env.js";
+import { ErrorCode } from "@/enums/error-code.enum.js";
+import { HttpStatus } from "@/enums/http-status.enum.js";
+import type { ModuloCodigo } from "@/enums/modulo-codigo.enum.js";
+import { AppError } from "@/errors/app-error.js";
+import type { AuthService } from "@/services/auth.service.js";
+import { clearSessionCookie, readSessionId } from "@/utils/session-cookie.js";
+
+/**
+ * Identifica a la persona si trae una cookie de sesión válida, pero nunca rechaza: las rutas que
+ * exigen sesión usan `requireSession`. Si la cookie ya no sirve (revocada, vencida o usuario
+ * desactivado) la borra para que el navegador no la siga enviando.
+ */
+export function attachSession(auth: AuthService, env: Env): RequestHandler {
+  return async (req, res, next) => {
+    const sesionId = readSessionId(req);
+    if (!sesionId) {
+      next();
+      return;
+    }
+    try {
+      const sesion = await auth.resolverSesion(sesionId);
+      if (sesion) {
+        req.sesion = sesion;
+      } else {
+        res.locals.sesionInvalida = true;
+        clearSessionCookie(res, env);
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+export const requireSession: RequestHandler = (req, res, next) => {
+  if (req.sesion) {
+    next();
+    return;
+  }
+  const code = res.locals.sesionInvalida ? ErrorCode.INVALID_SESSION : ErrorCode.UNAUTHORIZED;
+  next(new AppError(HttpStatus.UNAUTHORIZED, code));
+};
+
+export function requireModulo(modulo: ModuloCodigo): RequestHandler {
+  return (req, res, next) => {
+    if (!req.sesion) {
+      requireSession(req, res, next);
+      return;
+    }
+    if (!req.sesion.modulos.includes(modulo)) {
+      next(new AppError(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN));
+      return;
+    }
+    next();
+  };
+}

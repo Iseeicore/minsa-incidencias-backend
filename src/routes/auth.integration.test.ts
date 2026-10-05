@@ -4,10 +4,11 @@ import request from "supertest";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "@/app.js";
 import { createLogger } from "@/config/logger.js";
-import { ModuloCodigo } from "@/enums/modulo-codigo.enum.js";
+import { PERMISOS_POR_ROL } from "@/constants/permisos-por-rol.js";
 import { RolCodigo } from "@/enums/rol-codigo.enum.js";
+import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { errorHandler } from "@/middleware/error-handler.js";
-import { attachSession, requireModulo } from "@/middleware/session.js";
+import { attachSession, requireVista } from "@/middleware/session.js";
 import { SesionRepository } from "@/repositories/sesion.repository.js";
 import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { AuthService } from "@/services/auth.service.js";
@@ -52,7 +53,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     huella = await hasher.hash(CLAVE);
   });
 
-  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo y módulos, sin id ni roles", async () => {
+  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo y vistas, sin id, roles ni módulos", async () => {
     await usar(async (contexto) => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.ADMINISTRADOR], "Ana Prueba");
       const agente = request.agent(construir(contexto));
@@ -67,18 +68,59 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
 
       const me = await agente.get("/auth/me");
       expect(me.status).toBe(200);
-      expect(Object.keys(me.body).sort()).toEqual(["correo", "modulos", "nombreCompleto"]);
+      expect(Object.keys(me.body).sort()).toEqual(["correo", "nombreCompleto", "vistas"]);
       expect(me.body.nombreCompleto).toBe("Ana Prueba");
-      expect(me.body.modulos).toEqual(["ENTRENAMIENTO_IA", "INCIDENCIAS", "INDICADORES", "REVISION", "USUARIOS"]);
+      expect(me.body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
     });
   });
 
-  it("los módulos salen de los roles del usuario, consultados en la base", async () => {
+  it.each(Object.keys(PERMISOS_POR_ROL))("el rol %s abre las cuatro vistas, consultado en la base", async (rol) => {
     await usar(async (contexto) => {
-      await crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR]);
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [rol]);
       const agente = request.agent(construir(contexto));
-      await agente.post("/auth/login").send({ correo: "rev@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.modulos).toEqual(["ENTRENAMIENTO_IA", "INCIDENCIAS", "REVISION"]);
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(Object.values(VistaCodigo));
+    });
+  });
+
+  it("varios roles dan la unión de sus vistas sin repetir", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.AREA_QUEJA]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(Object.values(VistaCodigo));
+    });
+  });
+
+  it("un rol desactivado no da vistas y la sesión sigue válida", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
+      expect((await agente.get("/auth/me")).body.vistas).toHaveLength(4);
+
+      await contexto.client.query("UPDATE gestion.rol SET activo = false WHERE codigo = 'GESTOR'");
+
+      const me = await agente.get("/auth/me");
+      expect(me.status).toBe(200);
+      expect(me.body.vistas).toEqual([]);
+    });
+  });
+
+  it("una persona sin ningún rol tiene sesión válida y vistas vacías", async () => {
+    await usar(async (contexto) => {
+      await crearUsuario(contexto, "sin-rol@minsa.gob.pe", []);
+      const agente = request.agent(construir(contexto));
+      expect((await agente.post("/auth/login").send({ correo: "sin-rol@minsa.gob.pe", password: CLAVE })).status).toBe(204);
+      const me = await agente.get("/auth/me");
+      expect(me.status).toBe(200);
+      expect(me.body.vistas).toEqual([]);
+    });
+  });
+
+  it("el revisor retirado no se puede asignar: la base rechaza darle un rol desactivado a una persona", async () => {
+    await usar(async (contexto) => {
+      await expect(crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR])).rejects.toThrow();
     });
   });
 
@@ -194,16 +236,16 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     });
   });
 
-  it("requireModulo responde 403 si el usuario no tiene el módulo y deja pasar si lo tiene", async () => {
+  it("requireVista responde 403 si el usuario no tiene la vista y deja pasar si la tiene", async () => {
     await usar(async (contexto) => {
-      await crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR]);
+      await crearUsuario(contexto, "sin-rol@minsa.gob.pe", []);
       await crearUsuario(contexto, "adm@minsa.gob.pe", [RolCodigo.ADMINISTRADOR]);
       const env = testEnv();
       const auth = new AuthService(new UsuarioRepository(contexto.database), new SesionRepository(contexto.database), hasher, env);
       const mini = express();
       mini.use(cookieParser(TEST_COOKIE_SECRET));
       mini.use(attachSession(auth, env));
-      mini.get("/indicadores", requireModulo(ModuloCodigo.INDICADORES), (_req, res) => {
+      mini.get("/casos", requireVista(VistaCodigo.CASOS), (_req, res) => {
         res.json({ ok: true });
       });
       mini.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -212,16 +254,16 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       });
 
       const app = construir(contexto);
-      const revisor = request.agent(app);
+      const sinRol = request.agent(app);
       const admin = request.agent(app);
-      const cookieRevisor = (await revisor.post("/auth/login").send({ correo: "rev@minsa.gob.pe", password: CLAVE })).headers["set-cookie"] as unknown as string[];
+      const cookieSinRol = (await sinRol.post("/auth/login").send({ correo: "sin-rol@minsa.gob.pe", password: CLAVE })).headers["set-cookie"] as unknown as string[];
       const cookieAdmin = (await admin.post("/auth/login").send({ correo: "adm@minsa.gob.pe", password: CLAVE })).headers["set-cookie"] as unknown as string[];
 
-      const prohibido = await request(mini).get("/indicadores").set("Cookie", cookieRevisor);
+      const prohibido = await request(mini).get("/casos").set("Cookie", cookieSinRol);
       expect(prohibido.status).toBe(403);
       expect(prohibido.body.errorCode).toBe("FORBIDDEN");
-      expect((await request(mini).get("/indicadores").set("Cookie", cookieAdmin)).status).toBe(200);
-      expect((await request(mini).get("/indicadores")).status).toBe(401);
+      expect((await request(mini).get("/casos").set("Cookie", cookieAdmin)).status).toBe(200);
+      expect((await request(mini).get("/casos")).status).toBe(401);
     });
   });
 
@@ -262,12 +304,20 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     });
   });
 
-  it("los enums de módulos y roles coinciden con los catálogos de la base", async () => {
+  it("el enum de roles coincide con el catálogo y la tabla de permisos con los roles activos", async () => {
     await usar(async ({ database }) => {
-      const modulos = await database.query<{ codigo: string }>("SELECT codigo FROM gestion.modulo");
-      const roles = await database.query<{ codigo: string }>("SELECT codigo FROM gestion.rol");
-      expect(modulos.map((m) => m.codigo).sort()).toEqual(Object.values(ModuloCodigo).sort());
+      const roles = await database.query<{ codigo: string; activo: boolean }>("SELECT codigo, activo FROM gestion.rol");
       expect(roles.map((r) => r.codigo).sort()).toEqual(Object.values(RolCodigo).sort());
+      expect(roles.filter((r) => r.activo).map((r) => r.codigo).sort()).toEqual(Object.keys(PERMISOS_POR_ROL).sort());
+    });
+  });
+
+  it("la base ya no tiene las tablas de módulos", async () => {
+    await usar(async ({ database }) => {
+      const filas = await database.query<{ modulo: string | null; rol_modulo: string | null }>(
+        "SELECT to_regclass('gestion.modulo') AS modulo, to_regclass('gestion.rol_modulo') AS rol_modulo",
+      );
+      expect(filas[0]).toEqual({ modulo: null, rol_modulo: null });
     });
   });
 });

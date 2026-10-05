@@ -6,10 +6,26 @@ export interface RollbackContext {
   client: pg.Client;
 }
 
+const SUFIJOS_DE_BASE_DESECHABLE = ["_desechable", "_dev", "_local"];
+
+/**
+ * Las pruebas de integración solo corren contra una base cuyo nombre termine en `_desechable`, `_dev` o
+ * `_local`. El mensaje nunca incluye la URL, para no filtrar la clave.
+ */
+export function assertBaseDesechable(url: string): void {
+  const nombre = decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
+  if (!SUFIJOS_DE_BASE_DESECHABLE.some((sufijo) => nombre.endsWith(sufijo))) {
+    throw new Error(
+      `Las pruebas de integración solo corren contra una base desechable (nombre terminado en ${SUFIJOS_DE_BASE_DESECHABLE.join(", ")})`,
+    );
+  }
+}
+
 export async function withRollbackDatabase(
   url: string,
   work: (context: RollbackContext) => Promise<void>,
 ): Promise<void> {
+  assertBaseDesechable(url);
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   await client.query("BEGIN");

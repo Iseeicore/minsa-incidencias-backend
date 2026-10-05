@@ -2,7 +2,7 @@
 
 API de la plataforma de gestión de incidencias: visor de incidencias, revisión, entrenamiento de la IA, indicadores y portal de carga de archivos. Está construida con Express 5 y TypeScript. Comparte la base PostgreSQL del chatbot (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones: este repo nunca las ejecuta. El frontend es `minsa-incidencias-frontend`.
 
-> **Estado:** base del servidor (CORS, límite de peticiones por cubeta de tokens, errores estandarizados, logs, conexión a PostgreSQL, cierre ordenado y salud) y **autenticación por correo con sesión opaca y acceso por módulo** (ver [Autenticación y sesiones](#autenticación-y-sesiones)). Todavía no hay módulos de negocio: ver [Siguientes pasos](#siguientes-pasos).
+> **Estado:** base del servidor (CORS, límite de peticiones por cubeta de tokens, errores estandarizados, logs, conexión a PostgreSQL, cierre ordenado y salud) y **autenticación por correo con sesión opaca y vistas por rol** (ver [Autenticación y sesiones](#autenticación-y-sesiones)). Todavía no hay módulos de negocio: ver [Siguientes pasos](#siguientes-pasos).
 
 ## Inicio rápido
 
@@ -71,7 +71,7 @@ Requiere Node `^24.15` (campo `engines` de `package.json`).
 
 ## Conexión a la base de datos
 
-Esta API se conecta a la **base PostgreSQL del chatbot** (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones y deja las cargas iniciales (estados, categorías, roles, módulos). Aquí no se ejecuta ninguna migración. Solo se necesita una variable en el `.env`:
+Esta API se conecta a la **base PostgreSQL del chatbot** (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones y deja las cargas iniciales (estados, categorías, roles). Aquí no se ejecuta ninguna migración. Solo se necesita una variable en el `.env`:
 
 ```bash
 DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:PUERTO/NOMBRE_DE_LA_BASE
@@ -97,18 +97,35 @@ No se usa JWT. La sesión es **opaca y vive en la base**, y el navegador solo gu
 | Ruta | Qué hace | Respuesta |
 |---|---|---|
 | `POST /auth/login` | Cuerpo `{ "correo", "password" }`. Normaliza el correo, verifica la clave (Argon2id) y crea la sesión. Límite: 5 intentos por 15 minutos por correo | `204` con la cookie de sesión; `401 INVALID_CREDENTIALS` si el correo o la clave no sirven (el mismo error para un correo inexistente, una clave mala o un usuario desactivado); `400` si el cuerpo es inválido; `429` si se agotaron los intentos |
-| `GET /auth/me` | Quién soy: nombre, correo y los módulos que puedo abrir | `200 { nombreCompleto, correo, modulos }`; `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
+| `GET /auth/me` | Quién soy: nombre, correo y las vistas que puedo abrir | `200 { nombreCompleto, correo, vistas }`; `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
 | `POST /auth/logout` | Revoca la sesión en la base y borra la cookie | `204` (siempre, aunque no hubiera sesión) |
 
 Cómo funciona:
 
-1. Al iniciar sesión se crea una fila en `gestion.sesion_usuario` y se envía su `id` en una cookie **firmada**, `HttpOnly` y `SameSite=Strict` (con `Secure` en producción), con la vigencia máxima de 8 horas. La cookie **no lleva roles, módulos ni datos de la persona**.
-2. En cada petición `attachSession` lee la cookie con `readSessionId` (valida firma y formato) y consulta **en una sola consulta** si la sesión sigue abierta: no revocada, dentro de sus 8 horas y de los 30 minutos de inactividad, y con el usuario activo. De paso trae los módulos que abren los roles del usuario. Si la sesión ya no sirve, borra la cookie.
+1. Al iniciar sesión se crea una fila en `gestion.sesion_usuario` y se envía su `id` en una cookie **firmada**, `HttpOnly` y `SameSite=Strict` (con `Secure` en producción), con la vigencia máxima de 8 horas. La cookie **no lleva roles, vistas ni datos de la persona**.
+2. En cada petición `attachSession` lee la cookie con `readSessionId` (valida firma y formato) y consulta **en una sola consulta** si la sesión sigue abierta: no revocada, dentro de sus 8 horas y de los 30 minutos de inactividad, y con el usuario activo. De paso trae los roles activos del usuario (un rol desactivado no cuenta) y el servicio los convierte en vistas. Si la sesión ya no sirve, borra la cookie.
 3. La actividad se renueva como mucho una vez por minuto (no se escribe en cada petición).
-4. El acceso se da **por módulo**: `requireModulo(ModuloCodigo.REVISION)` responde `403` si el usuario no lo tiene. Un usuario abre la unión de los módulos de sus roles (`gestion.rol_modulo`).
+4. El acceso se da **por vista**: `requireVista(VistaCodigo.CASOS)` responde `403` si el usuario no la tiene. Un usuario abre la unión de las vistas de sus roles (ver [Vistas por rol](#vistas-por-rol)).
 5. **Interruptor de apagado:** cerrar sesión revoca la fila; desactivar a un usuario hace que la base cierre todas sus sesiones (disparador); la cookie deja de servir aunque el navegador la conserve.
 6. Cada login crea una sesión nueva (si traía otra abierta, la cierra): el identificador se rota.
 7. **Tiempos:** si el correo no existe se verifica igualmente una clave falsa, para que el tiempo de respuesta no delate qué correos están registrados.
+
+### Vistas por rol
+
+En el MVP los permisos son una **tabla fija en el código** (`src/constants/permisos-por-rol.ts`), sin permisos editables por persona: el rol define las vistas y, más adelante, las acciones. Los roles nunca viajan al navegador; solo las vistas que resultan. Los módulos se eliminaron: la base ya no tiene `gestion.modulo` ni `gestion.rol_modulo`.
+
+| Rol | Vistas |
+|---|---|
+| `ADMINISTRADOR` | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` |
+| `GESTOR` (revisa y deriva) | las cuatro |
+| `AREA_DENUNCIA_CORRUPCION` | las cuatro |
+| `AREA_QUEJA` | las cuatro |
+| `AREA_RECLAMO` | las cuatro |
+
+- **Varios roles:** se unen sus vistas, sin repetir y en el orden del menú (`vistasDeRoles`).
+- **Revisor retirado:** el rol `REVISOR` sigue en el catálogo de la base pero desactivado; solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista.
+- **Sin ningún rol activo** (por ejemplo, un rol desactivado después): la sesión es válida y `GET /auth/me` devuelve `vistas: []`; cualquier ruta con `requireVista` responde `403`. No se rechaza la sesión porque la persona sí se autenticó; lo que no tiene es acceso.
+- **Qué ve cada rol dentro de las vistas** (categorías) y **qué puede hacer** (acciones) no se decide aquí todavía: llegará con los endpoints de incidencias.
 
 ### Crear el primer administrador
 
@@ -193,17 +210,17 @@ src/
   server.ts            Arranque, cierre ordenado (SIGTERM/SIGINT) y pool de la base
   app.ts               createApp: logs, helmet, CORS, salud, límite, JSON, cookies, errores
   config/              env.ts (variables validadas) y logger.ts
-  constants/           Mensajes de error y límites (sin números mágicos)
+  constants/           Mensajes de error, límites (sin números mágicos) y permisos-por-rol (vistas de cada rol)
   database/            Puerto Database, adaptador PostgreSQL (pg) y actores de auditoría
-  enums/               ErrorCode, HttpStatus, ModuloCodigo, RolCodigo
+  enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo
   errors/app-error.ts  AppError (estado HTTP, código interno y mensaje)
-  middleware/          cors, rate-limit, session (attachSession, requireSession, requireModulo), error-handler
+  middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
   repositories/        Acceso a la base: usuario.repository, sesion.repository
   services/            auth.service (login, sesión, cierre) y administrador.service
   routes/              salud.routes y auth.routes
   scripts/             crear-admin (primer administrador)
   types/               Ampliación de Request con la sesión actual
-  utils/               token-bucket, session-cookie, password-hasher (Argon2id)
+  utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles
   test-utils/          Ayudas de pruebas (no entra al build)
 ```
 
@@ -232,6 +249,8 @@ Las pruebas contra PostgreSQL real (`*.integration.test.ts`: base de datos y aut
 ```bash
 TEST_DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:5432/NOMBRE_DE_LA_BASE npm test
 ```
+
+Por seguridad, esas pruebas **se niegan a correr** si el nombre de la base no termina en `_desechable`, `_dev` o `_local` (el mensaje de error nunca incluye la clave de la URL).
 
 ## Siguientes pasos
 

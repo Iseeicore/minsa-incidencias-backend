@@ -34,7 +34,7 @@ export function createAuthRouter(auth: AuthService, env: Env, loginLimiter: Requ
     res.json({
       nombreCompleto: sesion.nombreCompleto,
       correo: sesion.correo,
-      modulos: sesion.modulos,
+      vistas: sesion.vistas,
     });
   });
 

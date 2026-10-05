@@ -11,6 +11,7 @@ const sesion = (vistas: VistaCodigo[]): SesionActual => ({
   usuarioId: "u-1",
   correo: "ana@minsa.gob.pe",
   nombreCompleto: "Ana Prueba",
+  roles: [],
   vistas,
 });
 

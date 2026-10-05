@@ -59,6 +59,7 @@ export class AuthService {
       usuarioId: fila.usuarioId,
       correo: fila.correo,
       nombreCompleto: fila.nombreCompleto,
+      roles: fila.roles,
       vistas: vistasDeRoles(fila.roles),
     };
   }

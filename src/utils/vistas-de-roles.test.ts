@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERMISOS_POR_ROL, type PermisosDelRol } from "@/constants/permisos-por-rol.js";
+import { PERMISOS_POR_ROL } from "@/constants/permisos-por-rol.js";
 import { RolCodigo } from "@/enums/rol-codigo.enum.js";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { vistasDeRoles } from "@/utils/vistas-de-roles.js";
@@ -31,7 +31,7 @@ describe("PERMISOS_POR_ROL", () => {
 });
 
 describe("vistasDeRoles", () => {
-  const permisos: Record<string, PermisosDelRol> = {
+  const permisos: Record<string, { vistas: VistaCodigo[] }> = {
     A: { vistas: [VistaCodigo.CASOS, VistaCodigo.INICIO] },
     B: { vistas: [VistaCodigo.DERIVACIONES, VistaCodigo.CASOS] },
     C: { vistas: [] },

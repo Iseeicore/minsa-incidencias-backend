@@ -9,12 +9,12 @@ const ORDEN_DEL_MENU: readonly VistaCodigo[] = Object.values(VistaCodigo);
  */
 export function vistasDeRoles(
   roles: readonly string[],
-  permisos: Readonly<Record<string, PermisosDelRol>> = PERMISOS_POR_ROL,
+  permisos: Readonly<Record<string, Pick<PermisosDelRol, "vistas">>> = PERMISOS_POR_ROL,
 ): VistaCodigo[] {
   const habilitadas = new Set<VistaCodigo>();
   for (const rol of roles) {
     if (!Object.hasOwn(permisos, rol)) continue;
-    for (const vista of (permisos[rol] as PermisosDelRol).vistas) habilitadas.add(vista);
+    for (const vista of (permisos[rol] as Pick<PermisosDelRol, "vistas">).vistas) habilitadas.add(vista);
   }
   return ORDEN_DEL_MENU.filter((vista) => habilitadas.has(vista));
 }

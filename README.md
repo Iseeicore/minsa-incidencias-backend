@@ -198,6 +198,24 @@ docker compose run --rm \
 
 Guarda la huella Argon2id (nunca la clave), asigna el rol `ADMINISTRADOR` y firma con el actor `sistema:crear-admin`. Rechaza un correo repetido y una clave de menos de 12 caracteres. La clave queda en el historial de tu terminal: úsalo solo para el primer acceso y cámbiala cuando exista esa pantalla.
 
+### Crear usuarios sintéticos para probar cada rol
+
+Para recorrer cada flujo en el navegador hace falta una persona por rol. `crear-usuario-prueba` crea una persona sintética con cualquiera de los cinco roles vigentes (`ADMINISTRADOR`, `GESTOR`, `AREA_DENUNCIA_CORRUPCION`, `AREA_QUEJA`, `AREA_RECLAMO`). **Solo corre contra una base desechable**: se niega si el nombre de la base de `DATABASE_URL` no termina en `_desechable`, `_dev` o `_local`, antes de abrir ninguna conexión, y el mensaje nunca incluye la URL.
+
+```bash
+docker compose run --rm \
+  -e USUARIO_NOMBRE="Gestora de Prueba" \
+  -e USUARIO_CORREO="gestor@prueba.local" \
+  -e USUARIO_PASSWORD="una-clave-de-12-o-mas-caracteres" \
+  -e USUARIO_ROL="GESTOR" \
+  minsa-incidencias-backend node dist/scripts/crear-usuario-prueba.js
+```
+
+- Firma con el actor `sistema:script-prueba` y guarda solo la huella Argon2id.
+- Rechaza el rol `REVISOR` (retirado) y cualquier rol desactivado en la base, y una clave de menos de 12 caracteres.
+- **Es idempotente:** si el correo ya existe no duplica, no cambia la clave ni agrega roles, y lo dice.
+- Solo imprime el correo y el rol; nunca la clave ni la URL. Usa claves sintéticas y no las guardes en el repositorio.
+
 ## Conexión con el frontend (CORS)
 
 El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así que el navegador exige CORS. Se configura con una lista de orígenes exactos en `CORS_ORIGINS`:
@@ -275,7 +293,7 @@ src/
   repositories/        Acceso a la base: usuario, sesion e incidencia (consultas parametrizadas)
   services/            auth.service (login, sesión, cierre), administrador.service e incidencia.service (casos y acciones)
   routes/              salud, auth e incidencias
-  scripts/             crear-admin (primer administrador)
+  scripts/             crear-admin (primer administrador), crear-usuario-prueba (personas sintéticas por rol)
   types/               Ampliación de Request con la sesión actual
   utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,
                        plazo-incidencia, historial-incidencia, reclamante

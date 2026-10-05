@@ -12,7 +12,8 @@
     "docker:up": "docker compose up -d --build --wait --wait-timeout 180",
     "docker:logs": "docker compose logs -f",
     "docker:down": "docker compose down",
-    "crear-admin": "node --env-file=.env dist/scripts/crear-admin.js"
+    "crear-admin": "node --env-file=.env dist/scripts/crear-admin.js",
+    "crear-usuario-prueba": "node --env-file=.env dist/scripts/crear-usuario-prueba.js"
   },
   "type": "module",
   "dependencies": {

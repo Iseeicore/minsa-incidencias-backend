@@ -11,13 +11,17 @@ export interface ReglaDeAccion {
   estados: readonly EstadoIncidencia[];
   categorias?: readonly CategoriaIncidencia[];
   revisada?: boolean;
+  /** Solo en `corregir`: a qué categorías puede cambiar el caso quien corrige. Sin él, a cualquiera. */
+  categoriasDestino?: readonly CategoriaIncidencia[];
 }
 
 export interface PermisosDelRol {
   vistas: readonly VistaCodigo[];
   veSinCategoria: boolean;
-  /** Si puede listar todas las áreas (`GET /areas`, para elegir el destino); si no, solo ve la suya. */
+  /** Si puede listar todas las áreas (`GET /areas`, para filtrar por establecimiento o elegir el destino); si no, solo ve la suya. */
   veTodasLasAreas: boolean;
+  /** Si su campana cuenta todos los casos abiertos que ve, en vez de solo los que le toca atender según sus acciones. */
+  avisaTodoLoAbierto: boolean;
   acciones: readonly ReglaDeAccion[];
 }
 
@@ -28,54 +32,78 @@ const VISTAS_DEL_GESTOR = sin(VistaCodigo.QR);
 const VISTAS_DE_OTRANS = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR);
 const VISTAS_DEL_ESTABLECIMIENTO = sin(VistaCodigo.DERIVACIONES);
 
-const { CLASIFICADO, DERIVADO, EN_GESTION } = EstadoIncidencia;
+const { CLASIFICADO, DERIVADO, EN_GESTION, ARCHIVADO } = EstadoIncidencia;
 const { DENUNCIA_CORRUPCION, QUEJA, RECLAMO, OTRO } = CategoriaIncidencia;
-const { CONFIRMAR, CORREGIR, DERIVAR, TOMAR, RESOLVER } = AccionIncidencia;
+const { CONFIRMAR, CORREGIR, DERIVAR, TOMAR, RESOLVER, ARCHIVAR, REABRIR } = AccionIncidencia;
 
-const CATEGORIAS_DEL_GESTOR: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO, OTRO];
-const CATEGORIAS_PARA_DERIVAR: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO];
+const CATEGORIAS_DEL_AREA: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO, OTRO];
+const ESTADOS_ARCHIVABLES: readonly EstadoIncidencia[] = [CLASIFICADO, DERIVADO, EN_GESTION];
+
+/** Lo que hacen sobre los casos de su propia área el responsable del establecimiento y el gestor: revisar, atender, archivar y reabrir. */
+const ACCIONES_DE_REVISION_EN_EL_AREA: readonly ReglaDeAccion[] = [
+  { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: false },
+  { accion: CORREGIR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: false, categoriasDestino: CATEGORIAS_DEL_AREA },
+  { accion: TOMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: true },
+  { accion: TOMAR, estados: [DERIVADO], categorias: CATEGORIAS_DEL_AREA },
+  { accion: RESOLVER, estados: [EN_GESTION, DERIVADO], categorias: CATEGORIAS_DEL_AREA },
+  { accion: ARCHIVAR, estados: ESTADOS_ARCHIVABLES, categorias: CATEGORIAS_DEL_AREA },
+  { accion: REABRIR, estados: [ARCHIVADO], categorias: CATEGORIAS_DEL_AREA },
+];
 
 /**
  * Qué puede abrir y hacer cada rol en el MVP: una tabla fija, sin permisos editables. Qué categorías ve cada
- * rol lo decide la base (`gestion.rol_categoria`) y, para los roles ligados a un área (OTRANS y establecimiento),
+ * rol lo decide la base (`gestion.rol_categoria`) y, para los roles ligados a un área (gestor, OTRANS y establecimiento),
  * que el caso esté destinado a su área; aquí solo se dice si ve los casos aún sin categoría y qué acciones puede
- * ejecutar según el estado, la revisión y la categoría. El rol DIRIS está desactivado y por eso no figura. El
- * administrador solo mira: no actúa sobre los casos. Derivar elige el área de destino (por defecto, la del
- * establecimiento de origen) y la deriva siempre un gestor; por eso el gestor lista todas las áreas para elegirla,
- * y el administrador también (las ve para filtrar por establecimiento). OTRANS y los establecimientos solo ven
- * su propia área: no derivan y no necesitan conocer las demás.
+ * ejecutar según el estado, la revisión y la categoría. El rol DIRIS está desactivado y por eso no figura.
+ *
+ * La revisión ocurre donde llega el caso: el responsable del establecimiento y el gestor (que pertenece siempre a un
+ * establecimiento) confirman, corrigen, toman, resuelven, archivan y reabren los casos de su área, y OTRANS hace lo
+ * mismo con la corrupción. No derivan: derivar (cambiar el área de destino) solo lo hacen OTRANS y el administrador. El
+ * administrador revisa, deriva, archiva y reabre cualquier caso, pero no toma ni resuelve: ese trabajo lo hace el área.
+ * Solo el administrador lista todas las áreas; los demás roles ven la suya.
  */
 export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
-  [RolCodigo.ADMINISTRADOR]: { vistas: TODAS_LAS_VISTAS, veSinCategoria: true, veTodasLasAreas: true, acciones: [] },
-  [RolCodigo.GESTOR]: {
-    vistas: VISTAS_DEL_GESTOR,
+  [RolCodigo.ADMINISTRADOR]: {
+    vistas: TODAS_LAS_VISTAS,
     veSinCategoria: true,
     veTodasLasAreas: true,
+    avisaTodoLoAbierto: true,
     acciones: [
-      { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_GESTOR, revisada: false },
-      { accion: CORREGIR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_GESTOR, revisada: false },
-      { accion: DERIVAR, estados: [CLASIFICADO], categorias: CATEGORIAS_PARA_DERIVAR, revisada: true },
+      { accion: CONFIRMAR, estados: [CLASIFICADO], revisada: false },
+      { accion: CORREGIR, estados: [CLASIFICADO], revisada: false },
+      { accion: DERIVAR, estados: [CLASIFICADO], revisada: true },
+      { accion: ARCHIVAR, estados: ESTADOS_ARCHIVABLES },
+      { accion: REABRIR, estados: [ARCHIVADO] },
     ],
+  },
+  [RolCodigo.GESTOR]: {
+    vistas: VISTAS_DEL_GESTOR,
+    veSinCategoria: false,
+    veTodasLasAreas: false,
+    avisaTodoLoAbierto: false,
+    acciones: ACCIONES_DE_REVISION_EN_EL_AREA,
   },
   [RolCodigo.OTRANS]: {
     vistas: VISTAS_DE_OTRANS,
     veSinCategoria: false,
     veTodasLasAreas: false,
+    avisaTodoLoAbierto: false,
     acciones: [
       { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: false },
       { accion: CORREGIR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: false },
+      { accion: DERIVAR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: true },
       { accion: TOMAR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: true },
       { accion: TOMAR, estados: [DERIVADO], categorias: [DENUNCIA_CORRUPCION] },
       { accion: RESOLVER, estados: [DERIVADO, EN_GESTION], categorias: [DENUNCIA_CORRUPCION] },
+      { accion: ARCHIVAR, estados: ESTADOS_ARCHIVABLES, categorias: [DENUNCIA_CORRUPCION] },
+      { accion: REABRIR, estados: [ARCHIVADO], categorias: [DENUNCIA_CORRUPCION] },
     ],
   },
   [RolCodigo.ESTABLECIMIENTO]: {
     vistas: VISTAS_DEL_ESTABLECIMIENTO,
     veSinCategoria: false,
     veTodasLasAreas: false,
-    acciones: [
-      { accion: TOMAR, estados: [DERIVADO], categorias: CATEGORIAS_PARA_DERIVAR },
-      { accion: RESOLVER, estados: [DERIVADO, EN_GESTION], categorias: CATEGORIAS_PARA_DERIVAR },
-    ],
+    avisaTodoLoAbierto: false,
+    acciones: ACCIONES_DE_REVISION_EN_EL_AREA,
   },
 };

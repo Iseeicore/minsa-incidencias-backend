@@ -7,6 +7,8 @@ import {
 import type { ReglaDeAccion } from "@/constants/permisos-por-rol.js";
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
+import type { MotivoArchivo } from "@/enums/motivo-archivo.enum.js";
+import type { ResultadoResolucion } from "@/enums/resultado-resolucion.enum.js";
 import { TipoArea } from "@/enums/tipo-area.enum.js";
 import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { FilaHistorial } from "@/utils/historial-incidencia.js";
@@ -26,6 +28,19 @@ export interface FiltrosDeListado {
   texto?: string;
   /** Código RENIPRESS canónico del establecimiento de origen. */
   establecimiento?: string;
+  /** Solo los archivados por este motivo. */
+  motivoArchivo?: MotivoArchivo;
+}
+
+export interface DatosDeResolucion {
+  medidasTomadas: string;
+  fundamento: string;
+  resultado: ResultadoResolucion;
+}
+
+export interface DatosDeArchivo {
+  motivo: MotivoArchivo;
+  detalle: string;
 }
 
 export interface FilaCaso {
@@ -42,13 +57,21 @@ export interface FilaCaso {
   corregida: boolean;
   areaCodigo: string | null;
   areaNombre: string | null;
+  areaDestinoId: number | null;
   areaOrigenId: number | null;
   establecimientoCodigo: string | null;
   establecimientoNombre: string | null;
   establecimientoNivel: string | null;
   establecimientoCategoria: string | null;
   responsable: string | null;
-  resolucion: string | null;
+  medidasTomadas: string | null;
+  fundamento: string | null;
+  resultadoResolucion: ResultadoResolucion | null;
+  motivoArchivo: MotivoArchivo | null;
+  archivoDetalle: string | null;
+  archivadoEn: Date | null;
+  reabiertoEn: Date | null;
+  reabiertoMotivo: string | null;
   descripcion: string;
   esAnonimo: boolean;
   dni: string | null;
@@ -99,10 +122,11 @@ const DESDE_BASICO = `
 
 /**
  * Solo ve un caso quien tiene un rol activo que lo permita: la categoría del caso debe estar entre las del rol
- * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos. Un rol ligado a un área (OTRANS,
- * establecimiento) además exige que el caso esté destinado al área de la persona; los roles sin área (administrador,
- * gestor) no filtran por área. Los roles de establecimiento o DIRIS nunca ven una categoría sensible: se vuelve a
- * comprobar aquí con `es_sensible`, aparte de lo que diga `rol_categoria`.
+ * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos. Un rol ligado a un área (gestor,
+ * OTRANS, establecimiento) además exige que el caso esté destinado al área de la persona, también cuando está
+ * archivado (el archivo conserva su área de destino); el rol sin área (administrador) no filtra por área.
+ * Los roles de establecimiento o DIRIS nunca ven una categoría sensible: se vuelve a comprobar aquí con
+ * `es_sensible`, aparte de lo que diga `rol_categoria`.
  */
 function visibilidad(p: Parametros, visible: VisibilidadCasos): string {
   const roles = p.agregar([...visible.roles]);
@@ -135,6 +159,9 @@ function condicionesDeFiltros(p: Parametros, filtros: FiltrosDeListado): string[
     );
   }
   if (filtros.estado) condiciones.push(`e.codigo = ${p.agregar(filtros.estado)}`);
+  if (filtros.motivoArchivo) {
+    condiciones.push(`i.motivo_archivo_id = (SELECT m.id FROM catalogo.motivo_archivo m WHERE m.codigo = ${p.agregar(filtros.motivoArchivo)})`);
+  }
   if (filtros.categoria) condiciones.push(`c.codigo = ${p.agregar(filtros.categoria)}`);
   if (filtros.sinCategoria) condiciones.push("i.categoria_id IS NULL");
   if (filtros.texto) {
@@ -163,6 +190,7 @@ function consultaDeCaso(p: Parametros): string {
            (i.categoria_corregida_en IS NOT NULL) AS corregida,
            ad.codigo AS "areaCodigo",
            ad.nombre AS "areaNombre",
+           i.area_destino_id AS "areaDestinoId",
            es.area_id AS "areaOrigenId",
            es.codigo_renipress AS "establecimientoCodigo",
            es.nombre AS "establecimientoNombre",
@@ -171,7 +199,14 @@ function consultaDeCaso(p: Parametros): string {
            CASE WHEN ui.id IS NOT NULL THEN ui.nombre_completo
                 WHEN starts_with(resp.actor, ${prefijoSistema}) THEN 'Sistema'
            END AS responsable,
-           i.resolucion,
+           i.medidas_tomadas AS "medidasTomadas",
+           i.fundamento,
+           rr.codigo AS "resultadoResolucion",
+           ma.codigo AS "motivoArchivo",
+           i.archivo_detalle AS "archivoDetalle",
+           i.archivado_en AS "archivadoEn",
+           i.reabierto_en AS "reabiertoEn",
+           i.reabierto_motivo AS "reabiertoMotivo",
            i.descripcion,
            i.es_anonimo AS "esAnonimo",
            i.dni_reclamante AS dni,
@@ -186,6 +221,8 @@ function consultaDeCaso(p: Parametros): string {
       LEFT JOIN catalogo.area ad ON ad.id = i.area_destino_id
       LEFT JOIN catalogo.establecimiento_salud es ON es.id = i.establecimiento_id
       LEFT JOIN catalogo.nivel_atencion na ON na.id = es.nivel_atencion_id
+      LEFT JOIN catalogo.resultado_resolucion rr ON rr.id = i.resultado_resolucion_id
+      LEFT JOIN catalogo.motivo_archivo ma ON ma.id = i.motivo_archivo_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(
                  (SELECT a.actor
@@ -280,7 +317,8 @@ export class IncidenciaRepository {
               (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'categoria_confirmada_en') AS confirmada,
               (SELECT s.codigo FROM catalogo.estado_incidencia s
                 WHERE s.id = (a.cambios #>> '{estado_incidencia_id,despues}')::smallint) AS "estadoNuevo",
-              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'resolucion') AS resolvio
+              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'medidas_tomadas') AS resolvio,
+              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'reabierto_motivo') AS reabrio
          FROM chatbot.incidencia_paciente_auditoria a
          LEFT JOIN gestion.usuario_interno ui ON a.actor = $2 || ui.correo
         WHERE a.incidencia_paciente_id = $1
@@ -351,13 +389,18 @@ export class IncidenciaRepository {
   }
 
   /**
-   * El área a la que se puede derivar: activa y de un establecimiento. Por su código (la que eligió la persona) o por
-   * su id (la del establecimiento de origen). `null` si no existe o no cumple.
+   * El área a la que se puede derivar: activa y del tipo que recibe el caso (un establecimiento; OTRANS si es una
+   * denuncia por corrupción). Por su código (la que eligió la persona) o por su id (la de origen o la actual).
+   * `null` si no existe o no cumple.
    */
-  async areaReceptora(criterio: { codigo: string } | { id: number }, ejecutor: DbExecutor = this.database): Promise<number | null> {
+  async areaReceptora(
+    criterio: { codigo: string } | { id: number },
+    tipoDeArea: TipoArea = TipoArea.ESTABLECIMIENTO,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<number | null> {
     const p = new Parametros();
     const igual = "codigo" in criterio ? `a.codigo = ${p.agregar(criterio.codigo)}` : `a.id = ${p.agregar(criterio.id)}`;
-    const tipo = p.agregar(TipoArea.ESTABLECIMIENTO);
+    const tipo = p.agregar(tipoDeArea);
     const filas = await ejecutor.query<{ id: number }>(
       `SELECT a.id
          FROM catalogo.area a
@@ -388,8 +431,39 @@ export class IncidenciaRepository {
     );
   }
 
-  async resolver(tx: DbExecutor, incidenciaId: string, resolucion: string): Promise<void> {
-    await tx.query("UPDATE chatbot.incidencia_paciente SET resolucion = $2 WHERE id = $1", [incidenciaId, resolucion]);
+  /** Registra la resolución en una sola sentencia: la base exige los tres campos juntos y pasa el caso a RESUELTO. */
+  async resolver(tx: DbExecutor, incidenciaId: string, datos: DatosDeResolucion): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET medidas_tomadas = $2,
+              fundamento = $3,
+              resultado_resolucion_id = (SELECT r.id FROM catalogo.resultado_resolucion r WHERE r.codigo = $4)
+        WHERE id = $1`,
+      [incidenciaId, datos.medidasTomadas, datos.fundamento, datos.resultado],
+    );
+  }
+
+  /** Archivo manual: el estado, el motivo y su justificación van juntos; quién y cuándo lo llena la base con el actor declarado. */
+  async archivar(tx: DbExecutor, incidenciaId: string, datos: DatosDeArchivo): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $2),
+              motivo_archivo_id = (SELECT m.id FROM catalogo.motivo_archivo m WHERE m.codigo = $3),
+              archivo_detalle = $4
+        WHERE id = $1`,
+      [incidenciaId, EstadoIncidencia.ARCHIVADO, datos.motivo, datos.detalle],
+    );
+  }
+
+  /** Reabre un archivado: vuelve a EN_GESTION con el motivo; la base limpia el archivo y registra quién y cuándo reabrió. */
+  async reabrir(tx: DbExecutor, incidenciaId: string, motivo: string): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $2),
+              reabierto_motivo = $3
+        WHERE id = $1`,
+      [incidenciaId, EstadoIncidencia.EN_GESTION, motivo],
+    );
   }
 }
 

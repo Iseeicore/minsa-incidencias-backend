@@ -1,5 +1,7 @@
-import type { CategoriaApi, EstadoApi } from "@/constants/incidencias.js";
+import type { CategoriaApi, EstadoApi, MotivoDeArchivoManual } from "@/constants/incidencias.js";
 import type { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
+import type { MotivoArchivo } from "@/enums/motivo-archivo.enum.js";
+import type { ResultadoResolucion } from "@/enums/resultado-resolucion.enum.js";
 import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { PlazoCalculado } from "@/utils/plazo-incidencia.js";
 import type { ItemDeHistorial } from "@/utils/historial-incidencia.js";
@@ -14,13 +16,23 @@ export interface ConsultaListado {
   texto?: string;
   /** Código RENIPRESS canónico (sin ceros a la izquierda) del establecimiento de origen. */
   establecimiento?: string;
+  /** Solo los archivados por este motivo. */
+  motivoArchivo?: MotivoArchivo;
 }
 
 export interface DatosAccion {
   categoria?: CategoriaApi;
-  resolucion?: string;
-  /** Código del área de destino al derivar; si falta, la del establecimiento de origen. */
+  /** Código del área de destino al derivar; si falta, la del establecimiento de origen (o la actual, en una denuncia por corrupción). */
   areaDestino?: string;
+  /** Resolver: las tres partes de la resolución. */
+  medidasTomadas?: string;
+  fundamento?: string;
+  resultado?: ResultadoResolucion;
+  /** Archivar: el motivo que elige la persona y su justificación. */
+  motivoArchivo?: MotivoDeArchivoManual;
+  detalle?: string;
+  /** Reabrir: por qué se reabre. */
+  motivoReapertura?: string;
 }
 
 export interface AreaDto {
@@ -64,8 +76,30 @@ export interface EvidenciaDto {
   verificada: boolean;
 }
 
+/** Cómo se resolvió el caso; `null` mientras no se resuelve. */
+export interface ResolucionDto {
+  medidasTomadas: string;
+  fundamento: string;
+  resultado: ResultadoResolucion;
+}
+
+/** Por qué está archivado. `detalle` es la justificación de la persona; nulo si lo archivó el sistema (vencimiento o vigencia). */
+export interface ArchivoDto {
+  motivo: MotivoArchivo;
+  detalle: string | null;
+  archivadoEn: string;
+}
+
+/** La última reapertura, también si el caso volvió a archivarse o a resolverse después. */
+export interface ReaperturaDto {
+  reabiertoEn: string;
+  motivo: string;
+}
+
 export interface CasoDetalleDto extends CasoResumenDto {
-  resolucion: string | null;
+  resolucion: ResolucionDto | null;
+  archivo: ArchivoDto | null;
+  reapertura: ReaperturaDto | null;
   descripcion: string;
   reclamante: string;
   evidencias: EvidenciaDto[];

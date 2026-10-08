@@ -23,6 +23,7 @@ export interface FilaHistorial {
   confirmada: boolean;
   estadoNuevo: EstadoIncidencia | null;
   resolvio: boolean;
+  reabrio: boolean;
 }
 
 export interface ItemDeHistorial {
@@ -57,6 +58,7 @@ function detalleDeLaClasificacion(fila: FilaHistorial): string {
 
 function describirHito(fila: FilaHistorial): { titulo: string; detalle: string } | null {
   if (fila.resolvio) return { titulo: "Caso resuelto", detalle: `Por ${quienHizo(fila)}.` };
+  if (fila.reabrio) return { titulo: "Caso reabierto", detalle: `Por ${quienHizo(fila)}.` };
   if (fila.estadoNuevo === EstadoIncidencia.ARCHIVADO) return { titulo: "Archivado", detalle: `Por ${quienHizo(fila)}.` };
   if (fila.estadoNuevo === EstadoIncidencia.DERIVADO) return { titulo: "Derivado al área", detalle: `Por ${quienHizo(fila)}.` };
   if (fila.estadoNuevo === EstadoIncidencia.EN_GESTION) return { titulo: "Tomado en gestión", detalle: `Por ${quienHizo(fila)}.` };

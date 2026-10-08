@@ -1,6 +1,8 @@
 import { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
 import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
+import { MotivoArchivo } from "@/enums/motivo-archivo.enum.js";
+import { ResultadoResolucion } from "@/enums/resultado-resolucion.enum.js";
 
 export const LISTADO_LIMITE_POR_DEFECTO = 20;
 export const LISTADO_LIMITE_MAXIMO = 100;
@@ -9,6 +11,10 @@ export const AREA_CODIGO_LONGITUD_MAXIMA = 50;
 export const POR_VENCER_LISTA_MAXIMA = 10;
 export const TEXTO_BUSQUEDA_MAXIMO = 100;
 export const RESOLUCION_LONGITUD_MAXIMA = 4000;
+/** La base exige al menos 10 caracteres (sin contar espacios de los bordes) en las medidas, el fundamento, el detalle del archivo y el motivo de reapertura. */
+export const TEXTO_DE_REVISION_LONGITUD_MINIMA = 10;
+export const ARCHIVO_DETALLE_LONGITUD_MAXIMA = 2000;
+export const REAPERTURA_MOTIVO_LONGITUD_MAXIMA = 2000;
 export const CODIGO_INCIDENCIA_PATRON = /^MINSA-\d{4}-\d{6,}$/;
 export const CODIGO_RENIPRESS_PATRON = /^[1-9][0-9]{0,7}$/;
 export const MILISEGUNDOS_POR_HORA = 3_600_000;
@@ -53,6 +59,12 @@ export const CATEGORIA_ETIQUETA: Record<CategoriaIncidencia, string> = {
   [CategoriaIncidencia.RECLAMO]: "Reclamo",
   [CategoriaIncidencia.OTRO]: "Otro",
 };
+
+/** Los dos motivos que una persona puede elegir al archivar; los otros dos los pone el sistema. */
+export const MOTIVOS_DE_ARCHIVO_MANUAL = [MotivoArchivo.DATOS_INSUFICIENTES, MotivoArchivo.NO_CORRESPONDE] as const;
+export type MotivoDeArchivoManual = (typeof MOTIVOS_DE_ARCHIVO_MANUAL)[number];
+export const MOTIVOS_DE_ARCHIVO = Object.values(MotivoArchivo) as [MotivoArchivo, ...MotivoArchivo[]];
+export const RESULTADOS_DE_RESOLUCION = Object.values(ResultadoResolucion) as [ResultadoResolucion, ...ResultadoResolucion[]];
 
 export const ESTADOS_ABIERTOS: readonly EstadoIncidencia[] = [
   EstadoIncidencia.REGISTRADO,

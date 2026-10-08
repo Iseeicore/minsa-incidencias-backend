@@ -57,7 +57,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
           [(nandu as EstablecimientoDePrueba).establecimientoId],
         ),
       );
-      const agente = await entrar(contexto, app, [R.GESTOR]);
+      const agente = await entrar(contexto, app, [R.ADMINISTRADOR]);
       const res = await agente.get("/areas").query({ q: marca });
       expect(Object.keys(res.body).sort()).toEqual(["hayMas", "items", "siguiente"]);
       const area = (res.body.items as AreaDto[]).find((a) => a.id === (nandu as EstablecimientoDePrueba).areaId);
@@ -72,17 +72,21 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     });
   });
 
-  it("el gestor y el administrador listan todas; OTRANS y cada establecimiento, solo la suya", async () => {
+  it("solo el administrador lista todas; el gestor, OTRANS y cada establecimiento, solo la suya", async () => {
     await usar(async (contexto) => {
       const app = construir(contexto);
       const marca = marcaDeNombre();
       const [a, b] = await sembrar(contexto, marca);
       const [ea, eb] = [a as EstablecimientoDePrueba, b as EstablecimientoDePrueba];
 
-      for (const rol of [R.GESTOR, R.ADMINISTRADOR]) {
-        const agente = await entrar(contexto, app, [rol]);
-        expect(await nombres(agente, { q: marca })).toHaveLength(3);
-      }
+      const admin = await entrar(contexto, app, [R.ADMINISTRADOR]);
+      expect(await nombres(admin, { q: marca })).toHaveLength(3);
+
+      const gestor = await entrar(contexto, app, [R.GESTOR], eb.areaCodigo);
+      expect(await nombres(gestor, { q: marca })).toEqual([eb.nombre]);
+      expect(await nombres(gestor, {})).toEqual([eb.nombre]);
+      expect(await nombres(gestor, { q: ea.nombre })).toEqual([]);
+
       const delA = await entrar(contexto, app, [R.ESTABLECIMIENTO], ea.areaCodigo);
       expect(await nombres(delA, { q: marca })).toEqual([ea.nombre]);
       expect(await nombres(delA, {})).toEqual([ea.nombre]);
@@ -101,7 +105,13 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
 
   it("quien tiene un rol de área pero ninguna área no ve nada", async () => {
     await usar(async (contexto) => {
-      const agente = await entrar(contexto, construir(contexto), [R.ESTABLECIMIENTO]);
+      // La base ya no deja un rol de área sin área; se simula quitándosela después de crear al usuario.
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      const correo = await crearUsuarioDePrueba(contexto, [R.GESTOR], undefined, undefined, eess.areaCodigo);
+      const agente = await iniciarSesion(construir(contexto), correo);
+      await contexto.client.query("ALTER TABLE gestion.usuario_interno DISABLE TRIGGER USER");
+      await contexto.client.query("UPDATE gestion.usuario_interno SET area_id = NULL WHERE correo = $1", [correo]);
+      await contexto.client.query("ALTER TABLE gestion.usuario_interno ENABLE TRIGGER USER");
       expect((await agente.get("/areas")).body).toEqual({ items: [], siguiente: null, hayMas: false });
     });
   });
@@ -113,7 +123,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
       await contexto.database.transaction("sistema:prueba", (tx) =>
         tx.query("UPDATE catalogo.area SET activo = false WHERE id = $1", [(b as EstablecimientoDePrueba).areaId]),
       );
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       const vistas = await nombres(agente, { q: marca });
       expect(vistas).toHaveLength(2);
       expect(vistas).not.toContain((b as EstablecimientoDePrueba).nombre);
@@ -125,7 +135,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     await usar(async (contexto) => {
       const marca = marcaDeNombre();
       await sembrar(contexto, marca);
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       expect(await nombres(agente, { q: marca, tipo: "ESTABLECIMIENTO" })).toHaveLength(3);
       expect(await nombres(agente, { q: marca, tipo: "DIRIS" })).toEqual([]);
       const otrans = await agente.get("/areas").query({ tipo: "OTRANS" });
@@ -138,7 +148,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     await usar(async (contexto) => {
       const marca = marcaDeNombre();
       const [nandu] = await sembrar(contexto, marca);
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       const esperado = [(nandu as EstablecimientoDePrueba).nombre];
 
       expect(await nombres(agente, { q: `${marca} nandu` })).toEqual(esperado);
@@ -185,7 +195,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
           [`DIRIS-${marca}`, `DIRIS Lima Ñorte ${marca}`],
         ),
       );
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       const res = await agente.get("/areas").query({ q: `norte ${marca}` });
       expect(res.body.items).toHaveLength(1);
       expect(res.body.items[0]).toMatchObject({ tipoArea: "DIRIS", establecimiento: null });
@@ -205,7 +215,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
           );
         }
       });
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       const completo = await agente.get("/areas").query({ q: marca, limite: "200" });
       const esperado = (completo.body.items as AreaDto[]).map((x) => x.id);
       expect(esperado).toHaveLength(6);
@@ -234,7 +244,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
 
   it("un cursor inválido responde 400", async () => {
     await usar(async (contexto) => {
-      const agente = await entrar(contexto, construir(contexto), [R.GESTOR]);
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
       for (const cursor of ["basura", Buffer.from("1 OR 1=1|x").toString("base64url")]) {
         const res = await agente.get("/areas").query({ cursor });
         expect(res.status).toBe(400);

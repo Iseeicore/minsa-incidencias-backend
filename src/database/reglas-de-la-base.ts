@@ -41,14 +41,39 @@ const REGLAS_CONOCIDAS: readonly ReglaDeLaBase[] = [
     mensaje: "El establecimiento de origen no existe o está desactivado.",
     corregible: true,
   },
+  {
+    fragmento: "la resolucion exige las medidas tomadas y el fundamento",
+    mensaje: "Para resolver el caso hay que indicar las medidas tomadas y el fundamento (10 caracteres o más cada uno) y el resultado.",
+    corregible: true,
+  },
   { fragmento: "archivar un caso exige un motivo de archivo", mensaje: "Para archivar el caso hay que indicar el motivo." },
   { fragmento: "el motivo de archivo solo se indica al archivar", mensaje: "El motivo de archivo solo se indica al archivar el caso." },
-  { fragmento: "por datos insuficientes solo se archiva desde", mensaje: "Por datos insuficientes solo se archiva un caso registrado o clasificado." },
+  {
+    fragmento: "un archivado manual exige una justificacion",
+    mensaje: "Para archivar el caso hay que explicar el motivo con 10 caracteres o más.",
+    corregible: true,
+  },
+  {
+    fragmento: "un archivado manual solo se hace desde un caso abierto",
+    mensaje: "Solo se archiva a mano un caso abierto: registrado, clasificado, derivado o en gestión.",
+  },
+  { fragmento: "un archivado manual (datos insuficientes o no corresponde) lo hace una persona", mensaje: "Solo una persona archiva un caso a mano." },
   { fragmento: "un caso abierto solo se archiva por vencimiento", mensaje: "Un caso abierto solo se archiva cuando vence su plazo de atención." },
   { fragmento: "el motivo de archivo no corresponde", mensaje: "El motivo de archivo no corresponde al estado del caso." },
+  { fragmento: "la justificacion del archivo solo se indica al archivar", mensaje: "La justificación solo se indica al archivar el caso." },
   {
-    fragmento: "las fechas y actores de derivacion, toma y archivado",
-    mensaje: "Las fechas y los responsables de la derivación, la toma y el archivo los llena el sistema.",
+    fragmento: "solo se reabre un caso archivado por datos insuficientes",
+    mensaje: "Este caso no se puede reabrir: solo se reabren los archivados por datos insuficientes, por no corresponder o por vencimiento sin atender.",
+  },
+  {
+    fragmento: "reabrir un caso exige un motivo",
+    mensaje: "Para reabrir el caso hay que explicar el motivo con 10 caracteres o más.",
+    corregible: true,
+  },
+  { fragmento: "el motivo de la reapertura solo se indica al reabrir", mensaje: "El motivo de la reapertura solo se indica al reabrir el caso." },
+  {
+    fragmento: "las fechas y actores de derivacion, toma, archivado y reapertura",
+    mensaje: "Las fechas y los responsables de la derivación, la toma, el archivo y la reapertura los llena el sistema.",
   },
   {
     fragmento: "el tipo de area del rol no coincide con el area del usuario",

@@ -9,9 +9,15 @@ import {
   ESTADOS_API,
   LISTADO_LIMITE_MAXIMO,
   LISTADO_LIMITE_POR_DEFECTO,
+  MOTIVOS_DE_ARCHIVO,
+  MOTIVOS_DE_ARCHIVO_MANUAL,
+  REAPERTURA_MOTIVO_LONGITUD_MAXIMA,
   RESOLUCION_LONGITUD_MAXIMA,
+  RESULTADOS_DE_RESOLUCION,
   SIN_CATEGORIA_API,
   TEXTO_BUSQUEDA_MAXIMO,
+  TEXTO_DE_REVISION_LONGITUD_MINIMA,
+  ARCHIVO_DETALLE_LONGITUD_MAXIMA,
 } from "@/constants/incidencias.js";
 import { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
@@ -36,6 +42,7 @@ const listadoSchema = z.object({
       return posicion ?? undefined;
     }),
   estado: z.enum(ESTADOS_API).optional(),
+  motivoArchivo: z.enum(MOTIVOS_DE_ARCHIVO).optional(),
   categoria: z.enum([...CATEGORIAS_API, SIN_CATEGORIA_API]).optional(),
   texto: z
     .string()
@@ -61,7 +68,19 @@ const listadoSchema = z.object({
 
 const sinDatosSchema = z.object({});
 const correccionSchema = z.object({ categoria: z.enum(CATEGORIAS_API) });
-const resolucionSchema = z.object({ resolucion: z.string().trim().min(1).max(RESOLUCION_LONGITUD_MAXIMA) });
+/** Un texto que la base exige de 10 caracteres o más, sin contar los espacios de los bordes. */
+const textoDeRevision = (maximo: number) => z.string().trim().min(TEXTO_DE_REVISION_LONGITUD_MINIMA).max(maximo);
+const resolucionSchema = z.object({
+  medidasTomadas: textoDeRevision(RESOLUCION_LONGITUD_MAXIMA),
+  fundamento: textoDeRevision(RESOLUCION_LONGITUD_MAXIMA),
+  resultado: z.enum(RESULTADOS_DE_RESOLUCION),
+});
+const archivoSchema = z
+  .object({ motivo: z.enum(MOTIVOS_DE_ARCHIVO_MANUAL), detalle: textoDeRevision(ARCHIVO_DETALLE_LONGITUD_MAXIMA) })
+  .transform(({ motivo, detalle }) => ({ motivoArchivo: motivo, detalle }));
+const reaperturaSchema = z
+  .object({ motivo: textoDeRevision(REAPERTURA_MOTIVO_LONGITUD_MAXIMA) })
+  .transform(({ motivo }) => ({ motivoReapertura: motivo }));
 
 const derivacionSchema = z.object({ areaDestino: z.string().trim().min(1).max(AREA_CODIGO_LONGITUD_MAXIMA).optional() });
 
@@ -71,6 +90,8 @@ const SCHEMA_DE_ACCION: Record<AccionIncidencia, z.ZodType<DatosAccion>> = {
   [AccionIncidencia.DERIVAR]: derivacionSchema,
   [AccionIncidencia.TOMAR]: sinDatosSchema,
   [AccionIncidencia.RESOLVER]: resolucionSchema,
+  [AccionIncidencia.ARCHIVAR]: archivoSchema,
+  [AccionIncidencia.REABRIR]: reaperturaSchema,
 };
 
 const sesionDe = (req: Request): SesionActual => req.sesion as SesionActual;

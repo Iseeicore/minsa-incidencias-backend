@@ -13,7 +13,10 @@ import {
   MENSAJE_ACCION_REALIZADA,
   MENSAJE_AREA_DESTINO_INVALIDA,
   MENSAJE_CASO_NO_ENCONTRADO,
+  MENSAJE_CATEGORIA_NO_PERMITIDA,
   MENSAJE_FALTA_CATEGORIA,
+  MENSAJE_FALTA_MOTIVO_DE_ARCHIVO,
+  MENSAJE_FALTA_MOTIVO_DE_REAPERTURA,
   MENSAJE_FALTA_RESOLUCION,
   MENSAJE_MISMA_CATEGORIA,
   MENSAJE_SIN_DESTINO_DE_DERIVACION,
@@ -23,9 +26,11 @@ import { actorUsuarioInterno } from "@/database/actor.js";
 import type { Database, DbExecutor } from "@/database/database.js";
 import { traducirErrorDeBase } from "@/database/reglas-de-la-base.js";
 import { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
+import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
 import { HttpStatus } from "@/enums/http-status.enum.js";
+import { TipoArea } from "@/enums/tipo-area.enum.js";
 import { AppError } from "@/errors/app-error.js";
 import {
   type FilaCaso,
@@ -33,7 +38,7 @@ import {
   type IncidenciaRepository,
   type VisibilidadCasos,
 } from "@/repositories/incidencia.repository.js";
-import { accionesPermitidas, reglasDeAvisos, veCasosSinCategoria } from "@/utils/acciones-permitidas.js";
+import { accionesPermitidas, categoriasParaCorregir, reglasDeAvisos, veCasosSinCategoria } from "@/utils/acciones-permitidas.js";
 import { codificarCursor } from "@/utils/cursor-listado.js";
 import { construirHistorial } from "@/utils/historial-incidencia.js";
 import { calcularPlazo, horasEntre, type PlazosConfigurados } from "@/utils/plazo-incidencia.js";
@@ -70,6 +75,7 @@ function filtrosDe(consulta: ConsultaListado): FiltrosDeListado {
   else if (consulta.categoria) filtros.categoria = CATEGORIA_DESDE_API[consulta.categoria];
   if (consulta.texto) filtros.texto = consulta.texto;
   if (consulta.establecimiento) filtros.establecimiento = consulta.establecimiento;
+  if (consulta.motivoArchivo) filtros.motivoArchivo = consulta.motivoArchivo;
   return filtros;
 }
 
@@ -134,7 +140,7 @@ export class IncidenciaService implements IncidenciaServicio {
         if (!permitidas.includes(accion)) {
           throw new AppError(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, MENSAJE_ACCION_NO_PERMITIDA[accion]);
         }
-        await this.aplicar(tx, fila, accion, datos);
+        await this.aplicar(tx, sesion, fila, accion, datos);
       });
     } catch (error) {
       throw traducirErrorDeBase(error);
@@ -152,13 +158,15 @@ export class IncidenciaService implements IncidenciaServicio {
     return { mensaje, caso: null };
   }
 
-  private async aplicar(tx: DbExecutor, fila: FilaCaso, accion: AccionIncidencia, datos: DatosAccion): Promise<void> {
+  private async aplicar(tx: DbExecutor, sesion: SesionActual, fila: FilaCaso, accion: AccionIncidencia, datos: DatosAccion): Promise<void> {
     switch (accion) {
       case AccionIncidencia.CONFIRMAR:
         return this.casos.confirmar(tx, fila.id);
       case AccionIncidencia.CORREGIR: {
         if (!datos.categoria) throw new AppError(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, MENSAJE_FALTA_CATEGORIA);
         const nueva = CATEGORIA_DESDE_API[datos.categoria];
+        const alcanzables = categoriasParaCorregir(sesion.roles, { estado: fila.estado, categoria: fila.categoria, revisada: fila.revisada });
+        if (!alcanzables.includes(nueva)) throw new AppError(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, MENSAJE_CATEGORIA_NO_PERMITIDA);
         if (nueva === fila.categoria) {
           throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, MENSAJE_MISMA_CATEGORIA);
         }
@@ -169,19 +177,39 @@ export class IncidenciaService implements IncidenciaServicio {
       case AccionIncidencia.TOMAR:
         return this.casos.cambiarEstado(tx, fila.id, EstadoIncidencia.EN_GESTION);
       case AccionIncidencia.RESOLVER: {
-        if (!datos.resolucion) throw new AppError(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, MENSAJE_FALTA_RESOLUCION);
-        return this.casos.resolver(tx, fila.id, datos.resolucion);
+        const { medidasTomadas, fundamento, resultado } = datos;
+        if (!medidasTomadas || !fundamento || !resultado) {
+          throw new AppError(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, MENSAJE_FALTA_RESOLUCION);
+        }
+        return this.casos.resolver(tx, fila.id, { medidasTomadas, fundamento, resultado });
+      }
+      case AccionIncidencia.ARCHIVAR: {
+        if (!datos.motivoArchivo || !datos.detalle) {
+          throw new AppError(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, MENSAJE_FALTA_MOTIVO_DE_ARCHIVO);
+        }
+        return this.casos.archivar(tx, fila.id, { motivo: datos.motivoArchivo, detalle: datos.detalle });
+      }
+      case AccionIncidencia.REABRIR: {
+        if (!datos.motivoReapertura) {
+          throw new AppError(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_FAILED, MENSAJE_FALTA_MOTIVO_DE_REAPERTURA);
+        }
+        return this.casos.reabrir(tx, fila.id, datos.motivoReapertura);
       }
     }
   }
 
-  /** El área elegida por la persona o, si no eligió, la del establecimiento de origen; siempre de un establecimiento activo. */
+  /**
+   * El área elegida por la persona o, si no eligió, la de origen: el establecimiento de origen del caso; en una denuncia
+   * por corrupción, el área donde ya está (OTRANS). Siempre activa y del tipo que recibe el caso.
+   */
   private async areaDeDerivacion(tx: DbExecutor, fila: FilaCaso, datos: DatosAccion): Promise<number> {
-    if (!datos.areaDestino && fila.areaOrigenId === null) {
+    const sensible = fila.categoria === CategoriaIncidencia.DENUNCIA_CORRUPCION;
+    const porDefecto = sensible ? fila.areaDestinoId : fila.areaOrigenId;
+    if (!datos.areaDestino && porDefecto === null) {
       throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, MENSAJE_SIN_DESTINO_DE_DERIVACION);
     }
-    const criterio = datos.areaDestino ? { codigo: datos.areaDestino } : { id: fila.areaOrigenId as number };
-    const areaId = await this.casos.areaReceptora(criterio, tx);
+    const criterio = datos.areaDestino ? { codigo: datos.areaDestino } : { id: porDefecto as number };
+    const areaId = await this.casos.areaReceptora(criterio, sensible ? TipoArea.OTRANS : TipoArea.ESTABLECIMIENTO, tx);
     if (areaId === null) throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, MENSAJE_AREA_DESTINO_INVALIDA);
     return areaId;
   }
@@ -230,7 +258,18 @@ export class IncidenciaService implements IncidenciaServicio {
     }));
     return {
       ...this.resumir(fila, sesion),
-      resolucion: fila.resolucion,
+      resolucion:
+        fila.medidasTomadas !== null && fila.fundamento !== null && fila.resultadoResolucion !== null
+          ? { medidasTomadas: fila.medidasTomadas, fundamento: fila.fundamento, resultado: fila.resultadoResolucion }
+          : null,
+      archivo:
+        fila.motivoArchivo !== null && fila.archivadoEn !== null
+          ? { motivo: fila.motivoArchivo, detalle: fila.archivoDetalle, archivadoEn: fila.archivadoEn.toISOString() }
+          : null,
+      reapertura:
+        fila.reabiertoEn !== null && fila.reabiertoMotivo !== null
+          ? { reabiertoEn: fila.reabiertoEn.toISOString(), motivo: fila.reabiertoMotivo }
+          : null,
       descripcion: fila.descripcion,
       reclamante: describirReclamante({ esAnonimo: fila.esAnonimo, nombre: fila.nombre, dni: fila.dni }),
       evidencias: evidenciasDto,

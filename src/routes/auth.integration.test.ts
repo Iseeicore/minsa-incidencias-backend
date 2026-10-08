@@ -24,13 +24,24 @@ const CLAVE = "clave-de-prueba-123";
 
 let huella = "";
 
+/** El área que exige la base según el rol: OTRANS la suya; el gestor y el establecimiento, la de un establecimiento; el administrador, ninguna. */
+async function areaQueExigenLosRoles(contexto: RollbackContext, roles: readonly string[]): Promise<string | null> {
+  if (roles.includes(RolCodigo.OTRANS)) return "OTRANS";
+  if (roles.includes(RolCodigo.GESTOR) || roles.includes(RolCodigo.ESTABLECIMIENTO)) {
+    return (await crearEstablecimientoDePrueba(contexto)).areaCodigo;
+  }
+  return null;
+}
+
 async function crearUsuario(
-  { database }: RollbackContext,
+  contexto: RollbackContext,
   correo: string,
   roles: string[],
   nombre = "Persona de Prueba",
-  areaCodigo: string | null = null,
+  area?: string | null,
 ): Promise<void> {
+  const { database } = contexto;
+  const areaCodigo = area === undefined ? await areaQueExigenLosRoles(contexto, roles) : area;
   await database.transaction("usuario:admin-prueba", async (tx) => {
     const filas = await tx.query<{ id: string }>(
       `INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash, area_id)
@@ -129,10 +140,29 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
 
   it("varios roles dan la unión de sus vistas sin repetir", async () => {
     await usar(async (contexto) => {
-      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.OTRANS]);
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.ESTABLECIMIENTO]);
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES", "QR"]);
+    });
+  });
+
+  it("el gestor pertenece siempre a un establecimiento: la base rechaza darle ese rol sin área o con el área de OTRANS", async () => {
+    await usar(async (contexto) => {
+      await expect(crearUsuario(contexto, "g1@minsa.gob.pe", [RolCodigo.GESTOR], "G", null)).rejects.toThrow(/tipo de area del rol/);
+      await expect(crearUsuario(contexto, "g2@minsa.gob.pe", [RolCodigo.GESTOR], "G", "OTRANS")).rejects.toThrow(/tipo de area del rol/);
+    });
+  });
+
+  it("/auth/me del gestor trae el área de su establecimiento", async () => {
+    await usar(async (contexto) => {
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      await crearUsuario(contexto, "gestor@minsa.gob.pe", [RolCodigo.GESTOR], "Gestor", eess.areaCodigo);
+      const agente = request.agent(construir(contexto));
+      await agente.post("/auth/login").send({ correo: "gestor@minsa.gob.pe", password: CLAVE });
+      const me = await agente.get("/auth/me");
+      expect(me.body.roles).toEqual(["GESTOR"]);
+      expect(me.body.area).toEqual({ codigo: eess.areaCodigo, nombre: eess.areaNombre, tipo: "ESTABLECIMIENTO" });
     });
   });
 

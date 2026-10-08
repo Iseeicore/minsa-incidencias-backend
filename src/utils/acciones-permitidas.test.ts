@@ -4,53 +4,59 @@ import { AccionIncidencia as A } from "@/enums/accion-incidencia.enum.js";
 import { CategoriaIncidencia as C } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia as E } from "@/enums/estado-incidencia.enum.js";
 import { RolCodigo as R } from "@/enums/rol-codigo.enum.js";
-import { accionesPermitidas, reglasDeAvisos, veTodasLasAreas } from "@/utils/acciones-permitidas.js";
+import { accionesPermitidas, categoriasParaCorregir, reglasDeAvisos, veTodasLasAreas } from "@/utils/acciones-permitidas.js";
 
 type Caso = Parameters<typeof accionesPermitidas>[1];
 const caso = (estado: E, categoria: C | null, revisada: boolean): Caso => ({ estado, categoria, revisada });
 
 type Fila = [string, readonly string[], E, C | null, boolean, A[]];
 
+/** Lo que hacen el responsable del establecimiento y el gestor: lo mismo, sobre los casos de su área que no son corrupción. */
+const delArea = (rol: string): Fila[] => [
+  [`${rol}: confirma, corrige o archiva una queja sin revisar`, [rol], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  [`${rol}: confirma, corrige o archiva un reclamo sin revisar`, [rol], E.CLASIFICADO, C.RECLAMO, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  [`${rol}: confirma, corrige o archiva un caso otro sin revisar`, [rol], E.CLASIFICADO, C.OTRO, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  [`${rol}: toma directo o archiva una queja revisada, sin derivar`, [rol], E.CLASIFICADO, C.QUEJA, true, [A.TOMAR, A.ARCHIVAR]],
+  [`${rol}: toma directo o archiva un caso otro revisado`, [rol], E.CLASIFICADO, C.OTRO, true, [A.TOMAR, A.ARCHIVAR]],
+  [`${rol}: toma, resuelve o archiva un reclamo derivado`, [rol], E.DERIVADO, C.RECLAMO, true, [A.TOMAR, A.RESOLVER, A.ARCHIVAR]],
+  [`${rol}: resuelve o archiva una queja en gestión`, [rol], E.EN_GESTION, C.QUEJA, true, [A.RESOLVER, A.ARCHIVAR]],
+  [`${rol}: no actúa sobre un caso resuelto`, [rol], E.RESUELTO, C.QUEJA, true, []],
+  [`${rol}: reabre un reclamo archivado`, [rol], E.ARCHIVADO, C.RECLAMO, true, [A.REABRIR]],
+  [`${rol}: no actúa sobre corrupción clasificada`, [rol], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, []],
+  [`${rol}: no actúa sobre corrupción en gestión`, [rol], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, []],
+  [`${rol}: no reabre un archivado de corrupción`, [rol], E.ARCHIVADO, C.DENUNCIA_CORRUPCION, true, []],
+  [`${rol}: no actúa sobre un caso sin categoría`, [rol], E.REGISTRADO, null, false, []],
+];
+
 const MATRIZ: Fila[] = [
-  ["administrador no actúa", [R.ADMINISTRADOR], E.CLASIFICADO, C.QUEJA, false, []],
-  ["administrador no actúa en corrupción", [R.ADMINISTRADOR], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, []],
+  ...delArea(R.ESTABLECIMIENTO),
+  ...delArea(R.GESTOR),
 
-  ["gestor confirma o corrige una queja sin revisar", [R.GESTOR], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["gestor confirma o corrige un reclamo sin revisar", [R.GESTOR], E.CLASIFICADO, C.RECLAMO, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["gestor confirma o corrige un caso otro sin revisar", [R.GESTOR], E.CLASIFICADO, C.OTRO, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["gestor deriva una queja ya revisada", [R.GESTOR], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR]],
-  ["gestor deriva un reclamo ya revisado", [R.GESTOR], E.CLASIFICADO, C.RECLAMO, true, [A.DERIVAR]],
-  ["gestor no deriva un caso otro (solo quejas y reclamos)", [R.GESTOR], E.CLASIFICADO, C.OTRO, true, []],
-  ["gestor no actúa sobre corrupción", [R.GESTOR], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, []],
-  ["gestor no actúa sobre un caso sin categoría", [R.GESTOR], E.REGISTRADO, null, false, []],
-  ["gestor no actúa en DERIVADO", [R.GESTOR], E.DERIVADO, C.QUEJA, true, []],
-  ["gestor no actúa en EN_GESTION", [R.GESTOR], E.EN_GESTION, C.QUEJA, true, []],
-  ["gestor no actúa en RESUELTO", [R.GESTOR], E.RESUELTO, C.QUEJA, true, []],
-  ["gestor no actúa en ARCHIVADO", [R.GESTOR], E.ARCHIVADO, C.QUEJA, true, []],
+  ["OTRANS: confirma, corrige o archiva sin revisar", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  ["OTRANS: deriva, toma directo o archiva lo revisado", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.DERIVAR, A.TOMAR, A.ARCHIVAR]],
+  ["OTRANS: toma, resuelve o archiva lo derivado", [R.OTRANS], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR, A.RESOLVER, A.ARCHIVAR]],
+  ["OTRANS: resuelve o archiva lo que está en gestión", [R.OTRANS], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, [A.RESOLVER, A.ARCHIVAR]],
+  ["OTRANS: no actúa en RESUELTO", [R.OTRANS], E.RESUELTO, C.DENUNCIA_CORRUPCION, true, []],
+  ["OTRANS: reabre un archivado de corrupción", [R.OTRANS], E.ARCHIVADO, C.DENUNCIA_CORRUPCION, true, [A.REABRIR]],
+  ["OTRANS: no actúa sobre una queja", [R.OTRANS], E.CLASIFICADO, C.QUEJA, false, []],
+  ["OTRANS: no reabre una queja archivada", [R.OTRANS], E.ARCHIVADO, C.QUEJA, true, []],
 
-  ["OTRANS confirma o corrige sin revisar", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["OTRANS toma directo lo revisado, sin derivar", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
-  ["OTRANS toma o resuelve lo derivado", [R.OTRANS], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR, A.RESOLVER]],
-  ["OTRANS resuelve lo que está en gestión", [R.OTRANS], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, [A.RESOLVER]],
-  ["OTRANS no actúa en RESUELTO", [R.OTRANS], E.RESUELTO, C.DENUNCIA_CORRUPCION, true, []],
-  ["OTRANS no actúa sobre una queja", [R.OTRANS], E.CLASIFICADO, C.QUEJA, false, []],
-  ["OTRANS no deriva", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
+  ["administrador: confirma, corrige o archiva una queja sin revisar", [R.ADMINISTRADOR], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  ["administrador: confirma, corrige o archiva corrupción sin revisar", [R.ADMINISTRADOR], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, [A.CONFIRMAR, A.CORREGIR, A.ARCHIVAR]],
+  ["administrador: deriva o archiva una queja revisada", [R.ADMINISTRADOR], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR, A.ARCHIVAR]],
+  ["administrador: deriva o archiva un caso otro revisado", [R.ADMINISTRADOR], E.CLASIFICADO, C.OTRO, true, [A.DERIVAR, A.ARCHIVAR]],
+  ["administrador: deriva o archiva corrupción revisada", [R.ADMINISTRADOR], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.DERIVAR, A.ARCHIVAR]],
+  ["administrador: solo archiva lo derivado (no toma ni resuelve)", [R.ADMINISTRADOR], E.DERIVADO, C.QUEJA, true, [A.ARCHIVAR]],
+  ["administrador: solo archiva lo que está en gestión", [R.ADMINISTRADOR], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, [A.ARCHIVAR]],
+  ["administrador: no actúa en RESUELTO", [R.ADMINISTRADOR], E.RESUELTO, C.QUEJA, true, []],
+  ["administrador: reabre un archivado de queja", [R.ADMINISTRADOR], E.ARCHIVADO, C.QUEJA, true, [A.REABRIR]],
+  ["administrador: reabre un archivado de corrupción", [R.ADMINISTRADOR], E.ARCHIVADO, C.DENUNCIA_CORRUPCION, true, [A.REABRIR]],
+  ["administrador: no actúa sobre un caso sin categoría", [R.ADMINISTRADOR], E.REGISTRADO, null, false, []],
 
-  ["establecimiento no revisa una queja", [R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, false, []],
-  ["establecimiento no toma lo clasificado", [R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, true, []],
-  ["establecimiento toma o resuelve una queja derivada", [R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
-  ["establecimiento toma o resuelve un reclamo derivado", [R.ESTABLECIMIENTO], E.DERIVADO, C.RECLAMO, true, [A.TOMAR, A.RESOLVER]],
-  ["establecimiento resuelve una queja en gestión", [R.ESTABLECIMIENTO], E.EN_GESTION, C.QUEJA, true, [A.RESOLVER]],
-  ["establecimiento resuelve un reclamo en gestión", [R.ESTABLECIMIENTO], E.EN_GESTION, C.RECLAMO, true, [A.RESOLVER]],
-  ["establecimiento no actúa sobre corrupción", [R.ESTABLECIMIENTO], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, []],
-  ["establecimiento no actúa sobre un caso otro", [R.ESTABLECIMIENTO], E.DERIVADO, C.OTRO, true, []],
-  ["establecimiento no actúa en RESUELTO", [R.ESTABLECIMIENTO], E.RESUELTO, C.QUEJA, true, []],
-  ["establecimiento no actúa en ARCHIVADO", [R.ESTABLECIMIENTO], E.ARCHIVADO, C.RECLAMO, true, []],
-
-  ["gestor y establecimiento: confirma una queja sin revisar", [R.GESTOR, R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["gestor y establecimiento: deriva una queja revisada", [R.GESTOR, R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR]],
-  ["gestor y establecimiento: atiende una queja derivada", [R.GESTOR, R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
-  ["gestor y OTRANS: toma lo revisado de corrupción", [R.GESTOR, R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
+  ["establecimiento y gestor juntos no suman nada más", [R.GESTOR, R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER, A.ARCHIVAR]],
+  ["gestor y OTRANS: lo revisado de corrupción lo deriva, toma o archiva", [R.GESTOR, R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.DERIVAR, A.TOMAR, A.ARCHIVAR]],
+  ["administrador y establecimiento: una queja derivada se toma, resuelve o archiva", [R.ADMINISTRADOR, R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER, A.ARCHIVAR]],
+  ["administrador y establecimiento: una queja revisada se deriva, toma o archiva", [R.ADMINISTRADOR, R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR, A.TOMAR, A.ARCHIVAR]],
 
   ["DIRIS (desactivado) no da acciones", [R.DIRIS], E.DERIVADO, C.QUEJA, true, []],
   ["un rol inventado no da acciones", ["INVENTADO"], E.CLASIFICADO, C.QUEJA, false, []],
@@ -63,19 +69,72 @@ describe("accionesPermitidas", () => {
     expect(accionesPermitidas(roles, caso(estado, categoria, revisada))).toEqual(esperadas);
   });
 
-  it("devuelve las acciones en el orden confirmar, corregir, derivar, tomar y resolver, sin repetir", () => {
-    const acciones = accionesPermitidas([R.OTRANS, R.OTRANS], caso(E.DERIVADO, C.DENUNCIA_CORRUPCION, true));
-    expect(acciones).toEqual([A.TOMAR, A.RESOLVER]);
+  it("devuelve las acciones en el orden confirmar, corregir, derivar, tomar, resolver, archivar y reabrir, sin repetir", () => {
+    const acciones = accionesPermitidas([R.OTRANS, R.OTRANS, R.ADMINISTRADOR], caso(E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true));
+    expect(acciones).toEqual([A.DERIVAR, A.TOMAR, A.ARCHIVAR]);
   });
 
-  it("ninguna regla permite actuar sobre un caso archivado, y ninguna deriva sin revisión", () => {
+  it("el gestor y el responsable del establecimiento tienen exactamente las mismas acciones", () => {
+    expect(PERMISOS_POR_ROL[R.GESTOR].acciones).toEqual(PERMISOS_POR_ROL[R.ESTABLECIMIENTO].acciones);
+  });
+
+  it("solo OTRANS y el administrador derivan, y siempre un caso ya revisado; ni el gestor ni el establecimiento", () => {
+    const quienDeriva = Object.entries(PERMISOS_POR_ROL)
+      .filter(([, permisos]) => permisos.acciones.some((regla) => regla.accion === A.DERIVAR))
+      .map(([rol]) => rol)
+      .sort();
+    expect(quienDeriva).toEqual([R.ADMINISTRADOR, R.OTRANS].sort());
+  });
+
+  it("solo el administrador actúa sobre cualquier categoría; el administrador no toma ni resuelve", () => {
+    const acciones = PERMISOS_POR_ROL[R.ADMINISTRADOR].acciones;
+    expect(acciones.map((regla) => regla.accion)).not.toContain(A.TOMAR);
+    expect(acciones.map((regla) => regla.accion)).not.toContain(A.RESOLVER);
+    for (const [rol, permisos] of Object.entries(PERMISOS_POR_ROL)) {
+      if (rol === R.ADMINISTRADOR) continue;
+      for (const regla of permisos.acciones) expect(regla.categorias, `${rol} ${regla.accion}`).toBeDefined();
+    }
+  });
+
+  it("ninguna regla actúa sobre un archivado salvo reabrir, y reabrir solo sobre un archivado", () => {
     for (const permisos of Object.values(PERMISOS_POR_ROL)) {
       for (const regla of permisos.acciones) {
-        expect(regla.estados).not.toContain(E.ARCHIVADO);
+        if (regla.accion === A.REABRIR) expect(regla.estados).toEqual([E.ARCHIVADO]);
+        else expect(regla.estados).not.toContain(E.ARCHIVADO);
+        if (regla.accion === A.ARCHIVAR) expect([...regla.estados].sort()).toEqual([E.CLASIFICADO, E.DERIVADO, E.EN_GESTION].sort());
+      }
+    }
+  });
+
+  it("ninguna regla deriva sin revisión ni revisa lo ya revisado", () => {
+    for (const permisos of Object.values(PERMISOS_POR_ROL)) {
+      for (const regla of permisos.acciones) {
         if (regla.accion === A.DERIVAR) expect(regla.revisada).toBe(true);
         if (regla.accion === A.CONFIRMAR || regla.accion === A.CORREGIR) expect(regla.revisada).toBe(false);
       }
     }
+  });
+
+  describe("categoriasParaCorregir", () => {
+    const sinRevisar = (categoria: C) => caso(E.CLASIFICADO, categoria, false);
+
+    it("el establecimiento y el gestor solo cambian entre queja, reclamo y otro, nunca a corrupción", () => {
+      for (const rol of [R.ESTABLECIMIENTO, R.GESTOR]) {
+        expect(categoriasParaCorregir([rol], sinRevisar(C.QUEJA)).sort()).toEqual([C.OTRO, C.QUEJA, C.RECLAMO].sort());
+      }
+    });
+
+    it("OTRANS y el administrador pueden cambiar a cualquier categoría", () => {
+      expect(categoriasParaCorregir([R.OTRANS], sinRevisar(C.DENUNCIA_CORRUPCION)).sort()).toEqual(Object.values(C).sort());
+      expect(categoriasParaCorregir([R.ADMINISTRADOR], sinRevisar(C.QUEJA)).sort()).toEqual(Object.values(C).sort());
+    });
+
+    it("une las de varios roles y es vacío si no puede corregir ese caso", () => {
+      expect(categoriasParaCorregir([R.ESTABLECIMIENTO, R.ADMINISTRADOR], sinRevisar(C.QUEJA)).sort()).toEqual(Object.values(C).sort());
+      expect(categoriasParaCorregir([R.ESTABLECIMIENTO], caso(E.CLASIFICADO, C.QUEJA, true))).toEqual([]);
+      expect(categoriasParaCorregir([R.ESTABLECIMIENTO], sinRevisar(C.DENUNCIA_CORRUPCION))).toEqual([]);
+      expect(categoriasParaCorregir([R.DIRIS, "INVENTADO", "constructor"], sinRevisar(C.QUEJA))).toEqual([]);
+    });
   });
 
   describe("reglasDeAvisos (qué casos pendientes cuenta la campana de cada persona)", () => {
@@ -90,7 +149,7 @@ describe("accionesPermitidas", () => {
       expect(reglasDeAvisos([R.GESTOR, R.OTRANS])).toEqual([...reglasDe(R.GESTOR), ...reglasDe(R.OTRANS)]);
     });
 
-    it("quien no actúa (el administrador) cuenta todos los casos abiertos que ve, y eso gana si también es gestor", () => {
+    it("el administrador cuenta todos los casos abiertos que ve, y eso gana si también tiene otro rol", () => {
       expect(reglasDeAvisos([R.ADMINISTRADOR])).toBeNull();
       expect(reglasDeAvisos([R.GESTOR, R.ADMINISTRADOR])).toBeNull();
     });
@@ -101,28 +160,20 @@ describe("accionesPermitidas", () => {
     });
   });
 
-  it("cada rol vigente declara si ve los casos sin categoría: solo el administrador y el gestor", () => {
+  it("cada rol vigente declara si ve los casos sin categoría: solo el administrador", () => {
     const quienVe = Object.entries(PERMISOS_POR_ROL)
       .filter(([, permisos]) => permisos.veSinCategoria)
-      .map(([rol]) => rol)
-      .sort();
-    expect(quienVe).toEqual([R.ADMINISTRADOR, R.GESTOR].sort());
+      .map(([rol]) => rol);
+    expect(quienVe).toEqual([R.ADMINISTRADOR]);
   });
 
   describe("veTodasLasAreas", () => {
-    it("solo el administrador y el gestor listan todas las áreas; OTRANS y establecimiento, la suya", () => {
+    it("solo el administrador lista todas las áreas; el gestor, OTRANS y el establecimiento, la suya", () => {
       expect(veTodasLasAreas([R.ADMINISTRADOR])).toBe(true);
-      expect(veTodasLasAreas([R.GESTOR])).toBe(true);
+      expect(veTodasLasAreas([R.GESTOR])).toBe(false);
       expect(veTodasLasAreas([R.OTRANS])).toBe(false);
       expect(veTodasLasAreas([R.ESTABLECIMIENTO])).toBe(false);
-      expect(veTodasLasAreas([R.OTRANS, R.GESTOR])).toBe(true);
-    });
-
-    it("quien deriva (tiene la acción derivar) puede listar todas las áreas para elegir el destino", () => {
-      const quienDeriva = Object.entries(PERMISOS_POR_ROL)
-        .filter(([, permisos]) => permisos.acciones.some((regla) => regla.accion === A.DERIVAR))
-        .map(([rol]) => rol);
-      for (const rol of quienDeriva) expect(veTodasLasAreas([rol])).toBe(true);
+      expect(veTodasLasAreas([R.OTRANS, R.ADMINISTRADOR])).toBe(true);
     });
 
     it("sin roles o con roles que la tabla no conoce no ve todas", () => {

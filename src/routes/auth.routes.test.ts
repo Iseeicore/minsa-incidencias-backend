@@ -32,16 +32,16 @@ describe("GET /auth/me", () => {
     return app;
   };
 
-  it("devuelve nombre, correo, vistas y área, y nunca los roles ni los identificadores", async () => {
+  it("devuelve nombre, correo, vistas, roles y área, y nunca los identificadores", async () => {
     const res = await request(montar(sesion)).get("/auth/me");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       nombreCompleto: "Ana Prueba",
       correo: "ana@minsa.gob.pe",
       vistas: ["INICIO", "CASOS"],
+      roles: ["GESTOR", "ESTABLECIMIENTO"],
       area: { codigo: "EESS-6206", nombre: "Hospital Dos de Mayo", tipo: "ESTABLECIMIENTO" },
     });
-    expect(JSON.stringify(res.body)).not.toContain("GESTOR");
     expect(JSON.stringify(res.body)).not.toContain("u-1");
     expect(res.body.area).not.toHaveProperty("id");
   });

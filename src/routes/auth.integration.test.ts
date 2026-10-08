@@ -57,7 +57,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     huella = await hasher.hash(CLAVE);
   });
 
-  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo, vistas y área, sin id, roles ni módulos", async () => {
+  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo, vistas, roles y área, sin id ni módulos", async () => {
     await usar(async (contexto) => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.ADMINISTRADOR], "Ana Prueba");
       const agente = request.agent(construir(contexto));
@@ -72,7 +72,8 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
 
       const me = await agente.get("/auth/me");
       expect(me.status).toBe(200);
-      expect(Object.keys(me.body).sort()).toEqual(["area", "correo", "nombreCompleto", "vistas"]);
+      expect(Object.keys(me.body).sort()).toEqual(["area", "correo", "nombreCompleto", "roles", "vistas"]);
+      expect(me.body.roles).toEqual(["ADMINISTRADOR"]);
       expect(me.body.area).toBeNull();
       expect(me.body.nombreCompleto).toBe("Ana Prueba");
       expect(me.body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
@@ -120,7 +121,8 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       const eessMe = await meDe("eess@minsa.gob.pe");
       expect(eessMe.area).toEqual({ codigo: eess.areaCodigo, nombre: eess.areaNombre, tipo: "ESTABLECIMIENTO" });
       expect((await meDe("otrans@minsa.gob.pe")).area).toEqual({ codigo: "OTRANS", nombre: "OTRANS", tipo: "OTRANS" });
-      expect(Object.keys(eessMe).sort()).toEqual(["area", "correo", "nombreCompleto", "vistas"]);
+      expect(Object.keys(eessMe).sort()).toEqual(["area", "correo", "nombreCompleto", "roles", "vistas"]);
+      expect(eessMe.roles).toEqual(["ESTABLECIMIENTO"]);
       expect(eessMe.area).not.toHaveProperty("id");
     });
   });

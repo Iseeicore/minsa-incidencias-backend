@@ -97,7 +97,7 @@ No se usa JWT. La sesión es **opaca y vive en la base**, y el navegador solo gu
 | Ruta | Qué hace | Respuesta |
 |---|---|---|
 | `POST /auth/login` | Cuerpo `{ "correo", "password" }`. Normaliza el correo, verifica la clave (Argon2id) y crea la sesión. Límite: 5 intentos por 15 minutos por correo | `204` con la cookie de sesión; `401 INVALID_CREDENTIALS` si el correo o la clave no sirven (el mismo error para un correo inexistente, una clave mala o un usuario desactivado); `400` si el cuerpo es inválido; `429` si se agotaron los intentos |
-| `GET /auth/me` | Quién soy: nombre, correo, las vistas que puedo abrir y mi área | `200 { nombreCompleto, correo, vistas, area }` con `area: { codigo, nombre, tipo } \| null` (nunca ids ni roles); `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
+| `GET /auth/me` | Quién soy: nombre, correo, las vistas que puedo abrir, mis roles y mi área | `200 { nombreCompleto, correo, vistas, roles, area }` con `roles: string[]` (códigos activos) y `area: { codigo, nombre, tipo } \| null` (nunca ids); `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
 | `POST /auth/logout` | Revoca la sesión en la base y borra la cookie | `204` (siempre, aunque no hubiera sesión) |
 
 Cómo funciona:
@@ -127,7 +127,7 @@ El rol `DIRIS` existe en la base pero está **desactivado**: solo se consultan r
 - **Área de la persona:** cada usuario interno tiene a lo sumo un área (`catalogo.area`; tipos `ESTABLECIMIENTO`, `OTRANS`, `DIRIS`, `INSTITUTO`, `ORGANISMO`). Un rol con tipo de área (`OTRANS`, `ESTABLECIMIENTO`) solo se asigna a quien pertenece a un área de ese tipo: lo hace cumplir un disparador de la base, no esta API.
 - **Sin ningún rol activo** (por ejemplo, un rol desactivado después): la sesión es válida y `GET /auth/me` devuelve `vistas: []`; cualquier ruta con `requireVista` responde `403`. No se rechaza la sesión porque la persona sí se autenticó; lo que no tiene es acceso.
 - **Qué ve cada rol dentro de las vistas** (categorías) lo decide la base (`gestion.rol_categoria`) y **qué puede hacer** (acciones) lo decide la misma tabla fija; ver [Incidencias](#incidencias-casos).
-- **La sesión de la petición sí lleva los roles** (`req.sesion.roles`), pero solo dentro del servidor: `GET /auth/me` responde nombre, correo, vistas y área, nunca los roles ni los ids del área.
+- **La sesión de la petición lleva los roles** (`req.sesion.roles`) y `GET /auth/me` devuelve sus códigos (`roles`, p. ej. `["ADMINISTRADOR"]`) para que el cliente distinga al superadministrador del gestor, que comparten vistas; nunca devuelve ids de usuario ni del área.
 
 ## Áreas (destino al derivar y filtro por establecimiento)
 

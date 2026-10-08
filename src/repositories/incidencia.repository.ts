@@ -10,6 +10,7 @@ import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
 import { TipoArea } from "@/enums/tipo-area.enum.js";
 import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { FilaHistorial } from "@/utils/historial-incidencia.js";
+import { escaparComodines } from "@/utils/texto-busqueda.js";
 
 export interface VisibilidadCasos {
   roles: readonly string[];
@@ -86,8 +87,6 @@ class Parametros {
 const TIPOS_DE_AREA_SIN_SENSIBLES: readonly TipoArea[] = [TipoArea.ESTABLECIMIENTO, TipoArea.DIRIS];
 
 const ESTADOS_CONOCIDOS: readonly EstadoIncidencia[] = Object.values(EstadoIncidencia);
-
-const escaparComodines = (texto: string): string => texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
 
 const DESDE_BASICO = `
   FROM chatbot.incidencia_paciente i

@@ -4,7 +4,7 @@ import { AccionIncidencia as A } from "@/enums/accion-incidencia.enum.js";
 import { CategoriaIncidencia as C } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia as E } from "@/enums/estado-incidencia.enum.js";
 import { RolCodigo as R } from "@/enums/rol-codigo.enum.js";
-import { accionesPermitidas, reglasDeAvisos } from "@/utils/acciones-permitidas.js";
+import { accionesPermitidas, reglasDeAvisos, veTodasLasAreas } from "@/utils/acciones-permitidas.js";
 
 type Caso = Parameters<typeof accionesPermitidas>[1];
 const caso = (estado: E, categoria: C | null, revisada: boolean): Caso => ({ estado, categoria, revisada });
@@ -107,5 +107,27 @@ describe("accionesPermitidas", () => {
       .map(([rol]) => rol)
       .sort();
     expect(quienVe).toEqual([R.ADMINISTRADOR, R.GESTOR].sort());
+  });
+
+  describe("veTodasLasAreas", () => {
+    it("solo el administrador y el gestor listan todas las áreas; OTRANS y establecimiento, la suya", () => {
+      expect(veTodasLasAreas([R.ADMINISTRADOR])).toBe(true);
+      expect(veTodasLasAreas([R.GESTOR])).toBe(true);
+      expect(veTodasLasAreas([R.OTRANS])).toBe(false);
+      expect(veTodasLasAreas([R.ESTABLECIMIENTO])).toBe(false);
+      expect(veTodasLasAreas([R.OTRANS, R.GESTOR])).toBe(true);
+    });
+
+    it("quien deriva (tiene la acción derivar) puede listar todas las áreas para elegir el destino", () => {
+      const quienDeriva = Object.entries(PERMISOS_POR_ROL)
+        .filter(([, permisos]) => permisos.acciones.some((regla) => regla.accion === A.DERIVAR))
+        .map(([rol]) => rol);
+      for (const rol of quienDeriva) expect(veTodasLasAreas([rol])).toBe(true);
+    });
+
+    it("sin roles o con roles que la tabla no conoce no ve todas", () => {
+      expect(veTodasLasAreas([])).toBe(false);
+      expect(veTodasLasAreas([R.DIRIS, "INVENTADO", "constructor"])).toBe(false);
+    });
   });
 });

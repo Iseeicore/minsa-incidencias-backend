@@ -55,6 +55,11 @@ export function reglasDeAvisos(roles: readonly string[], permisos: TablaDePermis
   return reglas;
 }
 
+/** Si alguno de los roles puede listar todas las áreas; si no, la persona solo ve la suya. Ignora los roles desconocidos. */
+export function veTodasLasAreas(roles: readonly string[], permisos: TablaDePermisos = PERMISOS_POR_ROL): boolean {
+  return roles.some((rol) => Object.hasOwn(permisos, rol) && (permisos[rol] as PermisosDelRol).veTodasLasAreas);
+}
+
 export function veCasosSinCategoria(roles: readonly string[], permisos: TablaDePermisos = PERMISOS_POR_ROL): boolean {
   return roles.some((rol) => Object.hasOwn(permisos, rol) && (permisos[rol] as PermisosDelRol).veSinCategoria);
 }

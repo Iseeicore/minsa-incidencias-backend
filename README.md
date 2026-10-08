@@ -129,6 +129,17 @@ El rol `DIRIS` existe en la base pero está **desactivado**: solo se consultan r
 - **Qué ve cada rol dentro de las vistas** (categorías) lo decide la base (`gestion.rol_categoria`) y **qué puede hacer** (acciones) lo decide la misma tabla fija; ver [Incidencias](#incidencias-casos).
 - **La sesión de la petición sí lleva los roles** (`req.sesion.roles`), pero solo dentro del servidor: `GET /auth/me` responde nombre, correo, vistas y área, nunca los roles ni los ids del área.
 
+## Áreas (destino al derivar y filtro por establecimiento)
+
+Pide solo sesión (sin vista concreta): qué áreas ve cada persona lo decide el servidor según sus roles. Solo lista áreas **activas** (de un tipo de área activo).
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /areas` | Query: `tipo` (`ESTABLECIMIENTO`, `OTRANS`, `DIRIS`, `INSTITUTO` u `ORGANISMO`), `q` (texto, sin tildes ni mayúsculas, máximo 100; usa `nombre_busqueda` en los establecimientos y `f_unaccent(nombre)` en las demás áreas), `limite` (50 por defecto, máximo 200) y `cursor` (opaco, keyset por nombre e id). Responde `{ items, siguiente, hayMas }` con `items: [{ id, codigo, nombre, tipoArea, establecimiento }]`, donde `establecimiento` es `null` o `{ codigoRenipress, nivelAtencion, categoria }`. Orden estable por nombre e id; sin total. Un cursor inválido o un `tipo` desconocido responde `400` |
+
+- **Quién ve qué** (`veTodasLasAreas` en la tabla de permisos): `GESTOR` (es quien deriva) y `ADMINISTRADOR` (filtra por establecimiento) listan todas; `OTRANS` y `ESTABLECIMIENTO` solo ven **su propia área** (una sola; ninguna si no tienen área), porque no derivan. Con varios roles basta que uno lo permita.
+- Cada item trae su `codigo`: es el que se envía como `areaDestino` en `POST /incidencias/:codigo/derivar` (en un establecimiento, `EESS-<codigoRenipress>`). El `id` numérico es solo informativo.
+
 ## Incidencias (casos)
 
 Cada caso se identifica por su **código legible** (`MINSA-AAAA-NNNNNN`, columna `codigo`, lo asigna la base). El `id` interno (UUID) y el `trace_id` del chat nunca salen de la API. Todas las rutas piden sesión y la vista `CASOS`, salvo `por-vencer`, que solo pide sesión (la campana de avisos).
@@ -275,7 +286,7 @@ src/
   middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
   repositories/        Acceso a la base: usuario, sesion e incidencia (consultas parametrizadas)
   services/            auth.service (login, sesión, cierre), administrador.service e incidencia.service (casos y acciones)
-  routes/              salud, auth e incidencias
+  routes/              salud, auth, incidencias y áreas
   scripts/             crear-admin (primer administrador)
   types/               Ampliación de Request con la sesión actual
   utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,

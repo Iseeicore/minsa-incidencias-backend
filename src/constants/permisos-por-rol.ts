@@ -16,6 +16,8 @@ export interface ReglaDeAccion {
 export interface PermisosDelRol {
   vistas: readonly VistaCodigo[];
   veSinCategoria: boolean;
+  /** Si puede listar todas las áreas (`GET /areas`, para elegir el destino); si no, solo ve la suya. */
+  veTodasLasAreas: boolean;
   acciones: readonly ReglaDeAccion[];
 }
 
@@ -35,13 +37,16 @@ const CATEGORIAS_PARA_DERIVAR: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO]
  * que el caso esté destinado a su área; aquí solo se dice si ve los casos aún sin categoría y qué acciones puede
  * ejecutar según el estado, la revisión y la categoría. El rol DIRIS está desactivado y por eso no figura. El
  * administrador solo mira: no actúa sobre los casos. Derivar elige el área de destino (por defecto, la del
- * establecimiento de origen) y la deriva siempre un gestor.
+ * establecimiento de origen) y la deriva siempre un gestor; por eso el gestor lista todas las áreas para elegirla,
+ * y el administrador también (las ve para filtrar por establecimiento). OTRANS y los establecimientos solo ven
+ * su propia área: no derivan y no necesitan conocer las demás.
  */
 export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
-  [RolCodigo.ADMINISTRADOR]: { vistas: TODAS_LAS_VISTAS, veSinCategoria: true, acciones: [] },
+  [RolCodigo.ADMINISTRADOR]: { vistas: TODAS_LAS_VISTAS, veSinCategoria: true, veTodasLasAreas: true, acciones: [] },
   [RolCodigo.GESTOR]: {
     vistas: TODAS_LAS_VISTAS,
     veSinCategoria: true,
+    veTodasLasAreas: true,
     acciones: [
       { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_GESTOR, revisada: false },
       { accion: CORREGIR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_GESTOR, revisada: false },
@@ -51,6 +56,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   [RolCodigo.OTRANS]: {
     vistas: VISTAS_SIN_DERIVACIONES,
     veSinCategoria: false,
+    veTodasLasAreas: false,
     acciones: [
       { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: false },
       { accion: CORREGIR, estados: [CLASIFICADO], categorias: [DENUNCIA_CORRUPCION], revisada: false },
@@ -62,6 +68,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   [RolCodigo.ESTABLECIMIENTO]: {
     vistas: VISTAS_SIN_DERIVACIONES,
     veSinCategoria: false,
+    veTodasLasAreas: false,
     acciones: [
       { accion: TOMAR, estados: [DERIVADO], categorias: CATEGORIAS_PARA_DERIVAR },
       { accion: RESOLVER, estados: [DERIVADO, EN_GESTION], categorias: CATEGORIAS_PARA_DERIVAR },

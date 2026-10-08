@@ -12,12 +12,15 @@ import { createCors } from "@/middleware/cors.js";
 import { errorHandler, notFoundHandler } from "@/middleware/error-handler.js";
 import { createGeneralResolver, createLoginResolver, rateLimit } from "@/middleware/rate-limit.js";
 import { attachSession } from "@/middleware/session.js";
+import { AreaRepository } from "@/repositories/area.repository.js";
 import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
 import { SesionRepository } from "@/repositories/sesion.repository.js";
 import { UsuarioRepository } from "@/repositories/usuario.repository.js";
+import { createAreasRouter } from "@/routes/areas.routes.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
+import { AreaService } from "@/services/area.service.js";
 import { AuthService } from "@/services/auth.service.js";
 import { IncidenciaService, plazosDeEntorno } from "@/services/incidencia.service.js";
 import { ArgonPasswordHasher, type PasswordHasher } from "@/utils/password-hasher.js";
@@ -48,6 +51,8 @@ export function createApp(
   const auth = new AuthService(new UsuarioRepository(database), new SesionRepository(database), hasher, env);
   const incidencias = new IncidenciaService(new IncidenciaRepository(database), database, plazosDeEntorno(env));
 
+  const areas = new AreaService(new AreaRepository(database));
+
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", env.TRUST_PROXY);
@@ -62,6 +67,7 @@ export function createApp(
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
   app.use(createIncidenciasRouter(incidencias));
+  app.use(createAreasRouter(areas));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

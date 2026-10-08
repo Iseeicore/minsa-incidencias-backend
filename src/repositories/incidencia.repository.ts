@@ -184,6 +184,14 @@ function condicionesDeFiltros(p: Parametros, filtros: FiltrosDeListado): string[
   return condiciones;
 }
 
+/** Los filtros de las pestañas de la bandeja: todos menos el estado y el motivo del archivo, que elige cada pestaña. */
+export function sinEstadoNiMotivo(filtros: FiltrosDeListado): FiltrosDeListado {
+  const resto = { ...filtros };
+  delete resto.estado;
+  delete resto.motivoArchivo;
+  return resto;
+}
+
 /** Columnas y uniones de un caso. El responsable es quien derivó, o si no quien corrigió, o si no quien confirmó. */
 function consultaDeCaso(p: Parametros): string {
   const derivado = p.agregar(EstadoIncidencia.DERIVADO);
@@ -277,6 +285,58 @@ export class IncidenciaRepository {
        LIMIT ${p.agregar(limite)}`,
       p.lista,
     );
+  }
+
+  /**
+   * Cuántos casos del listado hay con estos filtros, contando como mucho `tope + 1`: la consulta se detiene en esa fila
+   * y nunca recorre la tabla entera. Mismas condiciones que `listar` (visibilidad incluida), así que nunca cuenta lo que
+   * el listado no mostraría. Quien llama compara con `tope` para saber si hay más.
+   */
+  async contarAcotado(
+    visible: VisibilidadCasos,
+    filtros: FiltrosDeListado,
+    tope: number,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<number> {
+    const p = new Parametros();
+    const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, filtros)];
+    const [fila] = await ejecutor.query<{ cantidad: number }>(
+      `SELECT count(*)::int AS cantidad
+         FROM (SELECT 1 ${DESDE_BASICO}
+                WHERE ${condiciones.join(" AND ")}
+                LIMIT ${p.agregar(tope + 1)}) s`,
+      p.lista,
+    );
+    return fila?.cantidad ?? 0;
+  }
+
+  /**
+   * Lo mismo que `contarAcotado` para cada estado, en una sola consulta: un `LATERAL` por estado del catálogo, cada uno
+   * acotado a `tope + 1` filas. El estado y el motivo del archivo de `filtros` se ignoran (el estado lo fija cada fila).
+   * Solo devuelve los estados que existen en el catálogo; quien llama completa con 0 los que falten.
+   */
+  async contarPorEstado(
+    visible: VisibilidadCasos,
+    filtros: FiltrosDeListado,
+    tope: number,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<Map<EstadoIncidencia, number>> {
+    const p = new Parametros();
+    const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, sinEstadoNiMotivo(filtros))];
+    const filas = await ejecutor.query<{ estado: EstadoIncidencia; cantidad: number }>(
+      `SELECT e.codigo AS estado, n.cantidad
+         FROM catalogo.estado_incidencia e
+        CROSS JOIN LATERAL (
+          SELECT count(*)::int AS cantidad
+            FROM (SELECT 1
+                    FROM chatbot.incidencia_paciente i
+                    LEFT JOIN catalogo.categoria_incidencia c ON c.id = i.categoria_id
+                   WHERE i.estado_incidencia_id = e.id AND ${condiciones.join(" AND ")}
+                   LIMIT ${p.agregar(tope + 1)}) s
+        ) n`,
+      p.lista,
+    );
+    return new Map(filas.map((fila) => [fila.estado, fila.cantidad]));
   }
 
   async buscarPorCodigo(

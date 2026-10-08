@@ -3,7 +3,9 @@ import {
   CATEGORIA_API,
   CATEGORIA_DESDE_API,
   CATEGORIA_ETIQUETA,
+  CONTEO_TOPE,
   ESTADO_API,
+  type EstadoApi,
   ESTADO_DESDE_API,
   POR_VENCER_LISTA_MAXIMA,
   SIN_CATEGORIA_API,
@@ -37,6 +39,7 @@ import {
   type FiltrosDeListado,
   type IncidenciaRepository,
   type VisibilidadCasos,
+  sinEstadoNiMotivo,
 } from "@/repositories/incidencia.repository.js";
 import { accionesPermitidas, categoriasParaCorregir, reglasDeAvisos, veCasosSinCategoria } from "@/utils/acciones-permitidas.js";
 import { codificarCursor } from "@/utils/cursor-listado.js";
@@ -49,8 +52,11 @@ import type {
   CasoEnviadoAOtransDto,
   CasoResumenDto,
   ConsultaListado,
+  ConteoAcotadoDto,
+  ConteosDto,
   DatosAccion,
   EvidenciaDto,
+  FiltrosConsulta,
   IncidenciaServicio,
   ListaCasosDto,
   PorVencerDto,
@@ -69,7 +75,7 @@ function visibilidadDe(sesion: SesionActual): VisibilidadCasos {
   return { roles: sesion.roles, verSinCategoria: veCasosSinCategoria(sesion.roles), areaId: sesion.area?.id ?? null };
 }
 
-function filtrosDe(consulta: ConsultaListado): FiltrosDeListado {
+function filtrosDe(consulta: FiltrosConsulta): FiltrosDeListado {
   const filtros: FiltrosDeListado = {};
   if (consulta.estado) filtros.estado = ESTADO_DESDE_API[consulta.estado];
   if (consulta.categoria === SIN_CATEGORIA_API) filtros.sinCategoria = true;
@@ -92,7 +98,35 @@ export class IncidenciaService implements IncidenciaServicio {
     private readonly casos: IncidenciaRepository,
     private readonly database: Database,
     private readonly plazos: PlazosConfigurados,
+    private readonly topeDeConteo: number = CONTEO_TOPE,
   ) {}
+
+  /**
+   * Contadores de las pestañas de la bandeja. Cada uno cuenta como mucho `topeDeConteo` casos y avisa con `conMas` si hay
+   * más. `todos` y `porEstado` ignoran `estado` y `motivoArchivo` (así cada pestaña muestra su cantidad real bajo los demás
+   * filtros); `total` los aplica y es la cantidad que muestra el listado con esos mismos filtros.
+   */
+  async conteos(sesion: SesionActual, consulta: FiltrosConsulta): Promise<ConteosDto> {
+    const visible = visibilidadDe(sesion);
+    const filtros = filtrosDe(consulta);
+    const deLasPestanas = sinEstadoNiMotivo(filtros);
+    const acotaPestana = filtros.estado !== undefined || filtros.motivoArchivo !== undefined;
+    const tope = this.topeDeConteo;
+    const [porEstado, total] = await Promise.all([
+      this.casos.contarPorEstado(visible, deLasPestanas, tope),
+      acotaPestana ? this.casos.contarAcotado(visible, filtros, tope) : null,
+    ]);
+    // Cada estado llega contado hasta tope + 1: la suma supera el tope exactamente cuando los casos de todos los estados lo superan.
+    const todos = [...porEstado.values()].reduce((suma, cantidad) => suma + cantidad, 0);
+    const acotar = (cantidad: number): ConteoAcotadoDto => ({ cantidad: Math.min(cantidad, tope), conMas: cantidad > tope });
+    return {
+      todos: acotar(todos),
+      total: acotar(total ?? todos),
+      porEstado: Object.fromEntries(
+        Object.values(EstadoIncidencia).map((estado) => [ESTADO_API[estado], acotar(porEstado.get(estado) ?? 0)]),
+      ) as Record<EstadoApi, ConteoAcotadoDto>,
+    };
+  }
 
   async listar(sesion: SesionActual, consulta: ConsultaListado): Promise<ListaCasosDto> {
     // Se pide un caso de más: si llega, hay otra página y el último de esta es la posición del cursor.

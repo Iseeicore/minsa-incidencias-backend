@@ -8,6 +8,7 @@ import { CategoriaIncidencia as C } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
 import { RolCodigo as R } from "@/enums/rol-codigo.enum.js";
 import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
+import { IncidenciaService, plazosDeEntorno } from "@/services/incidencia.service.js";
 import { testEnv } from "@/test-utils/env.js";
 import { crearEstablecimientoDePrueba, type EstablecimientoDePrueba } from "@/test-utils/establecimientos.js";
 import { marcaDePrueba, sembrarCaso, type OpcionesCaso } from "@/test-utils/incidencias.js";
@@ -1009,6 +1010,258 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(await verCodigos(agente, { texto: numero })).toContain(caso.codigo);
         expect(await verCodigos(agente, { texto: caso.codigo })).toEqual([caso.codigo]);
         expect(await verCodigos(agente, { texto: caso.codigo.toLowerCase() })).toEqual([caso.codigo]);
+      });
+    });
+  });
+
+  describe("conteos de las pestañas de la bandeja", () => {
+    interface ConteoDto {
+      cantidad: number;
+      conMas: boolean;
+    }
+    interface ConteosDto {
+      todos: ConteoDto;
+      total: ConteoDto;
+      porEstado: Record<string, ConteoDto>;
+    }
+    const ESTADOS = ["registrado", "clasificado", "derivado", "en-gestion", "resuelto", "archivado"];
+    const exacto = (cantidad: number): ConteoDto => ({ cantidad, conMas: false });
+
+    async function conteos(agente: AgentePrueba, query: Record<string, string> = {}): Promise<ConteosDto> {
+      const res = await agente.get("/incidencias/conteos").query(query);
+      expect(res.status).toBe(200);
+      return res.body as ConteosDto;
+    }
+
+    const resumen = (c: ConteosDto) => ({ todos: c.todos.cantidad, total: c.total.cantidad, ...Object.fromEntries(ESTADOS.map((e) => [e, c.porEstado[e]?.cantidad])) });
+
+    /** Recorre el listado completo siguiendo el cursor, de a `limite` casos por página. */
+    async function recorrer(agente: AgentePrueba, query: Record<string, string>, limite = 3): Promise<string[]> {
+      const codigos: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const res = await agente.get("/incidencias").query({ ...query, limite: String(limite), ...(cursor ? { cursor } : {}) });
+        expect(res.status).toBe(200);
+        codigos.push(...(res.body.items as CasoDto[]).map((c) => c.codigo));
+        cursor = res.body.siguiente as string | null;
+      } while (cursor);
+      return codigos;
+    }
+
+    async function llegoEl(contexto: RollbackContext, caso: { id: string }, instante: string) {
+      await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente DISABLE TRIGGER USER");
+      await contexto.client.query("UPDATE chatbot.incidencia_paciente SET fecha_creacion = $2::timestamptz WHERE id = $1", [caso.id, instante]);
+      await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente ENABLE TRIGGER USER");
+    }
+
+    /** Dos registrados, un clasificado, un derivado, uno en gestión, uno resuelto y dos archivados (uno manual y otro por vigencia). */
+    async function sembrarDeTodosLosEstados(contexto: RollbackContext, marcador: string, eess: EstablecimientoDePrueba) {
+      const base = { establecimiento: eess, marcador };
+      await sembrarCaso(contexto, { ...base, categoria: null });
+      await sembrarCaso(contexto, { ...base, categoria: null });
+      await sembrarCaso(contexto, { ...base, categoria: C.QUEJA });
+      await sembrarCaso(contexto, { ...base, categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO" });
+      await sembrarCaso(contexto, { ...base, categoria: C.RECLAMO, revision: "confirmada", estado: "EN_GESTION" });
+      await sembrarCaso(contexto, { ...base, categoria: C.QUEJA, revision: "confirmada", estado: "RESUELTO" });
+      await sembrarCaso(contexto, { ...base, categoria: C.QUEJA, revision: "confirmada", estado: "ARCHIVADO" });
+      await sembrarCaso(contexto, { ...base, categoria: C.QUEJA, archivar: { motivo: "NO_CORRESPONDE" } });
+    }
+
+    it("cuenta cada estado, con todos los estados presentes (0 si no hay) y los mismos códigos que emite el listado", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+        expect(await conteos(agente, { texto: marcador })).toEqual({
+          todos: exacto(0),
+          total: exacto(0),
+          porEstado: Object.fromEntries(ESTADOS.map((e) => [e, exacto(0)])),
+        });
+
+        await sembrarDeTodosLosEstados(contexto, marcador, eess);
+        const c = await conteos(agente, { texto: marcador });
+        expect(Object.keys(c.porEstado).sort()).toEqual([...ESTADOS].sort());
+        expect(resumen(c)).toEqual({ todos: 8, total: 8, registrado: 2, clasificado: 1, derivado: 1, "en-gestion": 1, resuelto: 1, archivado: 2 });
+        expect(c.todos.conMas).toBe(false);
+
+        // Cada pestaña coincide con lo que el listado devuelve al filtrar por ese estado.
+        for (const estado of ESTADOS) {
+          expect((await recorrer(agente, { texto: marcador, estado })).length).toBe(c.porEstado[estado]?.cantidad);
+        }
+      });
+    });
+
+    it("total respeta estado y motivo del archivo; todos y porEstado no", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        await sembrarDeTodosLosEstados(contexto, marcador, eess);
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const sinFiltrar = { todos: 8, registrado: 2, clasificado: 1, derivado: 1, "en-gestion": 1, resuelto: 1, archivado: 2 };
+
+        expect(resumen(await conteos(agente, { texto: marcador, estado: "derivado" }))).toEqual({ ...sinFiltrar, total: 1 });
+        expect(resumen(await conteos(agente, { texto: marcador, estado: "archivado" }))).toEqual({ ...sinFiltrar, total: 2 });
+        expect(resumen(await conteos(agente, { texto: marcador, estado: "archivado", motivoArchivo: "NO_CORRESPONDE" }))).toEqual({ ...sinFiltrar, total: 1 });
+        expect(resumen(await conteos(agente, { texto: marcador, motivoArchivo: "NO_CORRESPONDE" }))).toEqual({ ...sinFiltrar, total: 1 });
+        expect(resumen(await conteos(agente, { texto: marcador, estado: "registrado", motivoArchivo: "NO_CORRESPONDE" }))).toEqual({ ...sinFiltrar, total: 0 });
+        expect(resumen(await conteos(agente, { texto: marcador }))).toEqual({ ...sinFiltrar, total: 8 });
+      });
+    });
+
+    it("los demás filtros (categoría, sin categoría, fechas, texto, establecimiento) acotan todos los contadores", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const dentro = "2026-03-11T10:00:00-05:00";
+        const sembrar = async (opciones: OpcionesCaso, instante: string) => {
+          const caso = await sembrarCaso(contexto, { marcador, ...opciones });
+          await llegoEl(contexto, caso, instante);
+        };
+        await sembrar({ categoria: C.QUEJA, establecimiento: a }, dentro);
+        await sembrar({ categoria: C.RECLAMO, establecimiento: a }, dentro);
+        await sembrar({ categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", establecimiento: b }, dentro);
+        await sembrar({ categoria: null, establecimiento: a }, dentro);
+        await sembrar({ categoria: C.QUEJA, establecimiento: a }, "2026-03-20T10:00:00-05:00");
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const rango = { texto: marcador, desde: "2026-03-11", hasta: "2026-03-11" };
+
+        expect(resumen(await conteos(agente, rango))).toMatchObject({ todos: 4, total: 4, registrado: 1, clasificado: 2, derivado: 1 });
+        expect(resumen(await conteos(agente, { ...rango, categoria: "reclamo" }))).toMatchObject({ todos: 2, clasificado: 1, derivado: 1 });
+        expect(resumen(await conteos(agente, { ...rango, categoria: "sin-categoria" }))).toMatchObject({ todos: 1, registrado: 1, clasificado: 0 });
+        expect(resumen(await conteos(agente, { ...rango, establecimiento: a.codigoRenipress }))).toMatchObject({ todos: 3, derivado: 0, clasificado: 2 });
+        expect(resumen(await conteos(agente, { ...rango, establecimiento: b.codigoRenipress, estado: "clasificado" }))).toMatchObject({ todos: 1, derivado: 1, total: 0 });
+        expect(resumen(await conteos(agente, { texto: marcador, desde: "2026-03-12" }))).toMatchObject({ todos: 1, clasificado: 1 });
+        expect(resumen(await conteos(agente, { texto: "texto-que-no-existe-" + marcador }))).toMatchObject({ todos: 0, total: 0 });
+      });
+    });
+
+    describe("tope de cada contador", () => {
+      const servicioConTope = (contexto: RollbackContext, tope: number) =>
+        new IncidenciaService(new IncidenciaRepository(contexto.database), contexto.database, plazosDeEntorno(testEnv()), tope);
+      const administrador = { sesionId: "s", usuarioId: "u", correo: "a@minsa.gob.pe", nombreCompleto: "Admin", roles: [R.ADMINISTRADOR], area: null, vistas: [] };
+
+      it("cuenta hasta el tope y avisa con conMas si hay más; por debajo o justo en el tope es exacto", async () => {
+        await usar(async (contexto) => {
+          const marcador = marcaDePrueba();
+          const eess = await crearEstablecimientoDePrueba(contexto);
+          const base = { establecimiento: eess, marcador };
+          await sembrarCaso(contexto, { ...base, categoria: C.QUEJA });
+          await sembrarCaso(contexto, { ...base, categoria: C.QUEJA });
+          await sembrarCaso(contexto, { ...base, categoria: C.QUEJA });
+          await sembrarCaso(contexto, { ...base, categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO" });
+
+          const tope2 = await servicioConTope(contexto, 2).conteos(administrador, { texto: marcador });
+          expect(tope2.porEstado["clasificado"]).toEqual({ cantidad: 2, conMas: true });
+          expect(tope2.porEstado["derivado"]).toEqual(exacto(1));
+          expect(tope2.porEstado["registrado"]).toEqual(exacto(0));
+          expect(tope2.todos).toEqual({ cantidad: 2, conMas: true });
+          expect(tope2.total).toEqual({ cantidad: 2, conMas: true });
+
+          const tope3 = await servicioConTope(contexto, 3).conteos(administrador, { texto: marcador, estado: "clasificado" });
+          expect(tope3.porEstado["clasificado"]).toEqual(exacto(3));
+          expect(tope3.todos).toEqual({ cantidad: 3, conMas: true });
+          expect(tope3.total).toEqual(exacto(3));
+
+          const tope4 = await servicioConTope(contexto, 4).conteos(administrador, { texto: marcador });
+          expect(tope4.todos).toEqual(exacto(4));
+          expect(tope4.total).toEqual(exacto(4));
+        });
+      });
+
+      it("el repositorio nunca cuenta más de tope + 1 filas", async () => {
+        await usar(async (contexto) => {
+          const marcador = marcaDePrueba();
+          const eess = await crearEstablecimientoDePrueba(contexto);
+          for (let n = 0; n < 4; n += 1) await sembrarCaso(contexto, { establecimiento: eess, marcador, categoria: C.QUEJA });
+          const repo = new IncidenciaRepository(contexto.database);
+          const visible = { roles: [R.ADMINISTRADOR], verSinCategoria: true, areaId: null };
+          expect(await repo.contarAcotado(visible, { texto: marcador }, 2)).toBe(3);
+          expect(await repo.contarAcotado(visible, { texto: marcador }, 10)).toBe(4);
+          expect((await repo.contarPorEstado(visible, { texto: marcador }, 2)).get(EstadoIncidencia.CLASIFICADO)).toBe(3);
+        });
+      });
+    });
+
+    it("respeta la visibilidad: nunca cuenta corrupción para establecimiento ni gestor, ni casos de otra área", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto, "Hospital A");
+        const b = await crearEstablecimientoDePrueba(contexto, "Hospital B");
+        await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: a, marcador });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: b, marcador });
+        await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", establecimiento: a, destino: b, marcador });
+        await sembrarCaso(contexto, { categoria: C.RECLAMO, establecimiento: a, marcador });
+        await sembrarCaso(contexto, { categoria: C.OTRO, establecimiento: a, marcador });
+        await sembrarCaso(contexto, { categoria: null, establecimiento: a, marcador });
+        const app = construir(contexto);
+        const admin = await entrar(contexto, app, [R.ADMINISTRADOR]);
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
+        const estabA = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+        const estabB = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, b);
+        const gestorA = await entrar(contexto, app, [R.GESTOR], undefined, a);
+
+        const cuenta = async (u: { agente: AgentePrueba }) => (await conteos(u.agente, { texto: marcador })).todos.cantidad;
+        expect(await cuenta(admin)).toBe(7);
+        expect(await cuenta(otrans)).toBe(1);
+        expect(await cuenta(estabA)).toBe(3);
+        expect(await cuenta(estabB)).toBe(2);
+        expect(await cuenta(gestorA)).toBe(3);
+        // Lo que se cuenta es exactamente lo que el listado muestra, también por estado.
+        for (const u of [admin, otrans, estabA, estabB, gestorA]) {
+          const c = await conteos(u.agente, { texto: marcador });
+          expect((await recorrer(u.agente, { texto: marcador })).length).toBe(c.todos.cantidad);
+          for (const estado of ESTADOS) expect((await recorrer(u.agente, { texto: marcador, estado })).length).toBe(c.porEstado[estado]?.cantidad);
+        }
+        expect((await conteos(estabA.agente, { texto: marcador, categoria: "denuncia-corrupcion" })).todos.cantidad).toBe(0);
+        expect((await conteos(gestorA.agente, { texto: marcador, categoria: "sin-categoria" })).todos.cantidad).toBe(0);
+        expect((await conteos(otrans.agente, { texto: marcador, categoria: "queja" })).todos.cantidad).toBe(0);
+      });
+    });
+
+    it("todos coincide con recorrer el listado completo de la base, con y sin filtros", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        await sembrarDeTodosLosEstados(contexto, marcador, eess);
+        await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: eess, marcador });
+        const app = construir(contexto);
+        const admin = await entrar(contexto, app, [R.ADMINISTRADOR]);
+        const estab = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, eess);
+
+        for (const u of [admin, estab]) {
+          const variantes: Record<string, string>[] = [{},{ categoria: "queja" }, { desde: "2026-01-01" }, { estado: "archivado" }, { texto: marcador }];
+          for (const filtros of variantes) {
+            const c = await conteos(u.agente, filtros);
+            const deLasPestanas = Object.fromEntries(Object.entries(filtros).filter(([clave]) => clave !== "estado" && clave !== "motivoArchivo"));
+            expect(c.todos.cantidad).toBe((await recorrer(u.agente, deLasPestanas, 7)).length);
+            expect(c.total.cantidad).toBe((await recorrer(u.agente, filtros, 7)).length);
+          }
+        }
+      });
+    });
+
+    it("exige sesión y rechaza filtros inválidos con 400", async () => {
+      await usar(async (contexto) => {
+        const app = construir(contexto);
+        expect((await request(app).get("/incidencias/conteos")).status).toBe(401);
+        const { agente } = await entrar(contexto, app, [R.ADMINISTRADOR]);
+        for (const consulta of [
+          { estado: "anulado" },
+          { motivoArchivo: "otro" },
+          { categoria: "corrupcion" },
+          { establecimiento: "abc" },
+          { desde: "2026-02-31" },
+          { desde: "2026-03-12", hasta: "2026-03-11" },
+          { desde: "2025-03-11", hasta: "2026-03-12" },
+        ]) {
+          const res = await agente.get("/incidencias/conteos").query(consulta);
+          expect(res.status).toBe(400);
+          expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        }
+        expect((await agente.get("/incidencias/conteos").query({ desde: "2025-03-11", hasta: "2026-03-11" })).status).toBe(200);
       });
     });
   });

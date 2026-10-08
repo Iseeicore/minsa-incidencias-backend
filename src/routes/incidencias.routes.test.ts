@@ -24,6 +24,7 @@ const sesionConCasos: SesionActual = {
 function servicioFalso() {
   return {
     listar: vi.fn(async () => ({ items: [], siguiente: null, hayMas: false })),
+    conteos: vi.fn(async () => ({})),
     detalle: vi.fn(async () => ({ codigo: CODIGO })),
     porVencer: vi.fn(async () => ({ total: 0, porVencer: 0, vencidos: 0, casos: [] })),
     ejecutar: vi.fn(async () => ({ mensaje: "listo", caso: null })),
@@ -55,6 +56,7 @@ describe("rutas de incidencias", () => {
       const app = montar(servicio, null);
       expect((await request(app).get("/incidencias")).status).toBe(401);
       expect((await request(app).get("/incidencias/por-vencer")).status).toBe(401);
+      expect((await request(app).get("/incidencias/conteos")).status).toBe(401);
       expect((await request(app).get(`/incidencias/${CODIGO}`)).status).toBe(401);
       expect((await request(app).post(`/incidencias/${CODIGO}/confirmar`)).status).toBe(401);
       expect(servicio.listar).not.toHaveBeenCalled();
@@ -63,6 +65,8 @@ describe("rutas de incidencias", () => {
     it("sin la vista de casos responde 403, pero la campana de avisos solo pide sesión", async () => {
       const app = montar(servicio, { ...sesionConCasos, vistas: [] });
       expect((await request(app).get("/incidencias")).status).toBe(403);
+      expect((await request(app).get("/incidencias/conteos")).status).toBe(403);
+      expect(servicio.conteos).not.toHaveBeenCalled();
       expect((await request(app).get(`/incidencias/${CODIGO}`)).status).toBe(403);
       expect((await request(app).post(`/incidencias/${CODIGO}/tomar`)).status).toBe(403);
       expect((await request(app).get("/incidencias/por-vencer")).status).toBe(200);
@@ -220,6 +224,64 @@ describe("rutas de incidencias", () => {
     it("rechaza un texto de búsqueda demasiado largo", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ texto: "a".repeat(101) });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("GET /incidencias/conteos", () => {
+    it("va antes que la ruta por código y pasa los mismos filtros que el listado, sin límite ni cursor", async () => {
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      const res = await request(montar(servicio, sesionConCasos))
+        .get("/incidencias/conteos")
+        .query({
+          limite: "5",
+          cursor: codificarCursor(posicion),
+          estado: "en-gestion",
+          motivoArchivo: "NO_CORRESPONDE",
+          categoria: "sin-categoria",
+          texto: "  hola  ",
+          establecimiento: "0006206",
+          desde: "2026-10-01",
+          hasta: "2026-10-08",
+        });
+      expect(res.status).toBe(200);
+      expect(servicio.detalle).not.toHaveBeenCalled();
+      expect(servicio.conteos).toHaveBeenCalledWith(sesionConCasos, {
+        estado: "en-gestion",
+        motivoArchivo: "NO_CORRESPONDE",
+        categoria: "sin-categoria",
+        texto: "hola",
+        establecimiento: "6206",
+        desde: "2026-10-01",
+        hasta: "2026-10-08",
+      });
+    });
+
+    it("sin filtros llega al servicio con una consulta vacía", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias/conteos");
+      expect(servicio.conteos).toHaveBeenCalledWith(sesionConCasos, {});
+    });
+
+    it.each([
+      [{ estado: "anulado" }],
+      [{ motivoArchivo: "otro" }],
+      [{ categoria: "corrupcion" }],
+      [{ establecimiento: "abc" }],
+      [{ texto: "a".repeat(101) }],
+      [{ desde: "2026-02-31" }],
+      [{ desde: "2026-10-09", hasta: "2026-10-08" }],
+      [{ desde: "2024-01-01", hasta: "2025-01-01" }],
+    ])("rechaza %j con 400 VALIDATION_FAILED y no llega al servicio", async (consulta) => {
+      const res = await request(montar(servicio, sesionConCasos)).get("/incidencias/conteos").query(consulta);
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.conteos).not.toHaveBeenCalled();
+    });
+
+    it("acepta un rango de exactamente 366 días y explica un rango invertido", async () => {
+      const app = montar(servicio, sesionConCasos);
+      expect((await request(app).get("/incidencias/conteos").query({ desde: "2024-01-01", hasta: "2024-12-31" })).status).toBe(200);
+      const invertido = await request(app).get("/incidencias/conteos").query({ desde: "2026-10-09", hasta: "2026-10-08" });
+      expect(invertido.body.details).toEqual([{ path: "desde", message: "La fecha «desde» no puede ser posterior a «hasta»." }]);
     });
   });
 

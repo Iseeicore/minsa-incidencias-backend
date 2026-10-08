@@ -45,18 +45,8 @@ const diaDelListado = z
     return dia;
   });
 
-const camposDelListado = z.object({
-  limite: z.coerce.number().int().min(1).max(LISTADO_LIMITE_MAXIMO).default(LISTADO_LIMITE_POR_DEFECTO),
-  cursor: z
-    .string()
-    .max(CURSOR_LONGITUD_MAXIMA)
-    .optional()
-    .transform((cursor, contexto) => {
-      if (!cursor) return undefined;
-      const posicion = decodificarCursor(cursor);
-      if (!posicion) contexto.addIssue({ code: "custom", message: "El cursor no es válido." });
-      return posicion ?? undefined;
-    }),
+/** Los filtros del listado; los conteos de las pestañas usan exactamente los mismos (sin límite ni cursor). */
+const camposDeFiltros = z.object({
   estado: z.enum(ESTADOS_API).optional(),
   motivoArchivo: z.enum(MOTIVOS_DE_ARCHIVO).optional(),
   categoria: z.enum([...CATEGORIAS_API, SIN_CATEGORIA_API]).optional(),
@@ -85,7 +75,21 @@ const camposDelListado = z.object({
   hasta: diaDelListado,
 });
 
-const listadoSchema = camposDelListado.superRefine(({ desde, hasta }, contexto) => {
+const camposDelListado = camposDeFiltros.extend({
+  limite: z.coerce.number().int().min(1).max(LISTADO_LIMITE_MAXIMO).default(LISTADO_LIMITE_POR_DEFECTO),
+  cursor: z
+    .string()
+    .max(CURSOR_LONGITUD_MAXIMA)
+    .optional()
+    .transform((cursor, contexto) => {
+      if (!cursor) return undefined;
+      const posicion = decodificarCursor(cursor);
+      if (!posicion) contexto.addIssue({ code: "custom", message: "El cursor no es válido." });
+      return posicion ?? undefined;
+    }),
+});
+
+function validarRango({ desde, hasta }: { desde?: string | undefined; hasta?: string | undefined }, contexto: z.RefinementCtx): void {
   if (!desde || !hasta) return;
   const dias = diasDelRango(desde, hasta);
   if (dias === null) return;
@@ -94,7 +98,10 @@ const listadoSchema = camposDelListado.superRefine(({ desde, hasta }, contexto) 
   } else if (dias > LISTADO_RANGO_MAXIMO_DIAS) {
     contexto.addIssue({ code: "custom", path: ["hasta"], message: `El rango no puede abarcar más de ${LISTADO_RANGO_MAXIMO_DIAS} días.` });
   }
-});
+}
+
+const listadoSchema = camposDelListado.superRefine(validarRango);
+const conteosSchema = camposDeFiltros.superRefine(validarRango);
 
 const sinDatosSchema = z.object({});
 const correccionSchema = z.object({ categoria: z.enum(CATEGORIAS_API) });
@@ -140,6 +147,10 @@ export function createIncidenciasRouter(servicio: IncidenciaServicio): Router {
   router.get("/incidencias", verCasos, async (req, res) => {
     const { cursor, ...consulta } = listadoSchema.parse(req.query);
     res.json(await servicio.listar(sesionDe(req), cursor ? { ...consulta, despuesDe: cursor } : consulta));
+  });
+
+  router.get("/incidencias/conteos", verCasos, async (req, res) => {
+    res.json(await servicio.conteos(sesionDe(req), conteosSchema.parse(req.query)));
   });
 
   router.get("/incidencias/por-vencer", requireSession, async (req, res) => {

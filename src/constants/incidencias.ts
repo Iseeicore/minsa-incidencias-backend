@@ -9,6 +9,11 @@ export const LISTADO_LIMITE_MAXIMO = 100;
 export const CURSOR_LONGITUD_MAXIMA = 200;
 /** Días que puede abarcar el rango `desde`-`hasta` del listado (ambos extremos incluidos): evita recorrer toda la tabla. */
 export const LISTADO_RANGO_MAXIMO_DIAS = 366;
+/**
+ * Tope de cada contador de `GET /incidencias/conteos`: se cuentan como mucho este número de casos (la consulta se
+ * detiene en tope + 1), así que ninguna cuenta recorre la tabla entera. Si hay más, la cantidad es el tope y `conMas` es true.
+ */
+export const CONTEO_TOPE = 1000;
 export const AREA_CODIGO_LONGITUD_MAXIMA = 50;
 export const POR_VENCER_LISTA_MAXIMA = 10;
 export const TEXTO_BUSQUEDA_MAXIMO = 100;

@@ -7,10 +7,8 @@ import type { PlazoCalculado } from "@/utils/plazo-incidencia.js";
 import type { ItemDeHistorial } from "@/utils/historial-incidencia.js";
 import type { SesionActual } from "./auth.types.js";
 
-export interface ConsultaListado {
-  limite: number;
-  /** Posición del cursor de `siguiente`, ya decodificada; ausente en la primera página. */
-  despuesDe?: PosicionDeListado;
+/** Los filtros del listado, también los de los conteos de las pestañas (que no paginan). */
+export interface FiltrosConsulta {
   estado?: EstadoApi;
   categoria?: CategoriaApi | "sin-categoria";
   texto?: string;
@@ -22,6 +20,12 @@ export interface ConsultaListado {
   desde?: string;
   /** Último día (`YYYY-MM-DD`, hora de Lima, inclusive) de llegada del caso. */
   hasta?: string;
+}
+
+export interface ConsultaListado extends FiltrosConsulta {
+  limite: number;
+  /** Posición del cursor de `siguiente`, ya decodificada; ausente en la primera página. */
+  despuesDe?: PosicionDeListado;
 }
 
 export interface DatosAccion {
@@ -117,6 +121,21 @@ export interface ListaCasosDto {
   hayMas: boolean;
 }
 
+/** Un contador acotado: `cantidad` llega como mucho al tope; `conMas` indica que hay más casos que el tope. */
+export interface ConteoAcotadoDto {
+  cantidad: number;
+  conMas: boolean;
+}
+
+export interface ConteosDto {
+  /** Todos los estados, con todos los filtros salvo `estado` y `motivoArchivo`. */
+  todos: ConteoAcotadoDto;
+  /** Con todos los filtros, `estado` y `motivoArchivo` incluidos: el total de lo que muestra el listado. */
+  total: ConteoAcotadoDto;
+  /** Una entrada por estado, con todos los filtros salvo `estado` y `motivoArchivo`. */
+  porEstado: Record<EstadoApi, ConteoAcotadoDto>;
+}
+
 export interface PorVencerDto {
   total: number;
   porVencer: number;
@@ -140,6 +159,7 @@ export interface CasoEnviadoAOtransDto {
 
 export interface IncidenciaServicio {
   listar(sesion: SesionActual, consulta: ConsultaListado): Promise<ListaCasosDto>;
+  conteos(sesion: SesionActual, consulta: FiltrosConsulta): Promise<ConteosDto>;
   detalle(sesion: SesionActual, codigo: string): Promise<CasoDetalleDto>;
   porVencer(sesion: SesionActual): Promise<PorVencerDto>;
   ejecutar(

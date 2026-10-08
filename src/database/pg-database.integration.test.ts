@@ -29,7 +29,7 @@ describe.skipIf(!url)("PgDatabase contra PostgreSQL real", () => {
     );
 
     const roles = await database.query<{ codigo: string }>("SELECT codigo FROM gestion.rol");
-    expect(roles.map((fila) => fila.codigo)).toEqual(expect.arrayContaining(["ADMINISTRADOR", "GESTOR", "REVISOR"]));
+    expect(roles.map((fila) => fila.codigo)).toEqual(expect.arrayContaining(["ADMINISTRADOR", "GESTOR", "OTRANS", "ESTABLECIMIENTO"]));
   });
 
   it("declara el actor solo dentro de la transacción", async () => {

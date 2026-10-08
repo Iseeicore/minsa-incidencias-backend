@@ -60,6 +60,7 @@ export class AuthService {
       correo: fila.correo,
       nombreCompleto: fila.nombreCompleto,
       roles: fila.roles,
+      area: fila.area,
       vistas: vistasDeRoles(fila.roles),
     };
   }

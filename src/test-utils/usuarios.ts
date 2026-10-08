@@ -16,13 +16,16 @@ export async function crearUsuarioDePrueba(
   roles: readonly string[],
   nombre = "Persona de Prueba",
   correo = `prueba-${randomUUID()}@minsa.gob.pe`,
+  areaCodigo: string | null = null,
 ): Promise<string> {
   huella ??= hasher.hash(CLAVE_DE_PRUEBA);
   const hash = await huella;
   await database.transaction("usuario:admin-prueba", async (tx) => {
     const [fila] = await tx.query<{ id: string }>(
-      "INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash) VALUES ($1, $2, $3) RETURNING id",
-      [nombre, correo, hash],
+      `INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash, area_id)
+       VALUES ($1, $2, $3, (SELECT id FROM catalogo.area WHERE codigo = $4))
+       RETURNING id`,
+      [nombre, correo, hash, areaCodigo],
     );
     for (const rol of roles) {
       await tx.query(

@@ -71,7 +71,7 @@ Requiere Node `^24.15` (campo `engines` de `package.json`).
 
 ## Conexión a la base de datos
 
-Esta API se conecta a la **base PostgreSQL del chatbot** (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones y deja las cargas iniciales (estados, categorías, roles). Aquí no se ejecuta ninguna migración. Solo se necesita una variable en el `.env`:
+Esta API se conecta a la **base PostgreSQL del chatbot** (`minsa-citas-whatsapp-bot`), que es la dueña de las migraciones y deja las cargas iniciales (estados, categorías, roles, tipos de área y el área `OTRANS`). Aquí no se ejecuta ninguna migración. Los establecimientos y sus áreas (`EESS-<renipress>`) los carga el repo del bot (`npm run db:seed:eess`); sin ese padrón, ningún caso puede derivarse a un establecimiento. Esta API necesita la versión del esquema con áreas y establecimientos (`catalogo.area`, `catalogo.establecimiento_salud`, `incidencia_paciente.area_destino_id`). Solo se necesita una variable en el `.env`:
 
 ```bash
 DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:PUERTO/NOMBRE_DE_LA_BASE
@@ -97,13 +97,13 @@ No se usa JWT. La sesión es **opaca y vive en la base**, y el navegador solo gu
 | Ruta | Qué hace | Respuesta |
 |---|---|---|
 | `POST /auth/login` | Cuerpo `{ "correo", "password" }`. Normaliza el correo, verifica la clave (Argon2id) y crea la sesión. Límite: 5 intentos por 15 minutos por correo | `204` con la cookie de sesión; `401 INVALID_CREDENTIALS` si el correo o la clave no sirven (el mismo error para un correo inexistente, una clave mala o un usuario desactivado); `400` si el cuerpo es inválido; `429` si se agotaron los intentos |
-| `GET /auth/me` | Quién soy: nombre, correo y las vistas que puedo abrir | `200 { nombreCompleto, correo, vistas }`; `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
+| `GET /auth/me` | Quién soy: nombre, correo, las vistas que puedo abrir y mi área | `200 { nombreCompleto, correo, vistas, area }` con `area: { codigo, nombre, tipo } \| null` (nunca ids ni roles); `401` sin sesión (`UNAUTHORIZED`) o con una sesión que ya no sirve (`INVALID_SESSION`) |
 | `POST /auth/logout` | Revoca la sesión en la base y borra la cookie | `204` (siempre, aunque no hubiera sesión) |
 
 Cómo funciona:
 
 1. Al iniciar sesión se crea una fila en `gestion.sesion_usuario` y se envía su `id` en una cookie **firmada**, `HttpOnly` y `SameSite=Strict` (con `Secure` en producción), con la vigencia máxima de 8 horas. La cookie **no lleva roles, vistas ni datos de la persona**.
-2. En cada petición `attachSession` lee la cookie con `readSessionId` (valida firma y formato) y consulta **en una sola consulta** si la sesión sigue abierta: no revocada, dentro de sus 8 horas y de los 30 minutos de inactividad, y con el usuario activo. De paso trae los roles activos del usuario (un rol desactivado no cuenta) y el servicio los convierte en vistas. Si la sesión ya no sirve, borra la cookie.
+2. En cada petición `attachSession` lee la cookie con `readSessionId` (valida firma y formato) y consulta **en una sola consulta** si la sesión sigue abierta: no revocada, dentro de sus 8 horas y de los 30 minutos de inactividad, y con el usuario activo. De paso trae los roles activos del usuario (un rol desactivado no cuenta) y su área (`gestion.usuario_interno.area_id`); el servicio convierte los roles en vistas. Si la sesión ya no sirve, borra la cookie.
 3. La actividad se renueva como mucho una vez por minuto (no se escribe en cada petición).
 4. El acceso se da **por vista**: `requireVista(VistaCodigo.CASOS)` responde `403` si el usuario no la tiene. Un usuario abre la unión de las vistas de sus roles (ver [Vistas por rol](#vistas-por-rol)).
 5. **Interruptor de apagado:** cerrar sesión revoca la fila; desactivar a un usuario hace que la base cierre todas sus sesiones (disparador); la cookie deja de servir aunque el navegador la conserve.
@@ -114,19 +114,20 @@ Cómo funciona:
 
 En el MVP los permisos son una **tabla fija en el código** (`src/constants/permisos-por-rol.ts`), sin permisos editables por persona: el rol define las vistas y, más adelante, las acciones. Los roles nunca viajan al navegador; solo las vistas que resultan. Los módulos se eliminaron: la base ya no tiene `gestion.modulo` ni `gestion.rol_modulo`.
 
-| Rol | Vistas |
-|---|---|
-| `ADMINISTRADOR` | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` |
-| `GESTOR` (revisa y deriva) | las cuatro |
-| `AREA_DENUNCIA_CORRUPCION` | las cuatro |
-| `AREA_QUEJA` | las cuatro |
-| `AREA_RECLAMO` | las cuatro |
+| Rol | Área | Vistas |
+|---|---|---|
+| `ADMINISTRADOR` | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` |
+| `GESTOR` (revisa y deriva) | sin área | las cuatro |
+| `OTRANS` (denuncias por corrupción) | área `OTRANS` | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES`) |
+| `ESTABLECIMIENTO` | el área de su establecimiento (`EESS-<renipress>`) | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES`) |
+
+El rol `DIRIS` existe en la base pero está **desactivado**: solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista. Los roles `REVISOR`, `AREA_QUEJA`, `AREA_RECLAMO` y `AREA_DENUNCIA_CORRUPCION` ya no existen.
 
 - **Varios roles:** se unen sus vistas, sin repetir y en el orden del menú (`vistasDeRoles`).
-- **Revisor retirado:** el rol `REVISOR` sigue en el catálogo de la base pero desactivado; solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista.
+- **Área de la persona:** cada usuario interno tiene a lo sumo un área (`catalogo.area`; tipos `ESTABLECIMIENTO`, `OTRANS`, `DIRIS`, `INSTITUTO`, `ORGANISMO`). Un rol con tipo de área (`OTRANS`, `ESTABLECIMIENTO`) solo se asigna a quien pertenece a un área de ese tipo: lo hace cumplir un disparador de la base, no esta API.
 - **Sin ningún rol activo** (por ejemplo, un rol desactivado después): la sesión es válida y `GET /auth/me` devuelve `vistas: []`; cualquier ruta con `requireVista` responde `403`. No se rechaza la sesión porque la persona sí se autenticó; lo que no tiene es acceso.
 - **Qué ve cada rol dentro de las vistas** (categorías) lo decide la base (`gestion.rol_categoria`) y **qué puede hacer** (acciones) lo decide la misma tabla fija; ver [Incidencias](#incidencias-casos).
-- **La sesión de la petición sí lleva los roles** (`req.sesion.roles`), pero solo dentro del servidor: `GET /auth/me` responde nombre, correo y vistas, nunca los roles.
+- **La sesión de la petición sí lleva los roles** (`req.sesion.roles`), pero solo dentro del servidor: `GET /auth/me` responde nombre, correo, vistas y área, nunca los roles ni los ids del área.
 
 ## Incidencias (casos)
 
@@ -134,16 +135,16 @@ Cada caso se identifica por su **código legible** (`MINSA-AAAA-NNNNNN`, columna
 
 | Ruta | Qué hace |
 |---|---|
-| `GET /incidencias` | Lista paginada. Query: `pagina` (1 por defecto), `tamano` (20 por defecto, máximo 100), `estado`, `categoria` (o `sin-categoria`), `texto` (código o relato, búsqueda literal, máximo 100), `orden` (`fecha`, `codigo`, `categoria`, `estado`, `confianza`) y `direccion` (`asc` por defecto: lo más antiguo primero). Responde `{ casos, pagina, tamano, total }` con el resumen de cada caso |
-| `GET /incidencias/por-vencer` | La campana: `{ total, porVencer, vencidos, casos }`. Cuenta los casos abiertos cuyo plazo de atención vence dentro de `PLAZO_AVISO_HORAS` o ya venció, **y que a esa persona le toca atender** (los que cumplen alguna regla de acción de sus roles): el gestor cuenta lo clasificado que aún no revisó o derivó, y cada área lo derivado o en gestión que aún no resolvió. **El contador baja** cuando el gestor deriva (el caso pasa al área) y cuando el área resuelve. El administrador, que no actúa, cuenta todos los abiertos que ve. `casos` trae hasta 10, los más antiguos primero |
+| `GET /incidencias` | Lista con **paginación por cursor** (keyset), del caso más reciente al más antiguo (`fecha_creacion` y `id`, descendente). Query: `limite` (20 por defecto, máximo 100), `cursor` (opaco: el `siguiente` de la respuesta anterior; sin él, empieza por lo más reciente), `estado`, `categoria` (o `sin-categoria`) y `texto` (código o relato, búsqueda literal, máximo 100). Responde `{ items, siguiente, hayMas }`: `items` con el resumen de cada caso, `siguiente` el cursor de la página que sigue (`null` en la última) y `hayMas` si queda algo. **No hay total ni número de página** (con millones de casos un `COUNT(*)` y un `OFFSET` serían lentos) ni orden elegible. Un cursor que esta API no emitió responde `400`. Como el cursor es la posición del último caso entregado, un caso nuevo no mueve ni repite las páginas ya pedidas |
+| `GET /incidencias/por-vencer` | La campana: `{ total, porVencer, vencidos, casos }`. Cuenta los casos abiertos cuyo plazo de atención vence dentro de `PLAZO_AVISO_HORAS` o ya venció, **y que a esa persona le toca atender** (los que cumplen alguna regla de acción de sus roles): el gestor cuenta lo clasificado que aún no revisó o derivó, OTRANS la corrupción que le toca revisar o atender, y cada establecimiento lo derivado a su área o en gestión que aún no resolvió. **El contador baja** cuando el gestor deriva (el caso pasa al área) y cuando el área resuelve. El administrador, que no actúa, cuenta todos los abiertos que ve. `casos` trae hasta 10, los más antiguos primero |
 | `GET /incidencias/:codigo` | Detalle: el resumen más `resolucion`, `descripcion`, `reclamante`, `evidencias` e `historial` |
 | `POST /incidencias/:codigo/confirmar` | Confirma la categoría de la IA (una sola vez) |
 | `POST /incidencias/:codigo/corregir` | Cuerpo `{ "categoria": "denuncia-corrupcion" \| "queja" \| "reclamo" \| "otro" }`. Corrige la categoría (una sola vez, y nunca después de confirmar) |
-| `POST /incidencias/:codigo/derivar` | Pasa a `derivado`; el área sigue a la categoría |
+| `POST /incidencias/:codigo/derivar` | Cuerpo opcional `{ "areaDestino": "EESS-6206" }` (código del área). Pasa a `derivado` y fija el área de destino en la misma sentencia. Sin `areaDestino`, va al área del **establecimiento de origen** del caso. Debe ser un área **activa de tipo `ESTABLECIMIENTO`**; si no hay origen ni `areaDestino`, o el área no sirve, responde `422` con un mensaje claro y el caso no cambia |
 | `POST /incidencias/:codigo/tomar` | Pasa a `en-gestion` |
 | `POST /incidencias/:codigo/resolver` | Cuerpo `{ "resolucion": "texto" }` (obligatorio, máximo 4000). La base registra la resolución una sola vez y pone `resuelto` |
 
-Las acciones responden `200 { mensaje, caso }`. Si la corrección saca el caso de la vista de quien la hizo (por ejemplo, el gestor lo corrige a corrupción), `caso` es `null` y el `mensaje` lo avisa; a partir de ahí el caso responde `404` para esa persona.
+Las acciones responden `200 { mensaje, caso }`. Si la corrección saca el caso de la vista de quien la hizo (por ejemplo, el gestor lo corrige a corrupción, que la base asigna sola a OTRANS), `caso` es `null` y el `mensaje` lo avisa; a partir de ahí el caso responde `404` para esa persona.
 
 **Resumen de un caso** (compatible con el tipo `Caso` del frontend donde la base tiene el dato):
 
@@ -153,7 +154,8 @@ Las acciones responden `200 { mensaje, caso }`. Si la corrección saca el caso d
 | `categoria`, `categoriaIa` | `denuncia-corrupcion`, `queja`, `reclamo`, `otro` o `null` (aún sin clasificar) |
 | `confianzaIa` | 0 a 100, o `null` |
 | `estado` | `registrado`, `clasificado`, `derivado`, `en-gestion`, `resuelto`, `archivado` |
-| `area` | Nombre del área de la categoría; `null` para `otro` y sin categoría |
+| `area` | Área de destino del caso, `{ codigo, nombre }` (un establecimiento, u `OTRANS` para la corrupción); `null` mientras no se ha derivado ni asignado. Reemplaza al nombre de texto de la versión anterior |
+| `establecimiento` | Establecimiento de origen (donde ocurrió), `{ codigoRenipress, nombre }`; `null` si el caso no lo trae. Nunca ids |
 | `responsable` | Nombre de quien derivó, o si no de quien corrigió, o si no de quien confirmó; `"Sistema"` si lo hizo el sistema; `null` si nadie |
 | `revisadoPorHumano`, `corregida` | Si una persona confirmó o corrigió; si la corrigió |
 | `horasDesdeLlegada`, `horasDesdeResolucion` | Horas completas, con la hora de la base |
@@ -168,19 +170,18 @@ El detalle agrega:
 - `evidencias`: `{ nombre, tipo, fecha, sensible, verificada }`. **Solo metadatos**: nunca la ruta, el id de Meta ni el contenido. `sensible` es verdadero en las de corrupción; `verificada` cuando ya hay huella SHA-256 del archivo.
 - `historial`: `{ titulo, detalle, hora, fecha }` por cada hito (recibido, clasificado por la IA, categoría confirmada o corregida, derivado, tomado, resuelto, archivado), con el **nombre** de quien actuó. Nunca copia el relato, el documento ni el correo.
 
-**Qué ve cada rol.** Un caso es visible si su categoría está entre las de algún rol **activo** de la persona (`gestion.rol_categoria`) o, si aún no tiene categoría, si algún rol los ve (administrador y gestor). Con varios roles se une. Un caso que la persona no ve responde `404`, igual que uno que no existe.
+**Qué ve cada rol.** Un caso es visible si su categoría está entre las de algún rol **activo** de la persona (`gestion.rol_categoria`) o, si aún no tiene categoría, si algún rol los ve (administrador y gestor) **y**, para los roles ligados a un área (`OTRANS`, `ESTABLECIMIENTO`; `gestion.rol.tipo_area_id`), el caso está destinado a **su** área (`area_destino_id` igual a la suya). El administrador y el gestor no tienen área y no se filtran por ella. Con varios roles se une. Un caso que la persona no ve (de otra área, aún sin derivar para un establecimiento, o de una categoría que su rol no ve) responde `404`, igual que uno que no existe. Las denuncias por corrupción **nunca** las ve un establecimiento: además de `rol_categoria` se comprueba `catalogo.categoria_incidencia.es_sensible` en la misma consulta, que alimenta también la lista, el detalle, las acciones y los conteos de la campana.
 
 **Qué puede hacer cada rol** (`src/constants/permisos-por-rol.ts`; con varios roles se unen las acciones, y cada regla vale solo para su categoría):
 
 | Rol | Ve | Acciones |
 |---|---|---|
 | `ADMINISTRADOR` | Todo | Ninguna: solo mira |
-| `GESTOR` | Queja, reclamo, otro y sin categoría | `confirmar` o `corregir` en `clasificado` sin revisar; `derivar` en `clasificado` ya revisado y con área (no `otro`) |
-| `AREA_DENUNCIA_CORRUPCION` | Solo corrupción | `confirmar` o `corregir` sin revisar; `tomar` directo desde `clasificado` ya revisado (sin derivar); `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
-| `AREA_QUEJA` | Solo quejas | `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
-| `AREA_RECLAMO` | Solo reclamos | `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
+| `GESTOR` | Queja, reclamo, otro y sin categoría, de cualquier establecimiento (no corrupción) | `confirmar` o `corregir` en `clasificado` sin revisar; `derivar` en `clasificado` ya revisado, solo queja o reclamo |
+| `OTRANS` | Solo corrupción destinada a `OTRANS` | `confirmar` o `corregir` sin revisar; `tomar` directo desde `clasificado` ya revisado (sin derivar); `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
+| `ESTABLECIMIENTO` | Quejas y reclamos derivados al área de **su** establecimiento | `tomar` en `derivado`; `resolver` en `derivado` o `en-gestion` |
 
-**Errores.** `401` sin sesión; `403` si la persona no tiene la vista o la acción no le corresponde en el estado actual del caso (el cálculo es el mismo de `acciones`); `404` si el código no existe o la persona no lo ve; `400` si la consulta o el cuerpo no son válidos; `422` si la categoría nueva es igual a la actual; `409` si la base rechaza el cambio por una regla (ya se corrigió una vez, ya se confirmó, transición no permitida), por ejemplo cuando dos personas actúan a la vez: el servicio bloquea el caso (`FOR UPDATE`) y la base sigue siendo la última barrera. El mensaje de la base nunca se repite tal cual.
+**Errores.** `401` sin sesión; `403` si la persona no tiene la vista o la acción no le corresponde en el estado actual del caso (el cálculo es el mismo de `acciones`); `404` si el código no existe o la persona no lo ve; `400` si la consulta o el cuerpo no son válidos; `422` si la categoría nueva es igual a la actual o si el destino de la derivación no sirve (sin establecimiento de origen y sin `areaDestino`, área inexistente, desactivada o que no es de un establecimiento; también si la base rechaza el área, p. ej. una corrupción hacia un establecimiento); `409` si la base rechaza el cambio por una regla (ya se corrigió una vez, ya se confirmó, transición no permitida, establecimiento de origen inmutable, motivo de archivo), por ejemplo cuando dos personas actúan a la vez: el servicio bloquea el caso (`FOR UPDATE`) y la base sigue siendo la última barrera. El mensaje de la base nunca se repite tal cual (`src/database/reglas-de-la-base.ts` lo traduce). Las marcas `derivado_*`, `tomado_*` y `archivado_en` las llena la base: esta API no las envía.
 
 **Cada acción firma a quien la hace.** Corre en una transacción con el actor `usuario:{correo}` y la base llena quién y cuándo (`categoria_corregida_por`, `categoria_confirmada_por`, `resuelto_por`, historial). Confirmar y corregir copian el caso a `ia.entrenamiento_categoria`. El archivado por vencimiento **no** lo dispara este servicio todavía.
 
@@ -196,7 +197,7 @@ docker compose run --rm \
   minsa-incidencias-backend node dist/scripts/crear-admin.js
 ```
 
-Guarda la huella Argon2id (nunca la clave), asigna el rol `ADMINISTRADOR` y firma con el actor `sistema:crear-admin`. Rechaza un correo repetido y una clave de menos de 12 caracteres. La clave queda en el historial de tu terminal: úsalo solo para el primer acceso y cámbiala cuando exista esa pantalla.
+Opcionalmente `-e ADMIN_AREA="OTRANS"` (o `EESS-6206`) le da un área por su código (debe existir y estar activa; la compatibilidad rol-área la verifica el disparador de la base). Guarda la huella Argon2id (nunca la clave), asigna el rol `ADMINISTRADOR` y firma con el actor `sistema:crear-admin`. Rechaza un correo repetido y una clave de menos de 12 caracteres. La clave queda en el historial de tu terminal: úsalo solo para el primer acceso y cámbiala cuando exista esa pantalla.
 
 ## Conexión con el frontend (CORS)
 
@@ -269,7 +270,7 @@ src/
   config/              env.ts (variables validadas) y logger.ts
   constants/           Mensajes de error, límites (sin números mágicos) y permisos-por-rol (vistas de cada rol)
   database/            Puerto Database, adaptador PostgreSQL (pg) y actores de auditoría
-  enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo y los de incidencias (acción, categoría, estado, plazo, orden)
+  enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo y los de incidencias (acción, categoría, estado, plazo, tipo de área)
   errors/app-error.ts  AppError (estado HTTP, código interno y mensaje)
   middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
   repositories/        Acceso a la base: usuario, sesion e incidencia (consultas parametrizadas)
@@ -308,7 +309,7 @@ Las pruebas contra PostgreSQL real (`*.integration.test.ts`: base de datos y aut
 TEST_DATABASE_URL=postgresql://USUARIO:CLAVE@HOST:5432/NOMBRE_DE_LA_BASE npm test
 ```
 
-Por seguridad, esas pruebas **se niegan a correr** si el nombre de la base no termina en `_desechable`, `_dev` o `_local` (el mensaje de error nunca incluye la clave de la URL).
+Las pruebas crean sus propios establecimientos y áreas (código RENIPRESS al azar) dentro de la transacción, así que no necesitan el padrón cargado. Por seguridad, esas pruebas **se niegan a correr** si el nombre de la base no termina en `_desechable`, `_dev` o `_local` (el mensaje de error nunca incluye la clave de la URL).
 
 Las pruebas de incidencias **crean sus propios casos y usuarios sintéticos** dentro de la transacción (con las mismas operaciones que usa la aplicación, para que la base aplique sus reglas), así que no dependen de que la base tenga datos ni se ven afectadas por los que ya tenga. Solo exigen la base armada con las migraciones del repo del bot.
 

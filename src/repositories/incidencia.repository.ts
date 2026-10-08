@@ -2,20 +2,20 @@ import type { Database, DbExecutor } from "@/database/database.js";
 import {
   ACTOR_PREFIJO_SISTEMA,
   ACTOR_PREFIJO_USUARIO,
-  CATEGORIAS_CON_AREA,
   ESTADOS_ABIERTOS,
-  ORDEN_SQL,
-  ROL_AREA_PATRON_SQL,
 } from "@/constants/incidencias.js";
 import type { ReglaDeAccion } from "@/constants/permisos-por-rol.js";
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
-import { DireccionOrden, OrdenIncidencia } from "@/enums/orden-incidencia.enum.js";
+import { TipoArea } from "@/enums/tipo-area.enum.js";
+import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { FilaHistorial } from "@/utils/historial-incidencia.js";
 
 export interface VisibilidadCasos {
   roles: readonly string[];
   verSinCategoria: boolean;
+  /** Área de la persona: los roles ligados a un área solo ven los casos destinados a ella. `null` si no tiene. */
+  areaId: number | null;
 }
 
 export interface FiltrosDeListado {
@@ -23,8 +23,6 @@ export interface FiltrosDeListado {
   categoria?: CategoriaIncidencia | null;
   sinCategoria?: boolean;
   texto?: string;
-  orden: OrdenIncidencia;
-  direccion: DireccionOrden;
 }
 
 export interface FilaCaso {
@@ -39,7 +37,11 @@ export interface FilaCaso {
   ahora: Date;
   revisada: boolean;
   corregida: boolean;
-  area: string | null;
+  areaCodigo: string | null;
+  areaNombre: string | null;
+  areaOrigenId: number | null;
+  establecimientoCodigo: string | null;
+  establecimientoNombre: string | null;
   responsable: string | null;
   resolucion: string | null;
   descripcion: string;
@@ -80,6 +82,9 @@ class Parametros {
   }
 }
 
+/** Los roles de estos tipos de área nunca ven un caso de categoría sensible, aunque la tabla de categorías lo permitiera. */
+const TIPOS_DE_AREA_SIN_SENSIBLES: readonly TipoArea[] = [TipoArea.ESTABLECIMIENTO, TipoArea.DIRIS];
+
 const ESTADOS_CONOCIDOS: readonly EstadoIncidencia[] = Object.values(EstadoIncidencia);
 
 const escaparComodines = (texto: string): string => texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
@@ -91,16 +96,25 @@ const DESDE_BASICO = `
 
 /**
  * Solo ve un caso quien tiene un rol activo que lo permita: la categoría del caso debe estar entre las del rol
- * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos.
+ * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos. Un rol ligado a un área (OTRANS,
+ * establecimiento) además exige que el caso esté destinado al área de la persona; los roles sin área (administrador,
+ * gestor) no filtran por área. Los roles de establecimiento o DIRIS nunca ven una categoría sensible: se vuelve a
+ * comprobar aquí con `es_sensible`, aparte de lo que diga `rol_categoria`.
  */
 function visibilidad(p: Parametros, visible: VisibilidadCasos): string {
   const roles = p.agregar([...visible.roles]);
   const sinCategoria = p.agregar(visible.verSinCategoria);
+  const area = p.agregar(visible.areaId);
+  const tiposSinSensibles = p.agregar([...TIPOS_DE_AREA_SIN_SENSIBLES]);
   return `(
     (i.categoria_id IS NOT NULL AND EXISTS (
        SELECT 1 FROM gestion.rol_categoria rc
          JOIN gestion.rol r ON r.id = rc.rol_id AND r.activo
-        WHERE r.codigo = ANY(${roles}::text[]) AND rc.categoria_incidencia_id = i.categoria_id))
+         JOIN catalogo.categoria_incidencia k ON k.id = rc.categoria_incidencia_id
+         LEFT JOIN catalogo.tipo_area ta ON ta.id = r.tipo_area_id
+        WHERE r.codigo = ANY(${roles}::text[]) AND rc.categoria_incidencia_id = i.categoria_id
+          AND (r.tipo_area_id IS NULL OR i.area_destino_id = ${area}::int)
+          AND NOT (k.es_sensible AND COALESCE(ta.codigo = ANY(${tiposSinSensibles}::text[]), false))))
     OR (i.categoria_id IS NULL AND ${sinCategoria}::boolean)
   )`;
 }
@@ -124,7 +138,6 @@ function condicionesDeFiltros(p: Parametros, filtros: Pick<FiltrosDeListado, "es
 /** Columnas y uniones de un caso. El responsable es quien derivó, o si no quien corrigió, o si no quien confirmó. */
 function consultaDeCaso(p: Parametros): string {
   const derivado = p.agregar(EstadoIncidencia.DERIVADO);
-  const patronDeArea = p.agregar(ROL_AREA_PATRON_SQL);
   const prefijoUsuario = p.agregar(ACTOR_PREFIJO_USUARIO);
   const prefijoSistema = p.agregar(ACTOR_PREFIJO_SISTEMA);
   return `
@@ -139,11 +152,11 @@ function consultaDeCaso(p: Parametros): string {
            now() AS ahora,
            (i.categoria_corregida_en IS NOT NULL OR i.categoria_confirmada_en IS NOT NULL) AS revisada,
            (i.categoria_corregida_en IS NOT NULL) AS corregida,
-           (SELECT r.nombre
-              FROM gestion.rol_categoria rc
-              JOIN gestion.rol r ON r.id = rc.rol_id AND r.activo
-             WHERE rc.categoria_incidencia_id = i.categoria_id AND r.codigo LIKE ${patronDeArea}
-             ORDER BY r.id LIMIT 1) AS area,
+           ad.codigo AS "areaCodigo",
+           ad.nombre AS "areaNombre",
+           es.area_id AS "areaOrigenId",
+           es.codigo_renipress AS "establecimientoCodigo",
+           es.nombre AS "establecimientoNombre",
            CASE WHEN ui.id IS NOT NULL THEN ui.nombre_completo
                 WHEN starts_with(resp.actor, ${prefijoSistema}) THEN 'Sistema'
            END AS responsable,
@@ -159,6 +172,8 @@ function consultaDeCaso(p: Parametros): string {
       JOIN catalogo.canal_origen co ON co.id = i.canal_origen_id
       LEFT JOIN catalogo.categoria_incidencia c ON c.id = i.categoria_id
       LEFT JOIN catalogo.categoria_incidencia cia ON cia.id = i.categoria_ia_id
+      LEFT JOIN catalogo.area ad ON ad.id = i.area_destino_id
+      LEFT JOIN catalogo.establecimiento_salud es ON es.id = i.establecimiento_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(
                  (SELECT a.actor
@@ -176,34 +191,30 @@ function consultaDeCaso(p: Parametros): string {
 export class IncidenciaRepository {
   constructor(private readonly database: Database) {}
 
+  /**
+   * Paginación por cursor: del más reciente al más antiguo (fecha de creación y id), desde justo después de la
+   * posición dada. Quien llama pide un caso más que el límite para saber si quedan más; no hay conteo total.
+   */
   async listar(
     visible: VisibilidadCasos,
     filtros: FiltrosDeListado,
-    pagina: number,
-    tamano: number,
+    limite: number,
+    despuesDe: PosicionDeListado | null,
     ejecutor: DbExecutor = this.database,
-  ): Promise<{ filas: FilaCaso[]; total: number }> {
-    const conteo = new Parametros();
-    const condicionesDelConteo = [...condicionesBase(conteo, visible), ...condicionesDeFiltros(conteo, filtros)];
-    const [resumen] = await ejecutor.query<{ total: number }>(
-      `SELECT count(*)::int AS total ${DESDE_BASICO} WHERE ${condicionesDelConteo.join(" AND ")}`,
-      conteo.lista,
-    );
-
+  ): Promise<FilaCaso[]> {
     const p = new Parametros();
     const base = consultaDeCaso(p);
     const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, filtros)];
-    const sentido = filtros.direccion === DireccionOrden.DESCENDENTE ? "DESC" : "ASC";
-    const limite = p.agregar(tamano);
-    const desplazamiento = p.agregar((pagina - 1) * tamano);
-    const filas = await ejecutor.query<FilaCaso>(
+    if (despuesDe) {
+      condiciones.push(`(i.fecha_creacion, i.id) < (${p.agregar(despuesDe.fechaCreacion)}::timestamptz, ${p.agregar(despuesDe.id)}::uuid)`);
+    }
+    return ejecutor.query<FilaCaso>(
       `${base}
        WHERE ${condiciones.join(" AND ")}
-       ORDER BY ${ORDEN_SQL[filtros.orden]} ${sentido} NULLS LAST, i.fecha_creacion ASC, i.codigo ASC
-       LIMIT ${limite} OFFSET ${desplazamiento}`,
+       ORDER BY i.fecha_creacion DESC, i.id DESC
+       LIMIT ${p.agregar(limite)}`,
       p.lista,
     );
-    return { filas, total: resumen?.total ?? 0 };
   }
 
   async buscarPorCodigo(
@@ -327,6 +338,35 @@ export class IncidenciaRepository {
     );
   }
 
+  /**
+   * El área a la que se puede derivar: activa y de un establecimiento. Por su código (la que eligió la persona) o por
+   * su id (la del establecimiento de origen). `null` si no existe o no cumple.
+   */
+  async areaReceptora(criterio: { codigo: string } | { id: number }, ejecutor: DbExecutor = this.database): Promise<number | null> {
+    const p = new Parametros();
+    const igual = "codigo" in criterio ? `a.codigo = ${p.agregar(criterio.codigo)}` : `a.id = ${p.agregar(criterio.id)}`;
+    const tipo = p.agregar(TipoArea.ESTABLECIMIENTO);
+    const filas = await ejecutor.query<{ id: number }>(
+      `SELECT a.id
+         FROM catalogo.area a
+         JOIN catalogo.tipo_area ta ON ta.id = a.tipo_area_id AND ta.activo
+        WHERE ${igual} AND a.activo AND ta.codigo = ${tipo}`,
+      p.lista,
+    );
+    return filas[0]?.id ?? null;
+  }
+
+  /** Cambia el estado y fija el área de destino en una sola sentencia: la base exige las dos cosas a la vez. */
+  async derivar(tx: DbExecutor, incidenciaId: string, areaId: number): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $3),
+              area_destino_id = $2
+        WHERE id = $1`,
+      [incidenciaId, areaId, EstadoIncidencia.DERIVADO],
+    );
+  }
+
   async cambiarEstado(tx: DbExecutor, incidenciaId: string, estado: EstadoIncidencia): Promise<void> {
     await tx.query(
       `UPDATE chatbot.incidencia_paciente
@@ -343,7 +383,7 @@ export class IncidenciaRepository {
 
 /**
  * Deja solo los casos que a la persona le toca atender: los que cumplen alguna regla de acción de sus roles
- * (estado, categoría, si ya se revisó y si tiene área). Con `null` no filtra: cuenta todos los abiertos que ve.
+ * (estado, categoría y si ya se revisó). Con `null` no filtra: cuenta todos los abiertos que ve.
  */
 function condicionDePendientes(p: Parametros, reglas: ReglasPendientes): string[] {
   if (reglas === null) return [];
@@ -354,7 +394,6 @@ function condicionDePendientes(p: Parametros, reglas: ReglasPendientes): string[
     if (regla.revisada !== undefined) {
       partes.push(`(i.categoria_corregida_en IS NOT NULL OR i.categoria_confirmada_en IS NOT NULL) = ${p.agregar(regla.revisada)}::boolean`);
     }
-    if (regla.requiereArea) partes.push(`c.codigo = ANY(${p.agregar([...CATEGORIAS_CON_AREA])}::text[])`);
     return `(${partes.join(" AND ")})`;
   });
   return [`(${alternativas.join(" OR ")})`];

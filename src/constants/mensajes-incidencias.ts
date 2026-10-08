@@ -19,6 +19,8 @@ export const MENSAJE_ACCION_NO_PERMITIDA: Record<AccionIncidencia, string> = {
 export const MENSAJE_CASO_NO_ENCONTRADO = "El caso solicitado no existe.";
 export const MENSAJE_MISMA_CATEGORIA = "La nueva categoría es igual a la actual.";
 export const MENSAJE_FALTA_CATEGORIA = "Indica la categoría nueva.";
+export const MENSAJE_SIN_DESTINO_DE_DERIVACION = "El caso no tiene establecimiento de origen: indica el área de destino para derivarlo.";
+export const MENSAJE_AREA_DESTINO_INVALIDA = "El área de destino no existe, está desactivada o no es de un establecimiento de salud.";
 export const MENSAJE_FALTA_RESOLUCION = "Escribe el texto de la resolución.";
 
 export const mensajeCategoriaCorregidaFueraDeVista = (etiqueta: string): string =>

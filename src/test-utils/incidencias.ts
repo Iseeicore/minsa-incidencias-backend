@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
+import type { EstablecimientoDePrueba } from "@/test-utils/establecimientos.js";
 import type { RollbackContext } from "@/test-utils/rollback-database.js";
 
 export interface OpcionesCaso {
@@ -8,6 +9,10 @@ export interface OpcionesCaso {
   revision?: "confirmada" | "corregida";
   corregidaA?: CategoriaIncidencia;
   actorRevision?: string;
+  /** Establecimiento de origen del caso (donde ocurrió); sin él, el caso no tiene origen. */
+  establecimiento?: EstablecimientoDePrueba;
+  /** Área a la que se deriva (o en la que se toma) el caso; por defecto, la del establecimiento de origen. */
+  destino?: EstablecimientoDePrueba;
   estado?: "DERIVADO" | "EN_GESTION" | "RESUELTO" | "ARCHIVADO";
   actorDerivacion?: string;
   anonimo?: boolean;
@@ -56,8 +61,8 @@ export async function sembrarCaso(
     const [usuario] = await tx.query<{ id: string }>("INSERT INTO chatbot.usuario (wa_id) VALUES ($1) RETURNING id", [waId]);
     const [fila] = await tx.query<{ id: string; codigo: string }>(
       `INSERT INTO chatbot.incidencia_paciente
-         (canal_origen_id, usuario_id, wa_id, es_anonimo, dni_reclamante, nombre_reclamante, descripcion, trace_id)
-       VALUES (1, $1, $2, $3, $4, $5, $6, $7)
+         (canal_origen_id, usuario_id, wa_id, es_anonimo, dni_reclamante, nombre_reclamante, descripcion, trace_id, establecimiento_id)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, codigo`,
       [
         (usuario as { id: string }).id,
@@ -67,6 +72,7 @@ export async function sembrarCaso(
         anonimo ? null : (opciones.nombre ?? "Luis Alberto Quispe"),
         descripcion,
         traceId,
+        opciones.establecimiento?.establecimientoId ?? null,
       ],
     );
     return fila as { id: string; codigo: string };
@@ -104,15 +110,33 @@ export async function sembrarCaso(
     );
   }
 
+  // Una denuncia por corrupción ya trae su área (OTRANS) puesta por la base: el destino solo completa lo que falta.
+  const areaDestinoId = (opciones.destino ?? opciones.establecimiento)?.areaId ?? null;
   if (opciones.estado === "DERIVADO") {
     await actuar(
       opciones.actorDerivacion ?? ACTOR_OPERADOR,
-      "UPDATE chatbot.incidencia_paciente SET estado_incidencia_id = 6 WHERE id = $1",
-      [creado.id],
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = 6, area_destino_id = COALESCE(area_destino_id, $2)
+        WHERE id = $1`,
+      [creado.id, areaDestinoId],
     );
   } else if (opciones.estado === "EN_GESTION") {
-    await actuar(ACTOR_OPERADOR, "UPDATE chatbot.incidencia_paciente SET estado_incidencia_id = 3 WHERE id = $1", [creado.id]);
+    await actuar(
+      ACTOR_OPERADOR,
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = 3, area_destino_id = COALESCE(area_destino_id, $2)
+        WHERE id = $1`,
+      [creado.id, areaDestinoId],
+    );
   } else if (opciones.estado === "RESUELTO" || opciones.estado === "ARCHIVADO") {
+    // Un caso resuelto pasó antes por su área: se le pone el destino si tiene categoría (OTRANS ya lo trae por la base).
+    if (categoria && areaDestinoId !== null) {
+      await actuar(
+        ACTOR_OPERADOR,
+        "UPDATE chatbot.incidencia_paciente SET area_destino_id = COALESCE(area_destino_id, $2) WHERE id = $1",
+        [creado.id, areaDestinoId],
+      );
+    }
     await actuar(ACTOR_OPERADOR, "UPDATE chatbot.incidencia_paciente SET resolucion = 'Resuelto en la prueba.' WHERE id = $1", [
       creado.id,
     ]);

@@ -14,6 +14,7 @@ import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { AuthService } from "@/services/auth.service.js";
 import { crearAdministrador } from "@/services/administrador.service.js";
 import { testEnv, TEST_COOKIE_SECRET } from "@/test-utils/env.js";
+import { crearEstablecimientoDePrueba } from "@/test-utils/establecimientos.js";
 import { withRollbackDatabase, type RollbackContext } from "@/test-utils/rollback-database.js";
 import { ArgonPasswordHasher } from "@/utils/password-hasher.js";
 
@@ -28,11 +29,14 @@ async function crearUsuario(
   correo: string,
   roles: string[],
   nombre = "Persona de Prueba",
+  areaCodigo: string | null = null,
 ): Promise<void> {
   await database.transaction("usuario:admin-prueba", async (tx) => {
     const filas = await tx.query<{ id: string }>(
-      `INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash) VALUES ($1, $2, $3) RETURNING id`,
-      [nombre, correo, huella],
+      `INSERT INTO gestion.usuario_interno (nombre_completo, correo, password_hash, area_id)
+       VALUES ($1, $2, $3, (SELECT id FROM catalogo.area WHERE codigo = $4))
+       RETURNING id`,
+      [nombre, correo, huella, areaCodigo],
     );
     for (const rol of roles) {
       await tx.query(
@@ -53,7 +57,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     huella = await hasher.hash(CLAVE);
   });
 
-  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo y vistas, sin id, roles ni módulos", async () => {
+  it("login crea una sesión con cookie firmada y /auth/me devuelve nombre, correo, vistas y área, sin id, roles ni módulos", async () => {
     await usar(async (contexto) => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.ADMINISTRADOR], "Ana Prueba");
       const agente = request.agent(construir(contexto));
@@ -68,27 +72,72 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
 
       const me = await agente.get("/auth/me");
       expect(me.status).toBe(200);
-      expect(Object.keys(me.body).sort()).toEqual(["correo", "nombreCompleto", "vistas"]);
+      expect(Object.keys(me.body).sort()).toEqual(["area", "correo", "nombreCompleto", "vistas"]);
+      expect(me.body.area).toBeNull();
       expect(me.body.nombreCompleto).toBe("Ana Prueba");
       expect(me.body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
     });
   });
 
-  it.each(Object.keys(PERMISOS_POR_ROL))("el rol %s abre las cuatro vistas, consultado en la base", async (rol) => {
+  it.each(Object.keys(PERMISOS_POR_ROL))("el rol %s abre las vistas de la tabla de permisos, consultado en la base", async (rol) => {
     await usar(async (contexto) => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [rol]);
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.vistas).toEqual(Object.values(VistaCodigo));
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(PERMISOS_POR_ROL[rol as keyof typeof PERMISOS_POR_ROL].vistas);
+    });
+  });
+
+  it("OTRANS y establecimiento no ven Derivaciones; el gestor y el administrador sí", async () => {
+    await usar(async (contexto) => {
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      await crearUsuario(contexto, "otrans@minsa.gob.pe", [RolCodigo.OTRANS], "OTRANS", "OTRANS");
+      await crearUsuario(contexto, "eess@minsa.gob.pe", [RolCodigo.ESTABLECIMIENTO], "Establecimiento", eess.areaCodigo);
+      await crearUsuario(contexto, "gestor@minsa.gob.pe", [RolCodigo.GESTOR]);
+      const app = construir(contexto);
+      const vistasDe = async (correo: string) => {
+        const agente = request.agent(app);
+        await agente.post("/auth/login").send({ correo, password: CLAVE });
+        return (await agente.get("/auth/me")).body.vistas as string[];
+      };
+      expect(await vistasDe("otrans@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
+      expect(await vistasDe("eess@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
+      expect(await vistasDe("gestor@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+    });
+  });
+
+  it("/auth/me devuelve el área de la persona (código, nombre y tipo), nunca su id", async () => {
+    await usar(async (contexto) => {
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      await crearUsuario(contexto, "eess@minsa.gob.pe", [RolCodigo.ESTABLECIMIENTO], "Establecimiento", eess.areaCodigo);
+      await crearUsuario(contexto, "otrans@minsa.gob.pe", [RolCodigo.OTRANS], "OTRANS", "OTRANS");
+      const app = construir(contexto);
+      const meDe = async (correo: string) => {
+        const agente = request.agent(app);
+        await agente.post("/auth/login").send({ correo, password: CLAVE });
+        return (await agente.get("/auth/me")).body;
+      };
+      const eessMe = await meDe("eess@minsa.gob.pe");
+      expect(eessMe.area).toEqual({ codigo: eess.areaCodigo, nombre: eess.areaNombre, tipo: "ESTABLECIMIENTO" });
+      expect((await meDe("otrans@minsa.gob.pe")).area).toEqual({ codigo: "OTRANS", nombre: "OTRANS", tipo: "OTRANS" });
+      expect(Object.keys(eessMe).sort()).toEqual(["area", "correo", "nombreCompleto", "vistas"]);
+      expect(eessMe.area).not.toHaveProperty("id");
     });
   });
 
   it("varios roles dan la unión de sus vistas sin repetir", async () => {
     await usar(async (contexto) => {
-      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.AREA_QUEJA]);
+      await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.OTRANS]);
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.vistas).toEqual(Object.values(VistaCodigo));
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+    });
+  });
+
+  it("la base rechaza un rol cuyo tipo de área no coincide con el área de la persona", async () => {
+    await usar(async (contexto) => {
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      await expect(crearUsuario(contexto, "x@minsa.gob.pe", [RolCodigo.OTRANS], "X", eess.areaCodigo)).rejects.toThrow(/tipo de area del rol/);
     });
   });
 
@@ -118,9 +167,9 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     });
   });
 
-  it("el revisor retirado no se puede asignar: la base rechaza darle un rol desactivado a una persona", async () => {
+  it("DIRIS está desactivado: la base rechaza darle ese rol a una persona", async () => {
     await usar(async (contexto) => {
-      await expect(crearUsuario(contexto, "rev@minsa.gob.pe", [RolCodigo.REVISOR])).rejects.toThrow();
+      await expect(crearUsuario(contexto, "diris@minsa.gob.pe", [RolCodigo.DIRIS])).rejects.toThrow(/desactivado/);
     });
   });
 
@@ -308,6 +357,26 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       await expect(
         crearAdministrador(contexto.database, hasher, { nombreCompleto: "Otro", correo: "admin@minsa.gob.pe", password: CLAVE }),
       ).rejects.toMatchObject({ statusCode: 409, errorCode: "CONFLICT" });
+    });
+  });
+
+  it("crearAdministrador acepta el código de un área y la guarda; con un área que no existe responde 422", async () => {
+    await usar(async (contexto) => {
+      const eess = await crearEstablecimientoDePrueba(contexto);
+      await crearAdministrador(contexto.database, hasher, {
+        nombreCompleto: "Admin de Área",
+        correo: "admin-area@minsa.gob.pe",
+        password: CLAVE,
+        areaCodigo: eess.areaCodigo,
+      });
+      const [fila] = await contexto.database.query<{ area: string }>(
+        "SELECT a.codigo AS area FROM gestion.usuario_interno u JOIN catalogo.area a ON a.id = u.area_id WHERE u.correo = 'admin-area@minsa.gob.pe'",
+      );
+      expect(fila?.area).toBe(eess.areaCodigo);
+
+      await expect(
+        crearAdministrador(contexto.database, hasher, { nombreCompleto: "X", correo: "x@minsa.gob.pe", password: CLAVE, areaCodigo: "NO-EXISTE" }),
+      ).rejects.toMatchObject({ statusCode: 422, errorCode: "UNPROCESSABLE" });
     });
   });
 

@@ -1,5 +1,5 @@
 import { PERMISOS_POR_ROL, type PermisosDelRol, type ReglaDeAccion } from "@/constants/permisos-por-rol.js";
-import { ACCIONES_EN_ORDEN, CATEGORIAS_CON_AREA } from "@/constants/incidencias.js";
+import { ACCIONES_EN_ORDEN } from "@/constants/incidencias.js";
 import type { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import type { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
@@ -16,13 +16,12 @@ function cumple(regla: ReglaDeAccion, caso: CasoParaAcciones): boolean {
   if (!regla.estados.includes(caso.estado)) return false;
   if (regla.categorias && (caso.categoria === null || !regla.categorias.includes(caso.categoria))) return false;
   if (regla.revisada !== undefined && regla.revisada !== caso.revisada) return false;
-  if (regla.requiereArea && (caso.categoria === null || !CATEGORIAS_CON_AREA.includes(caso.categoria))) return false;
   return true;
 }
 
 /**
  * Une las acciones que dan todos los roles dados sobre este caso, sin repetir y en el orden confirmar,
- * corregir, derivar, tomar y resolver. Ignora los roles que la tabla no conoce (el revisor retirado, uno
+ * corregir, derivar, tomar y resolver. Ignora los roles que la tabla no conoce (DIRIS desactivado, uno
  * inventado o nombres heredados del objeto).
  */
 export function accionesPermitidas(

@@ -2,11 +2,12 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import {
   CATEGORIAS_API,
+  AREA_CODIGO_LONGITUD_MAXIMA,
   CODIGO_INCIDENCIA_PATRON,
+  CURSOR_LONGITUD_MAXIMA,
   ESTADOS_API,
-  ORDEN_API,
-  PAGINA_TAMANO_MAXIMO,
-  PAGINA_TAMANO_POR_DEFECTO,
+  LISTADO_LIMITE_MAXIMO,
+  LISTADO_LIMITE_POR_DEFECTO,
   RESOLUCION_LONGITUD_MAXIMA,
   SIN_CATEGORIA_API,
   TEXTO_BUSQUEDA_MAXIMO,
@@ -14,16 +15,25 @@ import {
 import { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
 import { HttpStatus } from "@/enums/http-status.enum.js";
-import { DireccionOrden, OrdenIncidencia } from "@/enums/orden-incidencia.enum.js";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { AppError } from "@/errors/app-error.js";
 import { requireSession, requireVista } from "@/middleware/session.js";
 import type { SesionActual } from "@/services/auth.types.js";
+import { decodificarCursor } from "@/utils/cursor-listado.js";
 import type { DatosAccion, IncidenciaServicio } from "@/services/incidencia.types.js";
 
 const listadoSchema = z.object({
-  pagina: z.coerce.number().int().min(1).default(1),
-  tamano: z.coerce.number().int().min(1).max(PAGINA_TAMANO_MAXIMO).default(PAGINA_TAMANO_POR_DEFECTO),
+  limite: z.coerce.number().int().min(1).max(LISTADO_LIMITE_MAXIMO).default(LISTADO_LIMITE_POR_DEFECTO),
+  cursor: z
+    .string()
+    .max(CURSOR_LONGITUD_MAXIMA)
+    .optional()
+    .transform((cursor, contexto) => {
+      if (!cursor) return undefined;
+      const posicion = decodificarCursor(cursor);
+      if (!posicion) contexto.addIssue({ code: "custom", message: "El cursor no es válido." });
+      return posicion ?? undefined;
+    }),
   estado: z.enum(ESTADOS_API).optional(),
   categoria: z.enum([...CATEGORIAS_API, SIN_CATEGORIA_API]).optional(),
   texto: z
@@ -32,18 +42,18 @@ const listadoSchema = z.object({
     .max(TEXTO_BUSQUEDA_MAXIMO)
     .optional()
     .transform((texto) => (texto ? texto : undefined)),
-  orden: z.enum(ORDEN_API).default(OrdenIncidencia.FECHA),
-  direccion: z.enum([DireccionOrden.ASCENDENTE, DireccionOrden.DESCENDENTE]).default(DireccionOrden.ASCENDENTE),
 });
 
 const sinDatosSchema = z.object({});
 const correccionSchema = z.object({ categoria: z.enum(CATEGORIAS_API) });
 const resolucionSchema = z.object({ resolucion: z.string().trim().min(1).max(RESOLUCION_LONGITUD_MAXIMA) });
 
+const derivacionSchema = z.object({ areaDestino: z.string().trim().min(1).max(AREA_CODIGO_LONGITUD_MAXIMA).optional() });
+
 const SCHEMA_DE_ACCION: Record<AccionIncidencia, z.ZodType<DatosAccion>> = {
   [AccionIncidencia.CONFIRMAR]: sinDatosSchema,
   [AccionIncidencia.CORREGIR]: correccionSchema,
-  [AccionIncidencia.DERIVAR]: sinDatosSchema,
+  [AccionIncidencia.DERIVAR]: derivacionSchema,
   [AccionIncidencia.TOMAR]: sinDatosSchema,
   [AccionIncidencia.RESOLVER]: resolucionSchema,
 };
@@ -62,8 +72,8 @@ export function createIncidenciasRouter(servicio: IncidenciaServicio): Router {
   const verCasos = requireVista(VistaCodigo.CASOS);
 
   router.get("/incidencias", verCasos, async (req, res) => {
-    const consulta = listadoSchema.parse(req.query);
-    res.json(await servicio.listar(sesionDe(req), consulta));
+    const { cursor, ...consulta } = listadoSchema.parse(req.query);
+    res.json(await servicio.listar(sesionDe(req), cursor ? { ...consulta, despuesDe: cursor } : consulta));
   });
 
   router.get("/incidencias/por-vencer", requireSession, async (req, res) => {

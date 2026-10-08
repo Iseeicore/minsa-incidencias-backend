@@ -20,6 +20,32 @@ describe("traducirErrorDeBase", () => {
     expect(traducido).toMatchObject({ statusCode: 409, errorCode: ErrorCode.CONFLICT, message: esperado });
   });
 
+  it.each([
+    ["incidencia_paciente: el area de destino solo se reasigna mientras el caso esta CLASIFICADO o DERIVADO", "El área de destino solo se cambia mientras el caso está clasificado o derivado."],
+    ["incidencia_paciente: el caso sensible esta en un area que no recibe casos sensibles y no hay una unica area que los reciba", "Una denuncia por corrupción no puede quedar en el área de un establecimiento."],
+    ["incidencia_paciente: el establecimiento de origen no se puede modificar", "El establecimiento de origen del caso no se puede cambiar."],
+    ["incidencia_paciente: archivar un caso exige un motivo de archivo", "Para archivar el caso hay que indicar el motivo."],
+    ["incidencia_paciente: el motivo de archivo solo se indica al archivar el caso", "El motivo de archivo solo se indica al archivar el caso."],
+    ["incidencia_paciente: por datos insuficientes solo se archiva desde REGISTRADO o CLASIFICADO, y lo hace el filtro o una persona", "Por datos insuficientes solo se archiva un caso registrado o clasificado."],
+    ["incidencia_paciente: un caso abierto solo se archiva por vencimiento del plazo de atencion, y lo hace el sistema", "Un caso abierto solo se archiva cuando vence su plazo de atención."],
+    ["incidencia_paciente: el motivo de archivo no corresponde a un caso resuelto", "El motivo de archivo no corresponde al estado del caso."],
+    ["incidencia_paciente: las fechas y actores de derivacion, toma y archivado los llena la base", "Las fechas y los responsables de la derivación, la toma y el archivo los llena el sistema."],
+  ])("traduce la regla de áreas o de archivo «%s» a un 409", (mensajeDeLaBase, esperado) => {
+    expect(traducirErrorDeBase(errorDeBase(mensajeDeLaBase))).toMatchObject({ statusCode: 409, errorCode: ErrorCode.CONFLICT, message: esperado });
+  });
+
+  it.each([
+    ["incidencia_paciente: DERIVADO y EN_GESTION exigen un area de destino", "El caso necesita un área de destino para derivarlo o tomarlo."],
+    ["incidencia_paciente: el area de destino esta desactivada", "El área de destino está desactivada."],
+    ["incidencia_paciente: un caso sensible solo se deriva a un area que reciba casos sensibles", "Una denuncia por corrupción solo se deriva a la oficina de transparencia (OTRANS), no a un establecimiento."],
+    ["incidencia_paciente: el establecimiento de origen no existe o esta desactivado", "El establecimiento de origen no existe o está desactivado."],
+    ["usuario_rol: el tipo de area del rol no coincide con el area del usuario", "El rol no corresponde al tipo de área del usuario."],
+    ["usuario_interno: el tipo de area no coincide con el de los roles del usuario", "El área no corresponde a los roles del usuario."],
+    ["usuario_rol: el rol esta desactivado y no se puede asignar", "El rol está desactivado y no se puede asignar."],
+  ])("traduce el dato que quien lo envía puede corregir «%s» a un 422", (mensajeDeLaBase, esperado) => {
+    expect(traducirErrorDeBase(errorDeBase(mensajeDeLaBase))).toMatchObject({ statusCode: 422, errorCode: ErrorCode.UNPROCESSABLE, message: esperado });
+  });
+
   it("una regla que no conocemos también es un 409, sin repetir el texto técnico de la base", () => {
     const traducido = traducirErrorDeBase(errorDeBase("ck_incidencia_paciente_estado: algo raro"));
     expect(traducido).toMatchObject({

@@ -1,23 +1,34 @@
 import type { CategoriaApi, EstadoApi } from "@/constants/incidencias.js";
 import type { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
-import type { DireccionOrden, OrdenIncidencia } from "@/enums/orden-incidencia.enum.js";
+import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { PlazoCalculado } from "@/utils/plazo-incidencia.js";
 import type { ItemDeHistorial } from "@/utils/historial-incidencia.js";
 import type { SesionActual } from "./auth.types.js";
 
 export interface ConsultaListado {
-  pagina: number;
-  tamano: number;
+  limite: number;
+  /** Posición del cursor de `siguiente`, ya decodificada; ausente en la primera página. */
+  despuesDe?: PosicionDeListado;
   estado?: EstadoApi;
   categoria?: CategoriaApi | "sin-categoria";
   texto?: string;
-  orden: OrdenIncidencia;
-  direccion: DireccionOrden;
 }
 
 export interface DatosAccion {
   categoria?: CategoriaApi;
   resolucion?: string;
+  /** Código del área de destino al derivar; si falta, la del establecimiento de origen. */
+  areaDestino?: string;
+}
+
+export interface AreaDto {
+  codigo: string;
+  nombre: string;
+}
+
+export interface EstablecimientoDto {
+  codigoRenipress: string;
+  nombre: string;
 }
 
 export interface CasoResumenDto {
@@ -28,7 +39,8 @@ export interface CasoResumenDto {
   etiquetas: string[];
   prioridad: null;
   organismo: null;
-  area: string | null;
+  area: AreaDto | null;
+  establecimiento: EstablecimientoDto | null;
   responsable: string | null;
   estado: EstadoApi;
   horasDesdeLlegada: number;
@@ -56,10 +68,10 @@ export interface CasoDetalleDto extends CasoResumenDto {
 }
 
 export interface ListaCasosDto {
-  casos: CasoResumenDto[];
-  pagina: number;
-  tamano: number;
-  total: number;
+  items: CasoResumenDto[];
+  /** Cursor para pedir la página que sigue; `null` en la última. */
+  siguiente: string | null;
+  hayMas: boolean;
 }
 
 export interface PorVencerDto {

@@ -20,7 +20,7 @@ const MATRIZ: Fila[] = [
   ["gestor confirma o corrige un caso otro sin revisar", [R.GESTOR], E.CLASIFICADO, C.OTRO, false, [A.CONFIRMAR, A.CORREGIR]],
   ["gestor deriva una queja ya revisada", [R.GESTOR], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR]],
   ["gestor deriva un reclamo ya revisado", [R.GESTOR], E.CLASIFICADO, C.RECLAMO, true, [A.DERIVAR]],
-  ["gestor no deriva un caso otro (no tiene área)", [R.GESTOR], E.CLASIFICADO, C.OTRO, true, []],
+  ["gestor no deriva un caso otro (solo quejas y reclamos)", [R.GESTOR], E.CLASIFICADO, C.OTRO, true, []],
   ["gestor no actúa sobre corrupción", [R.GESTOR], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, []],
   ["gestor no actúa sobre un caso sin categoría", [R.GESTOR], E.REGISTRADO, null, false, []],
   ["gestor no actúa en DERIVADO", [R.GESTOR], E.DERIVADO, C.QUEJA, true, []],
@@ -28,32 +28,31 @@ const MATRIZ: Fila[] = [
   ["gestor no actúa en RESUELTO", [R.GESTOR], E.RESUELTO, C.QUEJA, true, []],
   ["gestor no actúa en ARCHIVADO", [R.GESTOR], E.ARCHIVADO, C.QUEJA, true, []],
 
-  ["corrupción confirma o corrige sin revisar", [R.AREA_DENUNCIA_CORRUPCION], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["corrupción toma directo lo revisado, sin derivar", [R.AREA_DENUNCIA_CORRUPCION], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
-  ["corrupción toma o resuelve lo derivado", [R.AREA_DENUNCIA_CORRUPCION], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR, A.RESOLVER]],
-  ["corrupción resuelve lo que está en gestión", [R.AREA_DENUNCIA_CORRUPCION], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, [A.RESOLVER]],
-  ["corrupción no actúa en RESUELTO", [R.AREA_DENUNCIA_CORRUPCION], E.RESUELTO, C.DENUNCIA_CORRUPCION, true, []],
-  ["corrupción no actúa sobre una queja", [R.AREA_DENUNCIA_CORRUPCION], E.CLASIFICADO, C.QUEJA, false, []],
+  ["OTRANS confirma o corrige sin revisar", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, false, [A.CONFIRMAR, A.CORREGIR]],
+  ["OTRANS toma directo lo revisado, sin derivar", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
+  ["OTRANS toma o resuelve lo derivado", [R.OTRANS], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR, A.RESOLVER]],
+  ["OTRANS resuelve lo que está en gestión", [R.OTRANS], E.EN_GESTION, C.DENUNCIA_CORRUPCION, true, [A.RESOLVER]],
+  ["OTRANS no actúa en RESUELTO", [R.OTRANS], E.RESUELTO, C.DENUNCIA_CORRUPCION, true, []],
+  ["OTRANS no actúa sobre una queja", [R.OTRANS], E.CLASIFICADO, C.QUEJA, false, []],
+  ["OTRANS no deriva", [R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
 
-  ["área de quejas no revisa", [R.AREA_QUEJA], E.CLASIFICADO, C.QUEJA, false, []],
-  ["área de quejas no toma lo clasificado", [R.AREA_QUEJA], E.CLASIFICADO, C.QUEJA, true, []],
-  ["área de quejas toma o resuelve lo derivado", [R.AREA_QUEJA], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
-  ["área de quejas resuelve lo que está en gestión", [R.AREA_QUEJA], E.EN_GESTION, C.QUEJA, true, [A.RESOLVER]],
-  ["área de quejas no actúa sobre un reclamo", [R.AREA_QUEJA], E.DERIVADO, C.RECLAMO, true, []],
-  ["área de quejas no actúa en RESUELTO", [R.AREA_QUEJA], E.RESUELTO, C.QUEJA, true, []],
+  ["establecimiento no revisa una queja", [R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, false, []],
+  ["establecimiento no toma lo clasificado", [R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, true, []],
+  ["establecimiento toma o resuelve una queja derivada", [R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
+  ["establecimiento toma o resuelve un reclamo derivado", [R.ESTABLECIMIENTO], E.DERIVADO, C.RECLAMO, true, [A.TOMAR, A.RESOLVER]],
+  ["establecimiento resuelve una queja en gestión", [R.ESTABLECIMIENTO], E.EN_GESTION, C.QUEJA, true, [A.RESOLVER]],
+  ["establecimiento resuelve un reclamo en gestión", [R.ESTABLECIMIENTO], E.EN_GESTION, C.RECLAMO, true, [A.RESOLVER]],
+  ["establecimiento no actúa sobre corrupción", [R.ESTABLECIMIENTO], E.DERIVADO, C.DENUNCIA_CORRUPCION, true, []],
+  ["establecimiento no actúa sobre un caso otro", [R.ESTABLECIMIENTO], E.DERIVADO, C.OTRO, true, []],
+  ["establecimiento no actúa en RESUELTO", [R.ESTABLECIMIENTO], E.RESUELTO, C.QUEJA, true, []],
+  ["establecimiento no actúa en ARCHIVADO", [R.ESTABLECIMIENTO], E.ARCHIVADO, C.RECLAMO, true, []],
 
-  ["área de reclamos toma o resuelve lo derivado", [R.AREA_RECLAMO], E.DERIVADO, C.RECLAMO, true, [A.TOMAR, A.RESOLVER]],
-  ["área de reclamos resuelve lo que está en gestión", [R.AREA_RECLAMO], E.EN_GESTION, C.RECLAMO, true, [A.RESOLVER]],
-  ["área de reclamos no actúa sobre una queja", [R.AREA_RECLAMO], E.DERIVADO, C.QUEJA, true, []],
-  ["área de reclamos no actúa en ARCHIVADO", [R.AREA_RECLAMO], E.ARCHIVADO, C.RECLAMO, true, []],
+  ["gestor y establecimiento: confirma una queja sin revisar", [R.GESTOR, R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR]],
+  ["gestor y establecimiento: deriva una queja revisada", [R.GESTOR, R.ESTABLECIMIENTO], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR]],
+  ["gestor y establecimiento: atiende una queja derivada", [R.GESTOR, R.ESTABLECIMIENTO], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
+  ["gestor y OTRANS: toma lo revisado de corrupción", [R.GESTOR, R.OTRANS], E.CLASIFICADO, C.DENUNCIA_CORRUPCION, true, [A.TOMAR]],
 
-  ["gestor y área de quejas: confirma una queja sin revisar", [R.GESTOR, R.AREA_QUEJA], E.CLASIFICADO, C.QUEJA, false, [A.CONFIRMAR, A.CORREGIR]],
-  ["gestor y área de quejas: deriva una queja revisada", [R.GESTOR, R.AREA_QUEJA], E.CLASIFICADO, C.QUEJA, true, [A.DERIVAR]],
-  ["gestor y área de quejas: atiende una queja derivada", [R.GESTOR, R.AREA_QUEJA], E.DERIVADO, C.QUEJA, true, [A.TOMAR, A.RESOLVER]],
-  ["gestor y área de quejas: no atiende un reclamo derivado", [R.GESTOR, R.AREA_QUEJA], E.DERIVADO, C.RECLAMO, true, []],
-  ["dos áreas atienden cada una lo suyo", [R.AREA_QUEJA, R.AREA_RECLAMO], E.DERIVADO, C.RECLAMO, true, [A.TOMAR, A.RESOLVER]],
-
-  ["el revisor retirado no da acciones", [R.REVISOR], E.CLASIFICADO, C.QUEJA, false, []],
+  ["DIRIS (desactivado) no da acciones", [R.DIRIS], E.DERIVADO, C.QUEJA, true, []],
   ["un rol inventado no da acciones", ["INVENTADO"], E.CLASIFICADO, C.QUEJA, false, []],
   ["un nombre heredado del objeto no da acciones", ["constructor"], E.CLASIFICADO, C.QUEJA, false, []],
   ["sin roles no hay acciones", [], E.CLASIFICADO, C.QUEJA, false, []],
@@ -65,7 +64,7 @@ describe("accionesPermitidas", () => {
   });
 
   it("devuelve las acciones en el orden confirmar, corregir, derivar, tomar y resolver, sin repetir", () => {
-    const acciones = accionesPermitidas([R.AREA_DENUNCIA_CORRUPCION, R.AREA_DENUNCIA_CORRUPCION], caso(E.DERIVADO, C.DENUNCIA_CORRUPCION, true));
+    const acciones = accionesPermitidas([R.OTRANS, R.OTRANS], caso(E.DERIVADO, C.DENUNCIA_CORRUPCION, true));
     expect(acciones).toEqual([A.TOMAR, A.RESOLVER]);
   });
 
@@ -84,11 +83,11 @@ describe("accionesPermitidas", () => {
 
     it("quien actúa cuenta lo que le toca atender: las reglas de sus roles", () => {
       expect(reglasDeAvisos([R.GESTOR])).toEqual(reglasDe(R.GESTOR));
-      expect(reglasDeAvisos([R.AREA_QUEJA])).toEqual(reglasDe(R.AREA_QUEJA));
+      expect(reglasDeAvisos([R.ESTABLECIMIENTO])).toEqual(reglasDe(R.ESTABLECIMIENTO));
     });
 
     it("con varios roles que actúan se juntan sus reglas", () => {
-      expect(reglasDeAvisos([R.GESTOR, R.AREA_QUEJA])).toEqual([...reglasDe(R.GESTOR), ...reglasDe(R.AREA_QUEJA)]);
+      expect(reglasDeAvisos([R.GESTOR, R.OTRANS])).toEqual([...reglasDe(R.GESTOR), ...reglasDe(R.OTRANS)]);
     });
 
     it("quien no actúa (el administrador) cuenta todos los casos abiertos que ve, y eso gana si también es gestor", () => {
@@ -98,7 +97,7 @@ describe("accionesPermitidas", () => {
 
     it("sin roles o con roles que la tabla no conoce no cuenta nada", () => {
       expect(reglasDeAvisos([])).toEqual([]);
-      expect(reglasDeAvisos([R.REVISOR, "INVENTADO", "constructor"])).toEqual([]);
+      expect(reglasDeAvisos([R.DIRIS, "INVENTADO", "constructor"])).toEqual([]);
     });
   });
 

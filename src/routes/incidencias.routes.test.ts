@@ -2,12 +2,14 @@ import express, { type NextFunction, type Request, type Response } from "express
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
+import { codificarCursor } from "@/utils/cursor-listado.js";
 import { errorHandler, notFoundHandler } from "@/middleware/error-handler.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import type { IncidenciaServicio } from "@/services/incidencia.types.js";
 import type { SesionActual } from "@/services/auth.types.js";
 
 const CODIGO = "MINSA-2026-000001";
+const codificarTexto = (texto: string): string => Buffer.from(texto, "utf8").toString("base64url");
 
 const sesionConCasos: SesionActual = {
   sesionId: "s1",
@@ -15,12 +17,13 @@ const sesionConCasos: SesionActual = {
   correo: "ana@minsa.gob.pe",
   nombreCompleto: "Ana Prueba",
   roles: ["GESTOR"],
+  area: null,
   vistas: [VistaCodigo.CASOS],
 };
 
 function servicioFalso() {
   return {
-    listar: vi.fn(async () => ({ casos: [], pagina: 1, tamano: 20, total: 0 })),
+    listar: vi.fn(async () => ({ items: [], siguiente: null, hayMas: false })),
     detalle: vi.fn(async () => ({ codigo: CODIGO })),
     porVencer: vi.fn(async () => ({ total: 0, porVencer: 0, vencidos: 0, casos: [] })),
     ejecutar: vi.fn(async () => ({ mensaje: "listo", caso: null })),
@@ -67,30 +70,30 @@ describe("rutas de incidencias", () => {
   });
 
   describe("GET /incidencias", () => {
-    it("usa 20 por página, lo más antiguo primero y sin filtros cuando no se piden", async () => {
+    it("usa 20 por página, sin cursor ni filtros cuando no se piden", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias");
       expect(res.status).toBe(200);
-      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, {
-        pagina: 1,
-        tamano: 20,
-        orden: "fecha",
-        direccion: "asc",
-      });
+      expect(res.body).toEqual({ items: [], siguiente: null, hayMas: false });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
     });
 
-    it("pasa los filtros, el orden y la paginación ya validados", async () => {
+    it("pasa los filtros, el límite y el cursor ya validados y decodificados", async () => {
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
       await request(montar(servicio, sesionConCasos))
         .get("/incidencias")
-        .query({ pagina: "2", tamano: "5", estado: "derivado", categoria: "queja", texto: "  hola  ", orden: "codigo", direccion: "desc" });
+        .query({ limite: "5", cursor: codificarCursor(posicion), estado: "derivado", categoria: "queja", texto: "  hola  " });
       expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, {
-        pagina: 2,
-        tamano: 5,
+        limite: 5,
+        despuesDe: posicion,
         estado: "derivado",
         categoria: "queja",
         texto: "hola",
-        orden: "codigo",
-        direccion: "desc",
       });
+    });
+
+    it("ya no acepta pagina, tamano ni orden: se ignoran y el listado sigue del más nuevo al más antiguo", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ pagina: "3", tamano: "5", orden: "codigo" });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
     });
 
     it("acepta filtrar los casos sin categoría", async () => {
@@ -99,17 +102,18 @@ describe("rutas de incidencias", () => {
     });
 
     it.each([
-      ["pagina", "0"],
-      ["pagina", "-1"],
-      ["pagina", "abc"],
-      ["tamano", "0"],
-      ["tamano", "101"],
-      ["tamano", "20.5"],
+      ["limite", "0"],
+      ["limite", "-1"],
+      ["limite", "abc"],
+      ["limite", "101"],
+      ["limite", "20.5"],
+      ["cursor", "no es un cursor"],
+      ["cursor", "MjAyNi0xMC0wNXxubw"],
+      ["cursor", codificarTexto("2026-10-05T12:00:00.000Z|1; DROP TABLE chatbot.incidencia_paciente")],
+      ["cursor", codificarTexto("no-es-fecha|0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b")],
+      ["cursor", "a".repeat(201)],
       ["estado", "anulado"],
       ["categoria", "corrupcion"],
-      ["orden", "descripcion"],
-      ["orden", "codigo; DROP TABLE chatbot.incidencia_paciente"],
-      ["direccion", "arriba"],
     ])("rechaza %s=%s con 400 y no llega al servicio", async (campo, valor) => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ [campo]: valor });
       expect(res.status).toBe(400);
@@ -181,8 +185,22 @@ describe("rutas de incidencias", () => {
     });
 
     it("ignora campos de más en el cuerpo de las acciones sin datos", async () => {
-      await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/derivar`).send({ estado: "resuelto", actor: "otro" });
-      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "derivar", {});
+      await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/tomar`).send({ estado: "resuelto", actor: "otro" });
+      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "tomar", {});
+    });
+
+    it("derivar acepta el código del área de destino, lo recorta y descarta lo demás", async () => {
+      const app = montar(servicio, sesionConCasos);
+      const ok = await request(app).post(`/incidencias/${CODIGO}/derivar`).send({ areaDestino: "  EESS-6206 ", areaDestinoId: 7 });
+      expect(ok.status).toBe(200);
+      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "derivar", { areaDestino: "EESS-6206" });
+    });
+
+    it.each([[""], ["   "], [123], ["x".repeat(51)]])("derivar rechaza un área de destino inválida (%j)", async (areaDestino) => {
+      const res = await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/derivar`).send({ areaDestino });
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.ejecutar).not.toHaveBeenCalled();
     });
 
     it("un código con forma inválida responde 404 sin llegar al servicio", async () => {

@@ -1,10 +1,11 @@
 import { AccionIncidencia } from "@/enums/accion-incidencia.enum.js";
 import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
-import { OrdenIncidencia } from "@/enums/orden-incidencia.enum.js";
 
-export const PAGINA_TAMANO_POR_DEFECTO = 20;
-export const PAGINA_TAMANO_MAXIMO = 100;
+export const LISTADO_LIMITE_POR_DEFECTO = 20;
+export const LISTADO_LIMITE_MAXIMO = 100;
+export const CURSOR_LONGITUD_MAXIMA = 200;
+export const AREA_CODIGO_LONGITUD_MAXIMA = 50;
 export const POR_VENCER_LISTA_MAXIMA = 10;
 export const TEXTO_BUSQUEDA_MAXIMO = 100;
 export const RESOLUCION_LONGITUD_MAXIMA = 4000;
@@ -12,7 +13,6 @@ export const CODIGO_INCIDENCIA_PATRON = /^MINSA-\d{4}-\d{6,}$/;
 export const MILISEGUNDOS_POR_HORA = 3_600_000;
 export const HORAS_POR_DIA = 24;
 export const SIN_CATEGORIA_API = "sin-categoria";
-export const ROL_AREA_PATRON_SQL = "AREA\\_%";
 export const ACTOR_PREFIJO_USUARIO = "usuario:";
 export const ACTOR_PREFIJO_SISTEMA = "sistema:";
 export const NOMBRE_ACTOR_SISTEMA = "Sistema";
@@ -60,20 +60,5 @@ export const ESTADOS_ABIERTOS: readonly EstadoIncidencia[] = [
   EstadoIncidencia.EN_GESTION,
 ];
 
-export const ORDEN_SQL: Record<OrdenIncidencia, string> = {
-  [OrdenIncidencia.FECHA]: "i.fecha_creacion",
-  [OrdenIncidencia.CODIGO]: "i.codigo",
-  [OrdenIncidencia.CATEGORIA]: "c.codigo",
-  [OrdenIncidencia.ESTADO]: "e.codigo",
-  [OrdenIncidencia.CONFIANZA]: "i.categoria_confianza",
-};
-
-export const ORDEN_API = Object.values(OrdenIncidencia) as [OrdenIncidencia, ...OrdenIncidencia[]];
-
 export const ACCIONES_EN_ORDEN: readonly AccionIncidencia[] = Object.values(AccionIncidencia);
 
-export const CATEGORIAS_CON_AREA: readonly CategoriaIncidencia[] = [
-  CategoriaIncidencia.DENUNCIA_CORRUPCION,
-  CategoriaIncidencia.QUEJA,
-  CategoriaIncidencia.RECLAMO,
-];

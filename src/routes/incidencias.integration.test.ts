@@ -2,11 +2,14 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { createApp } from "@/app.js";
 import { createLogger } from "@/config/logger.js";
+import type { DbExecutor } from "@/database/database.js";
 import { traducirErrorDeBase } from "@/database/reglas-de-la-base.js";
 import { CategoriaIncidencia as C } from "@/enums/categoria-incidencia.enum.js";
+import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
 import { RolCodigo as R } from "@/enums/rol-codigo.enum.js";
 import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
 import { testEnv } from "@/test-utils/env.js";
+import { crearEstablecimientoDePrueba, type EstablecimientoDePrueba } from "@/test-utils/establecimientos.js";
 import { marcaDePrueba, sembrarCaso, type OpcionesCaso } from "@/test-utils/incidencias.js";
 import { withRollbackDatabase, type RollbackContext } from "@/test-utils/rollback-database.js";
 import { crearUsuarioDePrueba, iniciarSesion, type AgentePrueba } from "@/test-utils/usuarios.js";
@@ -21,16 +24,26 @@ interface CasoDto {
   [clave: string]: unknown;
 }
 
-async function entrar(contexto: RollbackContext, app: ReturnType<typeof construir>, roles: string[], nombre?: string) {
-  const correo = await crearUsuarioDePrueba(contexto, roles, nombre);
+/** Quien es de OTRANS pertenece al área OTRANS; quien es de establecimiento, al área del establecimiento dado. */
+function areaDe(roles: string[], eess?: EstablecimientoDePrueba): string | null {
+  if (roles.includes(R.OTRANS)) return "OTRANS";
+  if (roles.includes(R.ESTABLECIMIENTO)) {
+    if (!eess) throw new Error("un usuario de establecimiento necesita su establecimiento");
+    return eess.areaCodigo;
+  }
+  return null;
+}
+
+async function entrar(contexto: RollbackContext, app: ReturnType<typeof construir>, roles: string[], nombre?: string, eess?: EstablecimientoDePrueba) {
+  const correo = await crearUsuarioDePrueba(contexto, roles, nombre, undefined, areaDe(roles, eess));
   const agente = await iniciarSesion(app, correo);
   return { agente, correo };
 }
 
 async function codigosVistos(agente: AgentePrueba, marcador: string): Promise<string[]> {
-  const res = await agente.get("/incidencias").query({ texto: marcador, tamano: "100" });
+  const res = await agente.get("/incidencias").query({ texto: marcador, limite: "100" });
   expect(res.status).toBe(200);
-  return (res.body.casos as CasoDto[]).map((c) => c.codigo).sort();
+  return (res.body.items as CasoDto[]).map((c) => c.codigo).sort();
 }
 
 async function accionesDe(agente: AgentePrueba, codigo: string): Promise<string[]> {
@@ -43,26 +56,59 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
   const usar = (prueba: (contexto: RollbackContext) => Promise<void>) => withRollbackDatabase(url as string, prueba);
 
   describe("qué ve cada rol", () => {
-    it("el administrador ve todo; el gestor no ve corrupción; cada área solo lo suyo; los roles se unen", async () => {
+    it("el administrador y el gestor no filtran por área; OTRANS y cada establecimiento solo ven lo destinado a su área", async () => {
       await usar(async (contexto) => {
         const marcador = marcaDePrueba();
-        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, marcador });
-        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
-        const reclamo = await sembrarCaso(contexto, { categoria: C.RECLAMO, marcador });
-        const otro = await sembrarCaso(contexto, { categoria: C.OTRO, marcador });
-        const sinCategoria = await sembrarCaso(contexto, { categoria: null, marcador });
+        const a = await crearEstablecimientoDePrueba(contexto, "Hospital A");
+        const b = await crearEstablecimientoDePrueba(contexto, "Hospital B");
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: a, marcador });
+        const quejaA = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador });
+        const quejaB = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: b, marcador });
+        const deAaB = await sembrarCaso(contexto, {
+          categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", establecimiento: a, destino: b, marcador,
+        });
+        const sinDerivar = await sembrarCaso(contexto, { categoria: C.RECLAMO, establecimiento: a, marcador });
+        const otro = await sembrarCaso(contexto, { categoria: C.OTRO, establecimiento: a, marcador });
+        const sinCategoria = await sembrarCaso(contexto, { categoria: null, establecimiento: a, marcador });
         const ordenados = (...casos: { codigo: string }[]) => casos.map((c) => c.codigo).sort();
+        const todos = [corrupcion, quejaA, quejaB, deAaB, sinDerivar, otro, sinCategoria];
+        const sinCorrupcion = [quejaA, quejaB, deAaB, sinDerivar, otro, sinCategoria];
         const app = construir(contexto);
 
-        const vistos = async (roles: string[]) => codigosVistos((await entrar(contexto, app, roles)).agente, marcador);
+        const vistos = async (roles: string[], eess?: EstablecimientoDePrueba) =>
+          codigosVistos((await entrar(contexto, app, roles, undefined, eess)).agente, marcador);
 
-        expect(await vistos([R.ADMINISTRADOR])).toEqual(ordenados(corrupcion, queja, reclamo, otro, sinCategoria));
-        expect(await vistos([R.GESTOR])).toEqual(ordenados(queja, reclamo, otro, sinCategoria));
-        expect(await vistos([R.AREA_DENUNCIA_CORRUPCION])).toEqual(ordenados(corrupcion));
-        expect(await vistos([R.AREA_QUEJA])).toEqual(ordenados(queja));
-        expect(await vistos([R.AREA_RECLAMO])).toEqual(ordenados(reclamo));
-        expect(await vistos([R.GESTOR, R.AREA_DENUNCIA_CORRUPCION])).toEqual(ordenados(corrupcion, queja, reclamo, otro, sinCategoria));
-        expect(await vistos([R.AREA_QUEJA, R.AREA_RECLAMO])).toEqual(ordenados(queja, reclamo));
+        expect(await vistos([R.ADMINISTRADOR])).toEqual(ordenados(...todos));
+        expect(await vistos([R.GESTOR])).toEqual(ordenados(...sinCorrupcion));
+        expect(await vistos([R.OTRANS])).toEqual(ordenados(corrupcion));
+        expect(await vistos([R.ESTABLECIMIENTO], a)).toEqual(ordenados(quejaA));
+        expect(await vistos([R.ESTABLECIMIENTO], b)).toEqual(ordenados(quejaB, deAaB));
+        expect(await vistos([R.GESTOR, R.OTRANS])).toEqual(ordenados(...todos));
+        expect(await vistos([R.GESTOR, R.ESTABLECIMIENTO], a)).toEqual(ordenados(...sinCorrupcion));
+      });
+    });
+
+    it("un establecimiento sin ningún caso destinado a su área ve la lista vacía", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const vacio = await crearEstablecimientoDePrueba(contexto);
+        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador });
+        const { agente } = await entrar(contexto, construir(contexto), [R.ESTABLECIMIENTO], undefined, vacio);
+        expect(await codigosVistos(agente, marcador)).toEqual([]);
+        expect((await agente.get("/incidencias")).body).toEqual({ items: [], siguiente: null, hayMas: false });
+      });
+    });
+
+    it("quien tiene un rol de área pero ninguna área no ve nada", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador });
+        const correo = await crearUsuarioDePrueba(contexto, [R.ESTABLECIMIENTO]);
+        const agente = await iniciarSesion(construir(contexto), correo);
+        expect(await codigosVistos(agente, marcador)).toEqual([]);
+        expect((await agente.get(`/incidencias/${caso.codigo}`)).status).toBe(404);
       });
     });
 
@@ -75,27 +121,76 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
       });
     });
 
-    it("un caso que el rol no ve responde 404 igual que uno que no existe, y no se puede tocar", async () => {
+    it("un caso de otra área responde 404 igual que uno que no existe, y no se puede tocar", async () => {
       await usar(async (contexto) => {
-        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION });
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const deA = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a });
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: b });
         const app = construir(contexto);
-        const { agente } = await entrar(contexto, app, [R.AREA_QUEJA]);
+        const { agente } = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, b);
 
-        const oculto = await agente.get(`/incidencias/${corrupcion.codigo}`);
         const inexistente = await agente.get("/incidencias/MINSA-2099-999999");
-        expect(oculto.status).toBe(404);
-        expect(inexistente.status).toBe(404);
-        expect(oculto.body.errorCode).toBe("NOT_FOUND");
-        expect(oculto.body.message).toBe(inexistente.body.message);
-
-        for (const accion of ["confirmar", "derivar", "tomar"]) {
-          expect((await agente.post(`/incidencias/${corrupcion.codigo}/${accion}`)).status).toBe(404);
+        for (const ajeno of [deA, corrupcion]) {
+          const oculto = await agente.get(`/incidencias/${ajeno.codigo}`);
+          expect(oculto.status).toBe(404);
+          expect(oculto.body.errorCode).toBe("NOT_FOUND");
+          expect(oculto.body.message).toBe(inexistente.body.message);
+          for (const accion of ["confirmar", "derivar", "tomar"]) {
+            expect((await agente.post(`/incidencias/${ajeno.codigo}/${accion}`)).status).toBe(404);
+          }
+          expect((await agente.post(`/incidencias/${ajeno.codigo}/resolver`).send({ resolucion: "x" })).status).toBe(404);
         }
-        const [fila] = await contexto.database.query<{ categoria_confirmada_en: Date | null }>(
-          "SELECT categoria_confirmada_en FROM chatbot.incidencia_paciente WHERE id = $1",
-          [corrupcion.id],
+        const filas = await contexto.database.query<{ estado: string; resolucion: string | null; confirmada: boolean }>(
+          `SELECT e.codigo AS estado, i.resolucion, (i.categoria_confirmada_en IS NOT NULL) AS confirmada
+             FROM chatbot.incidencia_paciente i JOIN catalogo.estado_incidencia e ON e.id = i.estado_incidencia_id
+            WHERE i.id = ANY($1) ORDER BY e.codigo`,
+          [[deA.id, corrupcion.id]],
         );
-        expect(fila?.categoria_confirmada_en).toBeNull();
+        expect(filas).toEqual([
+          { estado: "CLASIFICADO", resolucion: null, confirmada: false },
+          { estado: "DERIVADO", resolucion: null, confirmada: true },
+        ]);
+      });
+    });
+
+    it("OTRANS tampoco abre ni toca un caso que no es de su área ni de su categoría", async () => {
+      await usar(async (contexto) => {
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a });
+        const { agente } = await entrar(contexto, construir(contexto), [R.OTRANS]);
+        expect((await agente.get(`/incidencias/${queja.codigo}`)).status).toBe(404);
+        expect((await agente.post(`/incidencias/${queja.codigo}/tomar`)).status).toBe(404);
+      });
+    });
+
+    it("una denuncia por corrupción nunca la ve un establecimiento, aunque la base quedara mal configurada", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, edadHoras: 61, establecimiento: a, marcador });
+        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", edadHoras: 61, establecimiento: a, marcador });
+        const app = construir(contexto);
+        const { agente } = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+        const antes = (await agente.get("/incidencias/por-vencer")).body as { total: number };
+
+        // Se apagan las reglas de la base para dejar la corrupción destinada al área del establecimiento y con la
+        // categoría permitida a su rol: la vista del servidor debe seguir ocultándola.
+        await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente DISABLE TRIGGER USER");
+        await contexto.client.query("ALTER TABLE gestion.rol_categoria DISABLE TRIGGER USER");
+        await contexto.client.query("UPDATE chatbot.incidencia_paciente SET area_destino_id = $2 WHERE id = $1", [corrupcion.id, a.areaId]);
+        await contexto.client.query(
+          "INSERT INTO gestion.rol_categoria (rol_id, categoria_incidencia_id) SELECT r.id, k.id FROM gestion.rol r, catalogo.categoria_incidencia k WHERE r.codigo = 'ESTABLECIMIENTO' AND k.codigo = 'DENUNCIA_CORRUPCION'",
+        );
+        await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente ENABLE TRIGGER USER");
+        await contexto.client.query("ALTER TABLE gestion.rol_categoria ENABLE TRIGGER USER");
+
+        expect(await codigosVistos(agente, marcador)).toEqual([queja.codigo]);
+        expect((await agente.get(`/incidencias/${corrupcion.codigo}`)).status).toBe(404);
+        expect((await agente.post(`/incidencias/${corrupcion.codigo}/tomar`)).status).toBe(404);
+        const despues = (await agente.get("/incidencias/por-vencer")).body as { total: number; casos: CasoDto[] };
+        expect(despues.total).toBe(antes.total);
+        expect(despues.casos.map((c) => c.codigo)).not.toContain(corrupcion.codigo);
       });
     });
   });
@@ -105,7 +200,9 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
         const revisor = await crearUsuarioDePrueba(contexto, [R.GESTOR], "Ana Prueba");
+        const eess = await crearEstablecimientoDePrueba(contexto, "Hospital Contrato");
         const caso = await sembrarCaso(contexto, {
+          establecimiento: eess,
           categoria: C.RECLAMO,
           confianza: 58,
           revision: "confirmada",
@@ -123,7 +220,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(Object.keys(res.body).sort()).toEqual(
           [
             "acciones", "area", "categoria", "categoriaIa", "codigo", "confianzaIa", "corregida", "descripcion", "estado",
-            "etiquetas", "evidencias", "historial", "horasDesdeLlegada", "horasDesdeResolucion", "organismo", "plazo",
+            "establecimiento", "etiquetas", "evidencias", "historial", "horasDesdeLlegada", "horasDesdeResolucion", "organismo", "plazo",
             "prioridad", "reclamante", "resolucion", "responsable", "revisadoPorHumano",
           ].sort(),
         );
@@ -135,7 +232,8 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
           etiquetas: [],
           prioridad: null,
           organismo: null,
-          area: "Área de reclamos",
+          area: null,
+          establecimiento: { codigoRenipress: eess.codigoRenipress, nombre: eess.nombre },
           responsable: "Ana Prueba",
           estado: "clasificado",
           horasDesdeLlegada: 20,
@@ -159,6 +257,33 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(texto).not.toContain("trace");
         expect(texto).not.toContain("roles");
         expect(texto).not.toContain(revisor);
+        expect(Object.keys(res.body.establecimiento)).toEqual(["codigoRenipress", "nombre"]);
+        expect(texto).not.toContain("areaId");
+        expect(texto).not.toContain("wa_id");
+        expect(texto).not.toContain("dni");
+      });
+    });
+
+    it("el área de destino y el establecimiento de origen salen con su código y nombre, nunca con ids", async () => {
+      await usar(async (contexto) => {
+        const origen = await crearEstablecimientoDePrueba(contexto, "Origen");
+        const destino = await crearEstablecimientoDePrueba(contexto, "Destino");
+        const derivado = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: origen, destino });
+        const sinOrigen = await sembrarCaso(contexto, { categoria: C.QUEJA });
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: origen });
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+        const a = await agente.get(`/incidencias/${derivado.codigo}`);
+        expect(a.body.area).toEqual({ codigo: destino.areaCodigo, nombre: destino.areaNombre });
+        expect(a.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
+        expect(Object.keys(a.body.area)).toEqual(["codigo", "nombre"]);
+
+        const b = await agente.get(`/incidencias/${sinOrigen.codigo}`);
+        expect(b.body).toMatchObject({ area: null, establecimiento: null });
+
+        const c = await agente.get(`/incidencias/${corrupcion.codigo}`);
+        expect(c.body.area).toEqual({ codigo: "OTRANS", nombre: "OTRANS" });
+        expect(c.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
       });
     });
 
@@ -231,35 +356,37 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
     const filas: [string, string[], OpcionesCaso, string[]][] = [
       ["gestor, queja clasificada sin revisar", [R.GESTOR], { categoria: C.QUEJA }, ["confirmar", "corregir"]],
       ["gestor, queja revisada", [R.GESTOR], { categoria: C.QUEJA, revision: "confirmada" }, ["derivar"]],
-      ["gestor, caso otro revisado (sin área)", [R.GESTOR], { categoria: C.OTRO, revision: "confirmada" }, []],
+      ["gestor, reclamo revisado", [R.GESTOR], { categoria: C.RECLAMO, revision: "confirmada" }, ["derivar"]],
+      ["gestor, caso otro revisado (solo quejas y reclamos se derivan)", [R.GESTOR], { categoria: C.OTRO, revision: "confirmada" }, []],
       ["gestor, queja ya derivada", [R.GESTOR], { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" }, []],
       ["administrador nunca actúa", [R.ADMINISTRADOR], { categoria: C.QUEJA }, []],
-      ["corrupción, sin revisar", [R.AREA_DENUNCIA_CORRUPCION], { categoria: C.DENUNCIA_CORRUPCION }, ["confirmar", "corregir"]],
-      ["corrupción, revisada: toma directo", [R.AREA_DENUNCIA_CORRUPCION], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada" }, ["tomar"]],
-      ["corrupción, derivada", [R.AREA_DENUNCIA_CORRUPCION], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
-      ["corrupción, en gestión", [R.AREA_DENUNCIA_CORRUPCION], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", estado: "EN_GESTION" }, ["resolver"]],
-      ["área de quejas, queja derivada", [R.AREA_QUEJA], { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
-      ["área de quejas, queja en gestión", [R.AREA_QUEJA], { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION" }, ["resolver"]],
-      ["área de quejas, queja resuelta", [R.AREA_QUEJA], { categoria: C.QUEJA, revision: "confirmada", estado: "RESUELTO" }, []],
-      ["área de reclamos, reclamo derivado", [R.AREA_RECLAMO], { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
-      ["gestor y área de quejas, queja derivada", [R.GESTOR, R.AREA_QUEJA], { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
-      ["gestor y área de quejas, reclamo derivado", [R.GESTOR, R.AREA_QUEJA], { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO" }, []],
+      ["OTRANS, sin revisar", [R.OTRANS], { categoria: C.DENUNCIA_CORRUPCION }, ["confirmar", "corregir"]],
+      ["OTRANS, revisada: toma directo", [R.OTRANS], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada" }, ["tomar"]],
+      ["OTRANS, derivada", [R.OTRANS], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
+      ["OTRANS, en gestión", [R.OTRANS], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", estado: "EN_GESTION" }, ["resolver"]],
+      ["establecimiento, queja derivada", [R.ESTABLECIMIENTO], { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
+      ["establecimiento, reclamo derivado", [R.ESTABLECIMIENTO], { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
+      ["establecimiento, queja en gestión", [R.ESTABLECIMIENTO], { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION" }, ["resolver"]],
+      ["establecimiento, queja resuelta", [R.ESTABLECIMIENTO], { categoria: C.QUEJA, revision: "confirmada", estado: "RESUELTO" }, []],
+      ["gestor y establecimiento, queja derivada", [R.GESTOR, R.ESTABLECIMIENTO], { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" }, ["tomar", "resolver"]],
+      ["gestor y OTRANS, corrupción revisada", [R.GESTOR, R.OTRANS], { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada" }, ["tomar"]],
     ];
 
     it.each(filas)("%s", async (_nombre, roles, opciones, esperadas) => {
       await usar(async (contexto) => {
-        const caso = await sembrarCaso(contexto, opciones);
-        const { agente } = await entrar(contexto, construir(contexto), roles);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { ...opciones, establecimiento: eess });
+        const { agente } = await entrar(contexto, construir(contexto), roles, undefined, eess);
         expect(await accionesDe(agente, caso.codigo)).toEqual(esperadas);
         const lista = await agente.get("/incidencias").query({ texto: caso.codigo });
-        expect(lista.body.casos).toHaveLength(1);
-        expect(lista.body.casos[0].acciones).toEqual(esperadas);
+        expect(lista.body.items).toHaveLength(1);
+        expect(lista.body.items[0].acciones).toEqual(esperadas);
       });
     });
   });
 
-  describe("lista: paginación, orden y filtros", () => {
-    it("20 por página, lo más antiguo primero, con el total", async () => {
+  describe("lista: paginación por cursor y filtros", () => {
+    it("20 por página del más reciente al más antiguo, con cursor y sin total", async () => {
       await usar(async (contexto) => {
         const marcador = marcaDePrueba();
         const casos = [];
@@ -267,53 +394,132 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
           casos.push(await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, edadHoras: 10 + n }));
         }
         const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const recientesPrimero = casos.map((c) => c.codigo);
+        const codigos = (cuerpo: { items: CasoDto[] }) => cuerpo.items.map((c) => c.codigo);
 
         const primera = await agente.get("/incidencias").query({ texto: marcador });
         expect(primera.status).toBe(200);
-        expect(primera.body).toMatchObject({ pagina: 1, tamano: 20, total: 25 });
-        expect(primera.body.casos).toHaveLength(20);
-        const masAntiguos = [...casos].reverse().map((c) => c.codigo);
-        expect((primera.body.casos as CasoDto[]).map((c) => c.codigo)).toEqual(masAntiguos.slice(0, 20));
+        expect(Object.keys(primera.body).sort()).toEqual(["hayMas", "items", "siguiente"]);
+        expect(primera.body.hayMas).toBe(true);
+        expect(typeof primera.body.siguiente).toBe("string");
+        expect(codigos(primera.body)).toEqual(recientesPrimero.slice(0, 20));
 
-        const segunda = await agente.get("/incidencias").query({ texto: marcador, pagina: "2" });
-        expect((segunda.body.casos as CasoDto[]).map((c) => c.codigo)).toEqual(masAntiguos.slice(20));
-        expect((await agente.get("/incidencias").query({ texto: marcador, pagina: "3" })).body.casos).toEqual([]);
-
-        const chica = await agente.get("/incidencias").query({ texto: marcador, tamano: "10", pagina: "3" });
-        expect(chica.body).toMatchObject({ pagina: 3, tamano: 10, total: 25 });
-        expect(chica.body.casos).toHaveLength(5);
+        const segunda = await agente.get("/incidencias").query({ texto: marcador, cursor: primera.body.siguiente });
+        expect(codigos(segunda.body)).toEqual(recientesPrimero.slice(20));
+        expect(segunda.body).toMatchObject({ siguiente: null, hayMas: false });
       });
     });
 
-    it("ordena por columna en los dos sentidos y desempata de forma estable", async () => {
+    it("recorre todo con cualquier límite sin repetir ni saltar casos, y el último trae siguiente null", async () => {
       await usar(async (contexto) => {
         const marcador = marcaDePrueba();
-        const a = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, edadHoras: 30, confianza: 90 });
-        const b = await sembrarCaso(contexto, { categoria: C.RECLAMO, marcador, edadHoras: 20, confianza: 40 });
-        const c = await sembrarCaso(contexto, { categoria: C.OTRO, marcador, edadHoras: 10, confianza: 70 });
+        const casos = [];
+        for (let n = 0; n < 12; n += 1) casos.push(await sembrarCaso(contexto, { categoria: C.RECLAMO, marcador, edadHoras: 10 + n }));
         const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
-        const orden = async (orden: string, direccion: string) =>
-          ((await agente.get("/incidencias").query({ texto: marcador, orden, direccion })).body.casos as CasoDto[]).map((x) => x.codigo);
+        const esperado = casos.map((c) => c.codigo);
 
-        expect(await orden("fecha", "asc")).toEqual([a.codigo, b.codigo, c.codigo]);
-        expect(await orden("fecha", "desc")).toEqual([c.codigo, b.codigo, a.codigo]);
-        expect(await orden("codigo", "asc")).toEqual([a.codigo, b.codigo, c.codigo]);
-        expect(await orden("codigo", "desc")).toEqual([c.codigo, b.codigo, a.codigo]);
-        expect(await orden("confianza", "asc")).toEqual([b.codigo, c.codigo, a.codigo]);
-        expect(await orden("confianza", "desc")).toEqual([a.codigo, c.codigo, b.codigo]);
-        expect(await orden("categoria", "asc")).toEqual([c.codigo, a.codigo, b.codigo]);
+        for (const limite of [1, 5, 11, 12, 13, 100]) {
+          const vistos: string[] = [];
+          let cursor: string | undefined;
+          let paginas = 0;
+          do {
+            const res = await agente.get("/incidencias").query({ texto: marcador, limite: String(limite), ...(cursor ? { cursor } : {}) });
+            expect(res.status).toBe(200);
+            expect(res.body.items.length).toBeLessThanOrEqual(limite);
+            vistos.push(...(res.body.items as CasoDto[]).map((c) => c.codigo));
+            expect(res.body.hayMas).toBe(res.body.siguiente !== null);
+            cursor = res.body.siguiente ?? undefined;
+            paginas += 1;
+          } while (cursor);
+          expect(vistos).toEqual(esperado);
+          expect(paginas).toBe(Math.ceil(12 / limite));
+        }
+      });
+    });
+
+    it("con el límite exacto no hay más páginas, y sin casos la lista viene vacía", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        for (let n = 0; n < 3; n += 1) await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, edadHoras: 5 + n });
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const exacto = await agente.get("/incidencias").query({ texto: marcador, limite: "3" });
+        expect(exacto.body).toMatchObject({ hayMas: false, siguiente: null });
+        expect(exacto.body.items).toHaveLength(3);
+        expect((await agente.get("/incidencias").query({ texto: `${marcador}-no-existe` })).body).toEqual({ items: [], siguiente: null, hayMas: false });
+      });
+    });
+
+    it("es estable: casos con la misma fecha se desempatan por id y un caso nuevo no mueve las páginas ya pedidas", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const iguales = [];
+        for (let n = 0; n < 7; n += 1) iguales.push(await sembrarCaso(contexto, { categoria: C.QUEJA, marcador }));
+        await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente DISABLE TRIGGER USER");
+        await contexto.client.query("UPDATE chatbot.incidencia_paciente SET fecha_creacion = now() - interval '2 days' WHERE id = ANY($1)", [
+          iguales.map((c) => c.id),
+        ]);
+        await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente ENABLE TRIGGER USER");
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const enOrden = await contexto.database.query<{ codigo: string }>(
+          "SELECT codigo FROM chatbot.incidencia_paciente WHERE id = ANY($1) ORDER BY fecha_creacion DESC, id DESC",
+          [iguales.map((c) => c.id)],
+        );
+
+        const primera = await agente.get("/incidencias").query({ texto: marcador, limite: "3" });
+        const nuevo = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+        const segunda = await agente.get("/incidencias").query({ texto: marcador, limite: "3", cursor: primera.body.siguiente });
+        const tercera = await agente.get("/incidencias").query({ texto: marcador, limite: "3", cursor: segunda.body.siguiente });
+        const vistos = [primera, segunda, tercera].flatMap((res) => (res.body.items as CasoDto[]).map((c) => c.codigo));
+        expect(vistos).toEqual(enOrden.map((f) => f.codigo));
+        expect(tercera.body).toMatchObject({ hayMas: false, siguiente: null });
+
+        const desdeCero = await agente.get("/incidencias").query({ texto: marcador, limite: "1" });
+        expect((desdeCero.body.items as CasoDto[])[0]?.codigo).toBe(nuevo.codigo);
+      });
+    });
+
+    it("el cursor respeta los filtros y la visibilidad de quien lo usa", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const deA = [];
+        for (let n = 0; n < 4; n += 1) {
+          deA.push(await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador, edadHoras: 10 + n }));
+        }
+        const deB = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: b, marcador, edadHoras: 3 });
+        const app = construir(contexto);
+        const usuarioA = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+
+        const primera = await usuarioA.agente.get("/incidencias").query({ texto: marcador, limite: "3", estado: "derivado" });
+        const segunda = await usuarioA.agente.get("/incidencias").query({ texto: marcador, limite: "3", estado: "derivado", cursor: primera.body.siguiente });
+        const vistos = [primera, segunda].flatMap((res) => (res.body.items as CasoDto[]).map((c) => c.codigo));
+        expect(vistos).toEqual(deA.map((c) => c.codigo));
+        expect(vistos).not.toContain(deB.codigo);
+      });
+    });
+
+    it("un cursor inválido responde 400 y no llega a la base", async () => {
+      await usar(async (contexto) => {
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        for (const cursor of ["basura", "MjAyNi0xMC0wNXxubw", Buffer.from("2026-10-05T00:00:00.000Z|1' OR '1'='1").toString("base64url")]) {
+          const res = await agente.get("/incidencias").query({ cursor });
+          expect(res.status).toBe(400);
+          expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        }
       });
     });
 
     it("filtra por estado, por categoría, por casos sin categoría y por texto", async () => {
       await usar(async (contexto) => {
         const marcador = marcaDePrueba();
+        const eess = await crearEstablecimientoDePrueba(contexto);
         const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
-        const derivado = await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", marcador });
+        const derivado = await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", marcador, establecimiento: eess });
         const sin = await sembrarCaso(contexto, { categoria: null, marcador });
         const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
         const ver = async (filtros: Record<string, string>) =>
-          ((await agente.get("/incidencias").query({ texto: marcador, ...filtros })).body.casos as CasoDto[]).map((x) => x.codigo).sort();
+          ((await agente.get("/incidencias").query({ texto: marcador, ...filtros })).body.items as CasoDto[]).map((x) => x.codigo).sort();
 
         expect(await ver({ estado: "derivado" })).toEqual([derivado.codigo]);
         expect(await ver({ estado: "registrado" })).toEqual([sin.codigo]);
@@ -323,9 +529,9 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(await ver({ categoria: "queja", estado: "derivado" })).toEqual([]);
 
         const porCodigo = await agente.get("/incidencias").query({ texto: queja.codigo });
-        expect((porCodigo.body.casos as CasoDto[]).map((x) => x.codigo)).toEqual([queja.codigo]);
+        expect((porCodigo.body.items as CasoDto[]).map((x) => x.codigo)).toEqual([queja.codigo]);
         const porCodigoParcial = await agente.get("/incidencias").query({ texto: queja.codigo.toLowerCase().slice(6) });
-        expect((porCodigoParcial.body.casos as CasoDto[]).map((x) => x.codigo)).toContain(queja.codigo);
+        expect((porCodigoParcial.body.items as CasoDto[]).map((x) => x.codigo)).toContain(queja.codigo);
       });
     });
 
@@ -334,7 +540,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         const marcador = marcaDePrueba();
         await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
         const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
-        const total = async (texto: string) => (await agente.get("/incidencias").query({ texto })).body.total as number;
+        const total = async (texto: string) => ((await agente.get("/incidencias").query({ texto })).body.items as CasoDto[]).length;
 
         expect(await total(marcador)).toBe(1);
         expect(await total(`${marcador}%`)).toBe(0);
@@ -344,15 +550,15 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
       });
     });
 
-    it("solo cuenta los casos que el rol ve en el total y la página", async () => {
+    it("solo lista los casos que el rol ve", async () => {
       await usar(async (contexto) => {
         const marcador = marcaDePrueba();
         await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, marcador });
         await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
         const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR]);
         const res = await agente.get("/incidencias").query({ texto: marcador });
-        expect(res.body.total).toBe(1);
-        expect(res.body.casos).toHaveLength(1);
+        expect(res.body.items).toHaveLength(1);
+        expect(res.body.hayMas).toBe(false);
       });
     });
   });
@@ -389,7 +595,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         const res = await agente.post(`/incidencias/${caso.codigo}/corregir`).send({ categoria: "queja" });
         expect(res.status).toBe(200);
         expect(res.body.mensaje).toBe("Categoría corregida. Se guardó para mejorar la IA.");
-        expect(res.body.caso).toMatchObject({ categoria: "queja", categoriaIa: "reclamo", corregida: true, revisadoPorHumano: true, area: "Área de quejas", acciones: ["derivar"] });
+        expect(res.body.caso).toMatchObject({ categoria: "queja", categoriaIa: "reclamo", corregida: true, revisadoPorHumano: true, area: null, acciones: ["derivar"] });
 
         const [fila] = await contexto.database.query<{ fue_corregida: boolean; categoria_final: string; revisado_por: string }>(
           `SELECT t.fue_corregida, c.codigo AS categoria_final, t.revisado_por
@@ -427,55 +633,188 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(res.body.mensaje).toContain("ya no aparece");
         expect((await agente.get(`/incidencias/${caso.codigo}`)).status).toBe(404);
 
-        const area = await entrar(contexto, app, [R.AREA_DENUNCIA_CORRUPCION]);
-        expect(await accionesDe(area.agente, caso.codigo)).toEqual(["tomar"]);
+        const [fila] = await contexto.database.query<{ area: string }>(
+          "SELECT a.codigo AS area FROM chatbot.incidencia_paciente i JOIN catalogo.area a ON a.id = i.area_destino_id WHERE i.id = $1",
+          [caso.id],
+        );
+        expect(fila?.area).toBe("OTRANS");
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
+        expect(await accionesDe(otrans.agente, caso.codigo)).toEqual(["tomar"]);
       });
     });
 
-    it("derivar: pasa a derivado y el responsable es quien derivó", async () => {
+    it("OTRANS corrige a queja: sale de su vista y el gestor, que ahora la ve, la deriva al establecimiento de origen", async () => {
       await usar(async (contexto) => {
-        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada" });
-        const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR], "Gina Gestora");
+        const app = construir(contexto);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: eess });
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
+        const gestor = await entrar(contexto, app, [R.GESTOR]);
+
+        expect((await otrans.agente.post(`/incidencias/${caso.codigo}/corregir`).send({ categoria: "queja" })).body.caso).toBeNull();
+        expect((await otrans.agente.get(`/incidencias/${caso.codigo}`)).status).toBe(404);
+        expect(await accionesDe(gestor.agente, caso.codigo)).toEqual(["derivar"]);
+
+        const res = await gestor.agente.post(`/incidencias/${caso.codigo}/derivar`);
+        expect(res.status).toBe(200);
+        expect(res.body.caso.area).toEqual({ codigo: eess.areaCodigo, nombre: eess.areaNombre });
+      });
+    });
+
+    it("derivar: va por defecto al área del establecimiento de origen y la base firma la derivación", async () => {
+      await usar(async (contexto) => {
+        const app = construir(contexto);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", establecimiento: eess });
+        const { agente, correo } = await entrar(contexto, app, [R.GESTOR], "Gina Gestora");
         const res = await agente.post(`/incidencias/${caso.codigo}/derivar`);
         expect(res.status).toBe(200);
         expect(res.body.mensaje).toBe("Caso derivado al área.");
-        expect(res.body.caso).toMatchObject({ estado: "derivado", responsable: "Gina Gestora", acciones: [] });
+        expect(res.body.caso).toMatchObject({
+          estado: "derivado",
+          responsable: "Gina Gestora",
+          acciones: [],
+          area: { codigo: eess.areaCodigo, nombre: eess.areaNombre },
+        });
+
+        const [fila] = await contexto.database.query<{ area_destino_id: number; derivado_por: string; derivado_en: Date | null }>(
+          "SELECT area_destino_id, derivado_por, derivado_en FROM chatbot.incidencia_paciente WHERE id = $1",
+          [caso.id],
+        );
+        expect(fila).toMatchObject({ area_destino_id: eess.areaId, derivado_por: `usuario:${correo}` });
+        expect(fila?.derivado_en).toBeInstanceOf(Date);
+
+        const delArea = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, eess);
+        expect(await accionesDe(delArea.agente, caso.codigo)).toEqual(["tomar", "resolver"]);
+      });
+    });
+
+    it("derivar con areaDestino lo envía a ese establecimiento aunque el origen sea otro, y el de origen deja de verlo", async () => {
+      await usar(async (contexto) => {
+        const app = construir(contexto);
+        const origen = await crearEstablecimientoDePrueba(contexto);
+        const destino = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "confirmada", establecimiento: origen });
+        const gestor = await entrar(contexto, app, [R.GESTOR]);
+
+        const res = await gestor.agente.post(`/incidencias/${caso.codigo}/derivar`).send({ areaDestino: destino.areaCodigo });
+        expect(res.status).toBe(200);
+        expect(res.body.caso.area).toEqual({ codigo: destino.areaCodigo, nombre: destino.areaNombre });
+        expect(res.body.caso.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
+
+        expect((await (await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, destino)).agente.get(`/incidencias/${caso.codigo}`)).status).toBe(200);
+        expect((await (await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, origen)).agente.get(`/incidencias/${caso.codigo}`)).status).toBe(404);
+      });
+    });
+
+    it("derivar un caso sin establecimiento de origen y sin areaDestino responde 422 y deja el caso como estaba", async () => {
+      await usar(async (contexto) => {
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada" });
+        const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR]);
+
+        const sinDestino = await agente.post(`/incidencias/${caso.codigo}/derivar`);
+        expect(sinDestino.status).toBe(422);
+        expect(sinDestino.body.errorCode).toBe("UNPROCESSABLE");
+        expect(sinDestino.body.message).toContain("área de destino");
+        expect((await agente.get(`/incidencias/${caso.codigo}`)).body.estado).toBe("clasificado");
+
+        const conDestino = await agente.post(`/incidencias/${caso.codigo}/derivar`).send({ areaDestino: eess.areaCodigo });
+        expect(conDestino.status).toBe(200);
+        expect(conDestino.body.caso.estado).toBe("derivado");
+      });
+    });
+
+    it("derivar solo acepta un área activa de tipo establecimiento: otra, desactivada o inexistente responde 422", async () => {
+      await usar(async (contexto) => {
+        const origen = await crearEstablecimientoDePrueba(contexto);
+        const desactivada = await crearEstablecimientoDePrueba(contexto);
+        await contexto.database.transaction("sistema:prueba", async (tx) => {
+          await tx.query("UPDATE catalogo.area SET activo = false WHERE id = $1", [desactivada.areaId]);
+          await tx.query(
+            "INSERT INTO catalogo.area (codigo, nombre, tipo_area_id) SELECT 'DIRIS-PRUEBA', 'DIRIS de prueba', id FROM catalogo.tipo_area WHERE codigo = 'DIRIS'",
+          );
+        });
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", establecimiento: origen });
+        const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR]);
+
+        for (const areaDestino of ["OTRANS", "DIRIS-PRUEBA", desactivada.areaCodigo, "EESS-NO-EXISTE"]) {
+          const res = await agente.post(`/incidencias/${caso.codigo}/derivar`).send({ areaDestino });
+          expect(res.status).toBe(422);
+          expect(res.body.errorCode).toBe("UNPROCESSABLE");
+        }
+        expect((await agente.post(`/incidencias/${caso.codigo}/derivar`).send({ areaDestino: "" })).status).toBe(400);
+        expect((await agente.get(`/incidencias/${caso.codigo}`)).body.estado).toBe("clasificado");
+      });
+    });
+
+    it("derivar un caso cuyo establecimiento de origen tiene el área desactivada responde 422", async () => {
+      await usar(async (contexto) => {
+        const origen = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", establecimiento: origen });
+        await contexto.database.transaction("sistema:prueba", (tx) =>
+          tx.query("UPDATE catalogo.area SET activo = false WHERE id = $1", [origen.areaId]),
+        );
+        const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR]);
+        const res = await agente.post(`/incidencias/${caso.codigo}/derivar`);
+        expect(res.status).toBe(422);
       });
     });
 
     it("derivar sin revisión, un caso otro o por un rol que no deriva responde 403", async () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
-        const sinRevisar = await sembrarCaso(contexto, { categoria: C.QUEJA });
-        const otro = await sembrarCaso(contexto, { categoria: C.OTRO, revision: "confirmada" });
-        const revisada = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada" });
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const sinRevisar = await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: eess });
+        const otro = await sembrarCaso(contexto, { categoria: C.OTRO, revision: "confirmada", establecimiento: eess });
+        const yaDerivada = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: eess });
         const gestor = await entrar(contexto, app, [R.GESTOR]);
-        const area = await entrar(contexto, app, [R.AREA_QUEJA]);
+        const area = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, eess);
 
         const sinRevisarRes = await gestor.agente.post(`/incidencias/${sinRevisar.codigo}/derivar`);
         expect(sinRevisarRes.status).toBe(403);
         expect(sinRevisarRes.body.errorCode).toBe("FORBIDDEN");
         expect((await gestor.agente.post(`/incidencias/${otro.codigo}/derivar`)).status).toBe(403);
-        expect((await area.agente.post(`/incidencias/${revisada.codigo}/derivar`)).status).toBe(403);
+        expect((await area.agente.post(`/incidencias/${yaDerivada.codigo}/derivar`)).status).toBe(403);
       });
     });
 
-    it("tomar: el área toma lo derivado; otra área no lo ve; corrupción toma directo desde clasificado", async () => {
+    it("el gestor no puede derivar una denuncia por corrupción a un establecimiento: ni la ve (404)", async () => {
+      await usar(async (contexto) => {
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", establecimiento: eess });
+        const { agente } = await entrar(contexto, construir(contexto), [R.GESTOR]);
+        const res = await agente.post(`/incidencias/${corrupcion.codigo}/derivar`).send({ areaDestino: eess.areaCodigo });
+        expect(res.status).toBe(404);
+      });
+    });
+
+    it("tomar: el establecimiento toma lo derivado a su área; otro establecimiento no lo ve; OTRANS toma directo desde clasificado", async () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
-        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO" });
-        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada" });
-        const areaQueja = await entrar(contexto, app, [R.AREA_QUEJA]);
-        const areaReclamo = await entrar(contexto, app, [R.AREA_RECLAMO]);
-        const areaCorrupcion = await entrar(contexto, app, [R.AREA_DENUNCIA_CORRUPCION]);
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a });
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, revision: "confirmada", establecimiento: a });
+        const delA = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+        const delB = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, b);
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
 
-        expect((await areaReclamo.agente.post(`/incidencias/${queja.codigo}/tomar`)).status).toBe(404);
-        const tomada = await areaQueja.agente.post(`/incidencias/${queja.codigo}/tomar`);
+        expect((await delB.agente.post(`/incidencias/${queja.codigo}/tomar`)).status).toBe(404);
+        expect((await delA.agente.post(`/incidencias/${corrupcion.codigo}/tomar`)).status).toBe(404);
+        const tomada = await delA.agente.post(`/incidencias/${queja.codigo}/tomar`);
         expect(tomada.status).toBe(200);
         expect(tomada.body.mensaje).toBe("Caso tomado en gestión.");
         expect(tomada.body.caso).toMatchObject({ estado: "en-gestion", acciones: ["resolver"] });
 
-        const directa = await areaCorrupcion.agente.post(`/incidencias/${corrupcion.codigo}/tomar`);
+        const [marca] = await contexto.database.query<{ tomado_por: string | null; tomado_en: Date | null }>(
+          "SELECT tomado_por, tomado_en FROM chatbot.incidencia_paciente WHERE id = $1",
+          [queja.id],
+        );
+        expect(marca?.tomado_por).toMatch(/^usuario:/);
+        expect(marca?.tomado_en).toBeInstanceOf(Date);
+
+        const directa = await otrans.agente.post(`/incidencias/${corrupcion.codigo}/tomar`);
         expect(directa.status).toBe(200);
         expect(directa.body.caso).toMatchObject({ estado: "en-gestion", categoria: "denuncia-corrupcion" });
         const [fila] = await contexto.database.query<{ estado: string }>(
@@ -488,8 +827,9 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
 
     it("resolver: exige el texto, la base pone RESUELTO y la resolución se registra una sola vez", async () => {
       await usar(async (contexto) => {
-        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION" });
-        const { agente, correo } = await entrar(contexto, construir(contexto), [R.AREA_QUEJA]);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION", establecimiento: eess });
+        const { agente, correo } = await entrar(contexto, construir(contexto), [R.ESTABLECIMIENTO], undefined, eess);
 
         expect((await agente.post(`/incidencias/${caso.codigo}/resolver`).send({ resolucion: "  " })).status).toBe(400);
         expect((await agente.post(`/incidencias/${caso.codigo}/resolver`).send({})).status).toBe(400);
@@ -521,6 +861,44 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
       });
     });
 
+    it("las reglas de áreas y de archivo de la base se traducen a un error claro, no a un 500", async () => {
+      await usar(async (contexto) => {
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const queja = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", establecimiento: eess });
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: eess });
+        const repositorio = new IncidenciaRepository(contexto.database);
+        const traducido = (trabajo: (tx: DbExecutor) => Promise<unknown>) =>
+          contexto.database.transaction("usuario:prueba@minsa.gob.pe", trabajo).catch((e: unknown) => traducirErrorDeBase(e));
+
+        // Derivar exige un área de destino.
+        expect(await traducido((tx) => repositorio.cambiarEstado(tx, queja.id, EstadoIncidencia.DERIVADO))).toMatchObject({
+          statusCode: 422,
+          message: "El caso necesita un área de destino para derivarlo o tomarlo.",
+        });
+        // Una denuncia por corrupción no se deriva a un establecimiento.
+        expect(await traducido((tx) => repositorio.derivar(tx, corrupcion.id, eess.areaId))).toMatchObject({
+          statusCode: 422,
+          message: expect.stringContaining("solo se deriva a la oficina de transparencia"),
+        });
+        // El establecimiento de origen no cambia.
+        const otro = await crearEstablecimientoDePrueba(contexto);
+        expect(
+          await traducido((tx) =>
+            tx.query("UPDATE chatbot.incidencia_paciente SET establecimiento_id = $2 WHERE id = $1", [queja.id, otro.establecimientoId]),
+          ),
+        ).toMatchObject({ statusCode: 409, message: "El establecimiento de origen del caso no se puede cambiar." });
+        // Un caso abierto no se archiva a mano.
+        expect(
+          await traducido((tx) =>
+            tx.query(
+              "UPDATE chatbot.incidencia_paciente SET estado_incidencia_id = 7, motivo_archivo_id = (SELECT id FROM catalogo.motivo_archivo WHERE codigo = 'VENCIDA_SIN_ATENDER') WHERE id = $1",
+              [queja.id],
+            ),
+          ),
+        ).toMatchObject({ statusCode: 409, message: "Un caso abierto solo se archiva cuando vence su plazo de atención." });
+      });
+    });
+
     it("si la base rechaza el cambio por una carrera, el repositorio lo traduce a un 409 claro", async () => {
       await usar(async (contexto) => {
         const caso = await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "corregida", corregidaA: C.QUEJA });
@@ -539,11 +917,12 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
         const marcador = marcaDePrueba();
-        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, confianza: 77 });
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, confianza: 77, establecimiento: eess });
         const gestor = await entrar(contexto, app, [R.GESTOR], "Gina Gestora");
         await gestor.agente.post(`/incidencias/${caso.codigo}/confirmar`);
         await gestor.agente.post(`/incidencias/${caso.codigo}/derivar`);
-        const area = await entrar(contexto, app, [R.AREA_QUEJA], "Aldo Área");
+        const area = await entrar(contexto, app, [R.ESTABLECIMIENTO], "Aldo Área", eess);
         await area.agente.post(`/incidencias/${caso.codigo}/tomar`);
 
         const res = await area.agente.get(`/incidencias/${caso.codigo}`);
@@ -573,12 +952,13 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
     it("el responsable es quien derivó, o si no quien corrigió, o si no quien confirmó; sin persona, ninguno", async () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
+        const eess = await crearEstablecimientoDePrueba(contexto);
         const ana = await crearUsuarioDePrueba(contexto, [R.GESTOR], "Ana Corrige");
         const beto = await crearUsuarioDePrueba(contexto, [R.GESTOR], "Beto Deriva");
         const corregido = await sembrarCaso(contexto, { categoria: C.RECLAMO, revision: "corregida", corregidaA: C.QUEJA, actorRevision: `usuario:${ana}` });
         const derivado = await sembrarCaso(contexto, {
           categoria: C.RECLAMO, revision: "corregida", corregidaA: C.QUEJA, actorRevision: `usuario:${ana}`,
-          estado: "DERIVADO", actorDerivacion: `usuario:${beto}`,
+          estado: "DERIVADO", actorDerivacion: `usuario:${beto}`, establecimiento: eess,
         });
         const sinPersona = await sembrarCaso(contexto, { categoria: C.QUEJA });
         const delSistema = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", actorRevision: "sistema:prueba" });
@@ -609,21 +989,27 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
     it("cuenta lo que a cada persona le toca atender y por vencer, y baja cuando se deriva o se resuelve", async () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const otroEess = await crearEstablecimientoDePrueba(contexto);
         const admin = await entrar(contexto, app, [R.ADMINISTRADOR]);
         const gestor = await entrar(contexto, app, [R.GESTOR]);
-        const areaQueja = await entrar(contexto, app, [R.AREA_QUEJA]);
+        const delEess = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, eess);
+        const delOtro = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, otroEess);
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
         const antesAdmin = await resumen(admin.agente);
         const antesGestor = await resumen(gestor.agente);
-        const antesArea = await resumen(areaQueja.agente);
+        const antesEess = await resumen(delEess.agente);
+        const antesOtro = await resumen(delOtro.agente);
+        const antesOtrans = await resumen(otrans.agente);
 
-        await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 10 });
-        const sinRevisarB = await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 60 });
-        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", edadHoras: 70 });
-        await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 80 });
-        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION", edadHoras: 90 });
-        await sembrarCaso(contexto, { categoria: C.QUEJA, estado: "RESUELTO", edadHoras: 100, resueltoHaceHoras: 5 });
-        await sembrarCaso(contexto, { categoria: C.QUEJA, estado: "ARCHIVADO", edadHoras: 200 });
-        await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, edadHoras: 61 });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 10, establecimiento: eess });
+        const sinRevisarB = await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 60, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", edadHoras: 70, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, edadHoras: 80, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "EN_GESTION", edadHoras: 90, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, estado: "RESUELTO", edadHoras: 100, resueltoHaceHoras: 5, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.QUEJA, estado: "ARCHIVADO", edadHoras: 200, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, edadHoras: 61, establecimiento: eess });
 
         const admin2 = await resumen(admin.agente);
         expect(delta(admin2, antesAdmin)).toEqual({ porVencer: 3, vencidos: 2, total: 5 });
@@ -632,23 +1018,30 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         const gestor2 = await resumen(gestor.agente);
         expect(delta(gestor2, antesGestor)).toEqual({ porVencer: 1, vencidos: 1, total: 2 });
 
-        const area2 = await resumen(areaQueja.agente);
-        expect(delta(area2, antesArea)).toEqual({ porVencer: 1, vencidos: 1, total: 2 });
+        // El establecimiento cuenta lo derivado a su área y nunca la corrupción; otro establecimiento no cuenta nada.
+        const eess2 = await resumen(delEess.agente);
+        expect(delta(eess2, antesEess)).toEqual({ porVencer: 1, vencidos: 1, total: 2 });
+        expect(delta(await resumen(delOtro.agente), antesOtro)).toEqual({ porVencer: 0, vencidos: 0, total: 0 });
+        expect(eess2.casos.every((c) => c.categoria !== "denuncia-corrupcion")).toBe(true);
+
+        // OTRANS solo cuenta la corrupción que le toca revisar.
+        expect(delta(await resumen(otrans.agente), antesOtrans)).toEqual({ porVencer: 1, vencidos: 0, total: 1 });
 
         expect((await gestor.agente.post(`/incidencias/${sinRevisarB.codigo}/confirmar`)).status).toBe(200);
         expect(delta(await resumen(gestor.agente), gestor2)).toEqual({ porVencer: 0, vencidos: 0, total: 0 });
 
         expect((await gestor.agente.post(`/incidencias/${sinRevisarB.codigo}/derivar`)).status).toBe(200);
         expect(delta(await resumen(gestor.agente), gestor2)).toEqual({ porVencer: -1, vencidos: 0, total: -1 });
-        const area3 = await resumen(areaQueja.agente);
-        expect(delta(area3, area2)).toEqual({ porVencer: 1, vencidos: 0, total: 1 });
+        const eess3 = await resumen(delEess.agente);
+        expect(delta(eess3, eess2)).toEqual({ porVencer: 1, vencidos: 0, total: 1 });
+        expect(delta(await resumen(delOtro.agente), antesOtro)).toEqual({ porVencer: 0, vencidos: 0, total: 0 });
         expect((await resumen(admin.agente)).total).toBe(admin2.total);
 
-        expect((await areaQueja.agente.post(`/incidencias/${sinRevisarB.codigo}/tomar`)).status).toBe(200);
-        expect(delta(await resumen(areaQueja.agente), area3)).toEqual({ porVencer: 0, vencidos: 0, total: 0 });
+        expect((await delEess.agente.post(`/incidencias/${sinRevisarB.codigo}/tomar`)).status).toBe(200);
+        expect(delta(await resumen(delEess.agente), eess3)).toEqual({ porVencer: 0, vencidos: 0, total: 0 });
 
-        expect((await areaQueja.agente.post(`/incidencias/${sinRevisarB.codigo}/resolver`).send({ resolucion: "Atendido." })).status).toBe(200);
-        expect(delta(await resumen(areaQueja.agente), area3)).toEqual({ porVencer: -1, vencidos: 0, total: -1 });
+        expect((await delEess.agente.post(`/incidencias/${sinRevisarB.codigo}/resolver`).send({ resolucion: "Atendido." })).status).toBe(200);
+        expect(delta(await resumen(delEess.agente), eess3)).toEqual({ porVencer: -1, vencidos: 0, total: -1 });
         expect((await resumen(admin.agente)).total).toBe(admin2.total - 1);
       });
     });
@@ -676,11 +1069,12 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
     it("un archivado, un resuelto o un caso en plazo no cuentan", async () => {
       await usar(async (contexto) => {
         const app = construir(contexto);
-        const { agente } = await entrar(contexto, app, [R.AREA_RECLAMO]);
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        const { agente } = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, eess);
         const antes = await resumen(agente);
-        await sembrarCaso(contexto, { categoria: C.RECLAMO, edadHoras: 5 });
-        await sembrarCaso(contexto, { categoria: C.RECLAMO, estado: "RESUELTO", edadHoras: 300, resueltoHaceHoras: 100 });
-        await sembrarCaso(contexto, { categoria: C.RECLAMO, estado: "ARCHIVADO", edadHoras: 300 });
+        await sembrarCaso(contexto, { categoria: C.RECLAMO, edadHoras: 5, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.RECLAMO, estado: "RESUELTO", edadHoras: 300, resueltoHaceHoras: 100, establecimiento: eess });
+        await sembrarCaso(contexto, { categoria: C.RECLAMO, estado: "ARCHIVADO", edadHoras: 300, establecimiento: eess });
         const despues = await resumen(agente);
         expect(despues.total).toBe(antes.total);
       });

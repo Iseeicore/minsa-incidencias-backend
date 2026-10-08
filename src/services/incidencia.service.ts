@@ -11,10 +11,12 @@ import {
 import {
   MENSAJE_ACCION_NO_PERMITIDA,
   MENSAJE_ACCION_REALIZADA,
+  MENSAJE_AREA_DESTINO_INVALIDA,
   MENSAJE_CASO_NO_ENCONTRADO,
   MENSAJE_FALTA_CATEGORIA,
   MENSAJE_FALTA_RESOLUCION,
   MENSAJE_MISMA_CATEGORIA,
+  MENSAJE_SIN_DESTINO_DE_DERIVACION,
   mensajeCategoriaCorregidaFueraDeVista,
 } from "@/constants/mensajes-incidencias.js";
 import { actorUsuarioInterno } from "@/database/actor.js";
@@ -32,6 +34,7 @@ import {
   type VisibilidadCasos,
 } from "@/repositories/incidencia.repository.js";
 import { accionesPermitidas, reglasDeAvisos, veCasosSinCategoria } from "@/utils/acciones-permitidas.js";
+import { codificarCursor } from "@/utils/cursor-listado.js";
 import { construirHistorial } from "@/utils/historial-incidencia.js";
 import { calcularPlazo, horasEntre, type PlazosConfigurados } from "@/utils/plazo-incidencia.js";
 import { describirReclamante } from "@/utils/reclamante.js";
@@ -57,11 +60,11 @@ export const plazosDeEntorno = (env: Pick<Env, "PLAZO_ATENCION_DIAS" | "VIGENCIA
 const noEncontrado = () => new AppError(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, MENSAJE_CASO_NO_ENCONTRADO);
 
 function visibilidadDe(sesion: SesionActual): VisibilidadCasos {
-  return { roles: sesion.roles, verSinCategoria: veCasosSinCategoria(sesion.roles) };
+  return { roles: sesion.roles, verSinCategoria: veCasosSinCategoria(sesion.roles), areaId: sesion.area?.id ?? null };
 }
 
 function filtrosDe(consulta: ConsultaListado): FiltrosDeListado {
-  const filtros: FiltrosDeListado = { orden: consulta.orden, direccion: consulta.direccion };
+  const filtros: FiltrosDeListado = {};
   if (consulta.estado) filtros.estado = ESTADO_DESDE_API[consulta.estado];
   if (consulta.categoria === SIN_CATEGORIA_API) filtros.sinCategoria = true;
   else if (consulta.categoria) filtros.categoria = CATEGORIA_DESDE_API[consulta.categoria];
@@ -82,12 +85,15 @@ export class IncidenciaService implements IncidenciaServicio {
   ) {}
 
   async listar(sesion: SesionActual, consulta: ConsultaListado): Promise<ListaCasosDto> {
-    const { filas, total } = await this.casos.listar(visibilidadDe(sesion), filtrosDe(consulta), consulta.pagina, consulta.tamano);
+    // Se pide un caso de más: si llega, hay otra página y el último de esta es la posición del cursor.
+    const filas = await this.casos.listar(visibilidadDe(sesion), filtrosDe(consulta), consulta.limite + 1, consulta.despuesDe ?? null);
+    const hayMas = filas.length > consulta.limite;
+    const pagina = hayMas ? filas.slice(0, consulta.limite) : filas;
+    const ultima = pagina.at(-1);
     return {
-      casos: filas.map((fila) => this.resumir(fila, sesion)),
-      pagina: consulta.pagina,
-      tamano: consulta.tamano,
-      total,
+      items: pagina.map((fila) => this.resumir(fila, sesion)),
+      siguiente: hayMas && ultima ? codificarCursor({ fechaCreacion: ultima.fechaCreacion, id: ultima.id }) : null,
+      hayMas,
     };
   }
 
@@ -158,7 +164,7 @@ export class IncidenciaService implements IncidenciaServicio {
         return this.casos.corregir(tx, fila.id, nueva);
       }
       case AccionIncidencia.DERIVAR:
-        return this.casos.cambiarEstado(tx, fila.id, EstadoIncidencia.DERIVADO);
+        return this.casos.derivar(tx, fila.id, await this.areaDeDerivacion(tx, fila, datos));
       case AccionIncidencia.TOMAR:
         return this.casos.cambiarEstado(tx, fila.id, EstadoIncidencia.EN_GESTION);
       case AccionIncidencia.RESOLVER: {
@@ -166,6 +172,17 @@ export class IncidenciaService implements IncidenciaServicio {
         return this.casos.resolver(tx, fila.id, datos.resolucion);
       }
     }
+  }
+
+  /** El área elegida por la persona o, si no eligió, la del establecimiento de origen; siempre de un establecimiento activo. */
+  private async areaDeDerivacion(tx: DbExecutor, fila: FilaCaso, datos: DatosAccion): Promise<number> {
+    if (!datos.areaDestino && fila.areaOrigenId === null) {
+      throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, MENSAJE_SIN_DESTINO_DE_DERIVACION);
+    }
+    const criterio = datos.areaDestino ? { codigo: datos.areaDestino } : { id: fila.areaOrigenId as number };
+    const areaId = await this.casos.areaReceptora(criterio, tx);
+    if (areaId === null) throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, MENSAJE_AREA_DESTINO_INVALIDA);
+    return areaId;
   }
 
   private resumir(fila: FilaCaso, sesion: SesionActual): CasoResumenDto {
@@ -177,7 +194,11 @@ export class IncidenciaService implements IncidenciaServicio {
       etiquetas: [],
       prioridad: null,
       organismo: null,
-      area: fila.area,
+      area: fila.areaCodigo && fila.areaNombre ? { codigo: fila.areaCodigo, nombre: fila.areaNombre } : null,
+      establecimiento:
+        fila.establecimientoCodigo && fila.establecimientoNombre
+          ? { codigoRenipress: fila.establecimientoCodigo, nombre: fila.establecimientoNombre }
+          : null,
       responsable: fila.responsable,
       estado: ESTADO_API[fila.estado],
       horasDesdeLlegada: Math.max(0, horasEntre(fila.fechaCreacion, fila.ahora)),

@@ -46,6 +46,7 @@ import { describirReclamante } from "@/utils/reclamante.js";
 import type { SesionActual } from "./auth.types.js";
 import type {
   CasoDetalleDto,
+  CasoEnviadoAOtransDto,
   CasoResumenDto,
   ConsultaListado,
   DatosAccion,
@@ -126,7 +127,12 @@ export class IncidenciaService implements IncidenciaServicio {
     };
   }
 
-  async ejecutar(sesion: SesionActual, codigo: string, accion: AccionIncidencia, datos: DatosAccion): Promise<ResultadoAccionDto> {
+  async ejecutar(
+    sesion: SesionActual,
+    codigo: string,
+    accion: AccionIncidencia,
+    datos: DatosAccion,
+  ): Promise<ResultadoAccionDto | CasoEnviadoAOtransDto> {
     const visible = visibilidadDe(sesion);
     try {
       await this.database.transaction(actorUsuarioInterno(sesion.correo), async (tx) => {
@@ -151,6 +157,10 @@ export class IncidenciaService implements IncidenciaServicio {
       return { mensaje: MENSAJE_ACCION_REALIZADA[accion], caso: await this.detallar(actualizado, sesion) };
     }
     const nueva = datos.categoria ? CATEGORIA_DESDE_API[datos.categoria] : null;
+    // Corrupción que se escapó a un establecimiento: la base la manda a OTRANS y ya no es de quien la corrigió. Sin datos del caso.
+    if (accion === AccionIncidencia.CORREGIR && nueva === CategoriaIncidencia.DENUNCIA_CORRUPCION) {
+      return { codigo, enviadoAOtrans: true };
+    }
     const mensaje =
       accion === AccionIncidencia.CORREGIR && nueva
         ? mensajeCategoriaCorregidaFueraDeVista(CATEGORIA_ETIQUETA[nueva])
@@ -240,7 +250,7 @@ export class IncidenciaService implements IncidenciaServicio {
       revisadoPorHumano: fila.revisada,
       corregida: fila.corregida,
       plazo: calcularPlazo(
-        { estado: fila.estado, fechaCreacion: fila.fechaCreacion, resueltoEn: fila.resueltoEn, ahora: fila.ahora },
+        { estado: fila.estado, fechaCreacion: fila.fechaCreacion, reabiertoEn: fila.reabiertoEn, resueltoEn: fila.resueltoEn, ahora: fila.ahora },
         this.plazos,
       ),
       acciones: accionesPermitidas(sesion.roles, { estado: fila.estado, categoria: fila.categoria, revisada: fila.revisada }),

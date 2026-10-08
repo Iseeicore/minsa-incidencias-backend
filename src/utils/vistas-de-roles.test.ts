@@ -5,12 +5,11 @@ import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { vistasDeRoles } from "@/utils/vistas-de-roles.js";
 
 const TODAS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES, VistaCodigo.QR, VistaCodigo.USUARIOS];
-const SIN_QR_NI_USUARIOS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES];
 const SOLO_CASOS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS];
 const SIN_DERIVACIONES = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.QR, VistaCodigo.USUARIOS];
 const VISTAS_POR_ROL = [
   [RolCodigo.ADMINISTRADOR, TODAS],
-  [RolCodigo.GESTOR, SIN_QR_NI_USUARIOS],
+  [RolCodigo.GESTOR, SOLO_CASOS],
   [RolCodigo.OTRANS, SOLO_CASOS],
   [RolCodigo.ESTABLECIMIENTO, SIN_DERIVACIONES],
 ] as const;
@@ -27,12 +26,12 @@ describe("PERMISOS_POR_ROL", () => {
     });
   });
 
-  it("solo el administrador y el gestor ven Derivaciones", () => {
+  it("solo el administrador ve Derivaciones", () => {
     const conDerivaciones = Object.entries(PERMISOS_POR_ROL)
       .filter(([, permisos]) => permisos.vistas.includes(VistaCodigo.DERIVACIONES))
       .map(([rol]) => rol)
       .sort();
-    expect(conDerivaciones).toEqual([RolCodigo.ADMINISTRADOR, RolCodigo.GESTOR].sort());
+    expect(conDerivaciones).toEqual([RolCodigo.ADMINISTRADOR]);
   });
 
   it("solo el administrador y el establecimiento ven Códigos QR", () => {
@@ -83,7 +82,7 @@ describe("vistasDeRoles", () => {
 
   it("ignora los roles que la tabla no conoce, incluido DIRIS, que está desactivado", () => {
     expect(vistasDeRoles([RolCodigo.DIRIS])).toEqual([]);
-    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(SIN_QR_NI_USUARIOS);
+    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(SOLO_CASOS);
   });
 
   it("no confunde un rol con propiedades heredadas del objeto", () => {
@@ -93,6 +92,6 @@ describe("vistasDeRoles", () => {
   it("devuelve siempre un arreglo nuevo que se puede modificar sin tocar la tabla", () => {
     const vistas = vistasDeRoles([RolCodigo.GESTOR]);
     vistas.pop();
-    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(SIN_QR_NI_USUARIOS);
+    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(SOLO_CASOS);
   });
 });

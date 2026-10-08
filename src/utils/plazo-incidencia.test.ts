@@ -55,6 +55,41 @@ describe("calcularPlazo de atención (3 días desde que llega)", () => {
   });
 });
 
+describe("calcularPlazo de un caso reabierto (3 días desde la última reapertura)", () => {
+  const plazo = (horasLlegada: number, horasReapertura: number | null) =>
+    calcularPlazo(
+      {
+        estado: E.EN_GESTION,
+        fechaCreacion: haceHoras(horasLlegada),
+        reabiertoEn: horasReapertura === null ? null : haceHoras(horasReapertura),
+        resueltoEn: null,
+        ahora: AHORA,
+      },
+      PLAZOS,
+    );
+
+  it("reabierto hace 1 día queda con 2 días (48 horas) aunque haya llegado hace mucho", () => {
+    expect(plazo(500, 24)).toEqual({
+      tipo: PlazoTipo.ATENCION,
+      estado: PlazoEstado.EN_PLAZO,
+      venceEn: new Date(haceHoras(24).getTime() + 72 * 3_600_000).toISOString(),
+      horasRestantes: 48,
+    });
+  });
+
+  it("reabierto con el plazo de llegada vencido ya no figura vencido", () => {
+    expect(plazo(200, 10)).toMatchObject({ estado: PlazoEstado.EN_PLAZO, horasRestantes: 62 });
+  });
+
+  it("reabierto hace más de 3 días vuelve a vencer", () => {
+    expect(plazo(500, 80)).toMatchObject({ estado: PlazoEstado.VENCIDO, horasRestantes: -8 });
+  });
+
+  it("sin reapertura cuenta desde la llegada", () => {
+    expect(plazo(80, null)).toMatchObject({ estado: PlazoEstado.VENCIDO, horasRestantes: -8 });
+  });
+});
+
 describe("calcularPlazo de vigencia de la resolución (3 días desde que se resuelve)", () => {
   const plazo = (horas: number) =>
     calcularPlazo(

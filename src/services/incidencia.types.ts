@@ -125,9 +125,23 @@ export interface ResultadoAccionDto {
   caso: CasoDetalleDto | null;
 }
 
+/**
+ * Respuesta de corregir cuando el caso pasó a corrupción y ya no es visible para quien lo corrigió (un establecimiento
+ * o un gestor): solo el código y la marca, nunca datos del caso. Es irreversible para esa persona.
+ */
+export interface CasoEnviadoAOtransDto {
+  codigo: string;
+  enviadoAOtrans: true;
+}
+
 export interface IncidenciaServicio {
   listar(sesion: SesionActual, consulta: ConsultaListado): Promise<ListaCasosDto>;
   detalle(sesion: SesionActual, codigo: string): Promise<CasoDetalleDto>;
   porVencer(sesion: SesionActual): Promise<PorVencerDto>;
-  ejecutar(sesion: SesionActual, codigo: string, accion: AccionIncidencia, datos: DatosAccion): Promise<ResultadoAccionDto>;
+  ejecutar(
+    sesion: SesionActual,
+    codigo: string,
+    accion: AccionIncidencia,
+    datos: DatosAccion,
+  ): Promise<ResultadoAccionDto | CasoEnviadoAOtransDto>;
 }

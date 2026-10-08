@@ -100,7 +100,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     });
   });
 
-  it("Derivaciones solo para gestor y administrador; Códigos QR y Usuarios solo para establecimiento y administrador", async () => {
+  it("Derivaciones solo para el administrador; Códigos QR y Usuarios solo para establecimiento y administrador", async () => {
     await usar(async (contexto) => {
       const eess = await crearEstablecimientoDePrueba(contexto);
       await crearUsuario(contexto, "otrans@minsa.gob.pe", [RolCodigo.OTRANS], "OTRANS", "OTRANS");
@@ -114,7 +114,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       };
       expect(await vistasDe("otrans@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
       expect(await vistasDe("eess@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS", "QR", "USUARIOS"]);
-      expect(await vistasDe("gestor@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+      expect(await vistasDe("gestor@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
     });
   });
 
@@ -143,7 +143,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR, RolCodigo.ESTABLECIMIENTO]);
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES", "QR", "USUARIOS"]);
+      expect((await agente.get("/auth/me")).body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "QR", "USUARIOS"]);
     });
   });
 
@@ -178,7 +178,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       await crearUsuario(contexto, "ana@minsa.gob.pe", [RolCodigo.GESTOR]);
       const agente = request.agent(construir(contexto));
       await agente.post("/auth/login").send({ correo: "ana@minsa.gob.pe", password: CLAVE });
-      expect((await agente.get("/auth/me")).body.vistas).toHaveLength(4);
+      expect((await agente.get("/auth/me")).body.vistas).toHaveLength(3);
 
       await contexto.client.query("UPDATE gestion.rol SET activo = false WHERE codigo = 'GESTOR'");
 

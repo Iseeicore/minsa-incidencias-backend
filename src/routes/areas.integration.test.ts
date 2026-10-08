@@ -72,7 +72,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     });
   });
 
-  it("solo el administrador lista todas; el gestor, OTRANS y cada establecimiento, solo la suya", async () => {
+  it("el administrador y el gestor listan todas; OTRANS y cada establecimiento, solo la suya", async () => {
     await usar(async (contexto) => {
       const app = construir(contexto);
       const marca = marcaDeNombre();
@@ -83,9 +83,9 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
       expect(await nombres(admin, { q: marca })).toHaveLength(3);
 
       const gestor = await entrar(contexto, app, [R.GESTOR], eb.areaCodigo);
-      expect(await nombres(gestor, { q: marca })).toEqual([eb.nombre]);
-      expect(await nombres(gestor, {})).toEqual([eb.nombre]);
-      expect(await nombres(gestor, { q: ea.nombre })).toEqual([]);
+      // El gestor elige el establecimiento destino al derivar: lista todos los establecimientos, no solo el suyo.
+      expect((await nombres(gestor, { q: marca })).sort()).toEqual((await nombres(admin, { q: marca })).sort());
+      expect(await nombres(gestor, { q: ea.nombre })).toEqual([ea.nombre]);
 
       const delA = await entrar(contexto, app, [R.ESTABLECIMIENTO], ea.areaCodigo);
       expect(await nombres(delA, { q: marca })).toEqual([ea.nombre]);
@@ -107,7 +107,7 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     await usar(async (contexto) => {
       // La base ya no deja un rol de área sin área; se simula quitándosela después de crear al usuario.
       const eess = await crearEstablecimientoDePrueba(contexto);
-      const correo = await crearUsuarioDePrueba(contexto, [R.GESTOR], undefined, undefined, eess.areaCodigo);
+      const correo = await crearUsuarioDePrueba(contexto, [R.ESTABLECIMIENTO], undefined, undefined, eess.areaCodigo);
       const agente = await iniciarSesion(construir(contexto), correo);
       await contexto.client.query("ALTER TABLE gestion.usuario_interno DISABLE TRIGGER USER");
       await contexto.client.query("UPDATE gestion.usuario_interno SET area_id = NULL WHERE correo = $1", [correo]);

@@ -94,7 +94,7 @@ describe("AuthService.resolverSesion", () => {
   it("devuelve las vistas de los roles y no toca la actividad si es reciente", async () => {
     const { service, sesiones } = build(ANA, vigente);
     const sesion = await service.resolverSesion("s-1");
-    expect(sesion?.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+    expect(sesion?.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
     expect(sesiones.buscarVigente).toHaveBeenCalledWith("s-1", 30, 60);
     expect(sesiones.tocarActividad).not.toHaveBeenCalled();
   });

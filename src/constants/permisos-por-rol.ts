@@ -46,7 +46,7 @@ const sin = (...excluidas: readonly VistaCodigo[]): readonly VistaCodigo[] => TO
  * `QR` (generador de códigos QR de WhatsApp por establecimiento) solo la tienen el administrador y los establecimientos;
  * `USUARIOS` (gestión de usuarios) también: solo quien puede crear usuarios la abre.
  */
-const VISTAS_DEL_GESTOR = sin(VistaCodigo.QR, VistaCodigo.USUARIOS);
+const VISTAS_DEL_GESTOR = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR, VistaCodigo.USUARIOS);
 const VISTAS_DE_OTRANS = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR, VistaCodigo.USUARIOS);
 const VISTAS_DEL_ESTABLECIMIENTO = sin(VistaCodigo.DERIVACIONES);
 
@@ -57,10 +57,26 @@ const { CONFIRMAR, CORREGIR, DERIVAR, TOMAR, RESOLVER, ARCHIVAR, REABRIR } = Acc
 const CATEGORIAS_DEL_AREA: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO, OTRO];
 const ESTADOS_ARCHIVABLES: readonly EstadoIncidencia[] = [CLASIFICADO, DERIVADO, EN_GESTION];
 
-/** Lo que hacen sobre los casos de su propia área el responsable del establecimiento y el gestor: revisar, atender, archivar y reabrir. */
+/**
+ * A qué puede cambiar la categoría quien corrige en un establecimiento: queja, reclamo, otro y también corrupción.
+ * Corrupción es la salida de emergencia de un caso que se escapó al establecimiento: la base lo manda a OTRANS y
+ * deja de ser visible para quien lo corrigió (irreversible).
+ */
+const CATEGORIAS_AL_CORREGIR_EN_EL_AREA: readonly CategoriaIncidencia[] = [...CATEGORIAS_DEL_AREA, DENUNCIA_CORRUPCION];
+
+/**
+ * Lo que hacen sobre los casos de su propia área el responsable del establecimiento y el gestor: revisar, atender,
+ * archivar y reabrir. Ninguna regla es sobre un caso de corrupción: solo se puede reclasificar hacia ella al corregir.
+ */
 const ACCIONES_DE_REVISION_EN_EL_AREA: readonly ReglaDeAccion[] = [
   { accion: CONFIRMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: false },
-  { accion: CORREGIR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: false, categoriasDestino: CATEGORIAS_DEL_AREA },
+  {
+    accion: CORREGIR,
+    estados: [CLASIFICADO],
+    categorias: CATEGORIAS_DEL_AREA,
+    revisada: false,
+    categoriasDestino: CATEGORIAS_AL_CORREGIR_EN_EL_AREA,
+  },
   { accion: TOMAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: true },
   { accion: TOMAR, estados: [DERIVADO], categorias: CATEGORIAS_DEL_AREA },
   { accion: RESOLVER, estados: [EN_GESTION, DERIVADO], categorias: CATEGORIAS_DEL_AREA },
@@ -76,9 +92,15 @@ const ACCIONES_DE_REVISION_EN_EL_AREA: readonly ReglaDeAccion[] = [
  *
  * La revisión ocurre donde llega el caso: el responsable del establecimiento y el gestor (que pertenece siempre a un
  * establecimiento) confirman, corrigen, toman, resuelven, archivan y reabren los casos de su área, y OTRANS hace lo
- * mismo con la corrupción. No derivan: derivar (cambiar el área de destino) solo lo hacen OTRANS y el administrador. El
- * administrador revisa, deriva, archiva y reabre cualquier caso, pero no toma ni resuelve: ese trabajo lo hace el área.
- * Solo el administrador lista todas las áreas; los demás roles ven la suya.
+ * mismo con la corrupción. Derivar (cambiar el área de destino) lo hacen OTRANS, el administrador y el gestor (este
+ * último solo una queja, reclamo u otro ya revisado, a otro establecimiento); el responsable del establecimiento no deriva.
+ * El administrador revisa, deriva, archiva y reabre cualquier caso, pero no toma ni resuelve: ese trabajo lo hace el área.
+ * El administrador y el gestor listan todas las áreas (para elegir el destino al derivar); OTRANS y el establecimiento ven la suya.
+ *
+ * Corrupción nunca queda en un establecimiento: ninguna regla de establecimiento ni de gestor la cubre, y al corregir
+ * pueden reclasificar un caso a corrupción (sale de su vista hacia OTRANS).
+ * Regla de diseño para el filtro de corrupción futuro (aún no conectado): ante la duda, OTRANS. Cualquier señal de corrupción,
+ * aun con certeza baja, va a revisión de OTRANS y nunca a un establecimiento.
  *
  * Usuarios: el administrador crea y gestiona los de cualquier área y asigna cualquier rol; el responsable del
  * establecimiento, solo los de su propio establecimiento y solo los roles GESTOR o ESTABLECIMIENTO (nunca
@@ -106,9 +128,9 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
     vistas: VISTAS_DEL_GESTOR,
     usuarios: null,
     veSinCategoria: false,
-    veTodasLasAreas: false,
+    veTodasLasAreas: true,
     avisaTodoLoAbierto: false,
-    acciones: ACCIONES_DE_REVISION_EN_EL_AREA,
+    acciones: [...ACCIONES_DE_REVISION_EN_EL_AREA, { accion: DERIVAR, estados: [CLASIFICADO], categorias: CATEGORIAS_DEL_AREA, revisada: true }],
   },
   [RolCodigo.OTRANS]: {
     vistas: VISTAS_DE_OTRANS,

@@ -11,6 +11,8 @@ export interface PlazosConfigurados {
 export interface EntradaDePlazo {
   estado: EstadoIncidencia;
   fechaCreacion: Date;
+  /** Última reapertura: el plazo de atención de un caso reabierto cuenta desde aquí y no desde que llegó. */
+  reabiertoEn?: Date | null;
   resueltoEn: Date | null;
   ahora: Date;
 }
@@ -32,15 +34,15 @@ const sumarDias = (fecha: Date, dias: number): Date => new Date(fecha.getTime() 
 
 /**
  * Plazo de un caso, calculado con la hora de la base. Un caso abierto tiene el plazo de atención (desde que
- * llega) y puede estar en plazo, por vencer (le quedan las horas de aviso o menos) o vencido. Un caso resuelto
+ * llega o, si se reabrió, desde su última reapertura) y puede estar en plazo, por vencer (le quedan las horas de aviso o menos) o vencido. Un caso resuelto
  * tiene la vigencia de su resolución (desde que se resuelve): en plazo o vencido, a la espera del archivado.
  * Un caso archivado no tiene plazo.
  */
 export function calcularPlazo(entrada: EntradaDePlazo, plazos: PlazosConfigurados): PlazoCalculado {
-  const { estado, fechaCreacion, resueltoEn, ahora } = entrada;
+  const { estado, fechaCreacion, reabiertoEn, resueltoEn, ahora } = entrada;
 
   if (ESTADOS_ABIERTOS.includes(estado)) {
-    const venceEn = sumarDias(fechaCreacion, plazos.atencionDias);
+    const venceEn = sumarDias(reabiertoEn ?? fechaCreacion, plazos.atencionDias);
     const horasRestantes = horasEntre(ahora, venceEn);
     let estadoDelPlazo: PlazoEstado = PlazoEstado.EN_PLAZO;
     if (venceEn.getTime() <= ahora.getTime()) estadoDelPlazo = PlazoEstado.VENCIDO;

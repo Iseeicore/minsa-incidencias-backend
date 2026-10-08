@@ -115,6 +115,9 @@ const TIPOS_DE_AREA_SIN_SENSIBLES: readonly TipoArea[] = [TipoArea.ESTABLECIMIEN
 
 const ESTADOS_CONOCIDOS: readonly EstadoIncidencia[] = Object.values(EstadoIncidencia);
 
+/** Desde cuándo corre el plazo de atención: la última reapertura o, si nunca se reabrió, la llegada (igual que en la base). */
+const INICIO_DEL_PLAZO = "COALESCE(i.reabierto_en, i.fecha_creacion)";
+
 const DESDE_BASICO = `
   FROM chatbot.incidencia_paciente i
   JOIN catalogo.estado_incidencia e ON e.id = i.estado_incidencia_id
@@ -343,7 +346,7 @@ export class IncidenciaRepository {
     const dias = p.agregar(atencionDias);
     const [fila] = await ejecutor.query<ConteoPorVencer>(
       `SELECT count(*)::int AS total,
-              (count(*) FILTER (WHERE i.fecha_creacion + make_interval(days => ${dias}::int) <= now()))::int AS vencidos
+              (count(*) FILTER (WHERE ${INICIO_DEL_PLAZO} + make_interval(days => ${dias}::int) <= now()))::int AS vencidos
          ${DESDE_BASICO}
         WHERE ${condiciones.join(" AND ")}`,
       p.lista,
@@ -369,7 +372,7 @@ export class IncidenciaRepository {
     return ejecutor.query<FilaCaso>(
       `${base}
        WHERE ${condiciones.join(" AND ")}
-       ORDER BY i.fecha_creacion ASC, i.codigo ASC
+       ORDER BY ${INICIO_DEL_PLAZO} ASC, i.codigo ASC
        LIMIT ${p.agregar(limite)}`,
       p.lista,
     );
@@ -491,6 +494,6 @@ function condicionesPorVencer(p: Parametros, atencionDias: number, avisoHoras: n
   const horas = p.agregar(avisoHoras);
   return [
     `e.codigo = ANY(${abiertos}::text[])`,
-    `i.fecha_creacion + make_interval(days => ${dias}::int) <= now() + make_interval(hours => ${horas}::int)`,
+    `${INICIO_DEL_PLAZO} + make_interval(days => ${dias}::int) <= now() + make_interval(hours => ${horas}::int)`,
   ];
 }

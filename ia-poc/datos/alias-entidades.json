@@ -1,0 +1,33 @@
+{
+  "_comentario": "Escrito a mano; lo mezcla ia-poc/scripts/generar-catalogo.mjs. Las siglas y los nombres oficiales ya salen de la nota del catálogo: aquí van solo los nombres cortos de uso común y las formas con error frecuente. No añadir siglas que no sean evidentes. Clave = codigo de la entidad.",
+  "excluirSiglas": {
+    "_comentario": "Siglas de la nota que NO se usan como alias porque chocan con palabras comunes. Clave = sigla tal como está en la nota.",
+    "H.H": "Dos letras sueltas con punto: coincidiría con cualquier 'h h'. Se usa 'Hospital Huaycán'.",
+    "DIRIS LE": "'le' es un pronombre común ('la DIRIS le cobró'). Se usa 'DIRIS Lima Este'."
+  },
+  "alias": {
+    "sis": ["Sistema Integral de Salud", "Sistema Integrado de Salud"],
+    "insm": ["Instituto Nacional de Salud Mental"],
+    "insnsb": ["Instituto del Niño San Borja"],
+    "insn": ["Instituto del Niño Breña"],
+    "incn": ["Instituto Nacional de Ciencias Neurológicas"],
+    "hnhu": ["Hospital Hipólito Unanue"],
+    "hnal": ["Hospital Loayza", "Hospital Loaiza", "Hospital Nacional Arzobispo Loayza"],
+    "hvlh": ["Hospital Larco Herrera"],
+    "hnseb": ["Hospital Sergio Bernales"],
+    "hndm": ["Hospital Dos de Mayo", "Hospital Nacional Dos de Mayo"],
+    "hh": ["Hospital Huaycán"],
+    "hnch": ["Hospital Nacional Cayetano Heredia"],
+    "hejcu": ["Hospital Casimiro Ulloa", "Hospital de Emergencias Casimiro Ulloa"],
+    "hsjl": ["Hospital de San Juan de Lurigancho"],
+    "heves": ["Hospital de Villa El Salvador"],
+    "hcllh": ["Hospital Lanfranco La Hoz"],
+    "hjatch": ["Hospital de Chosica", "Hospital José Agurto Tello"],
+    "honadomani-sb": ["HONADOMANI", "Hospital San Bartolomé"],
+    "hlev": ["Hospital Vitarte"],
+    "diris-le": ["DIRIS Lima Este", "Dirección de Redes Integradas de Salud Lima Este"],
+    "diris-ln": ["DIRIS Lima Norte", "Dirección de Redes Integradas de Salud Lima Norte"],
+    "diris-lc": ["DIRIS Lima Centro", "Dirección de Redes Integradas de Salud Lima Centro"],
+    "diris-ls": ["DIRIS Lima Sur", "Dirección de Redes Integradas de Salud Lima Sur"]
+  }
+}

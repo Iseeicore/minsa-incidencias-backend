@@ -1,13 +1,16 @@
 import {
   LONGITUD_MINIMA_TEXTO_CORRUPCION,
   MARCA_DE_HUECO,
+  PALABRAS_SEGUIDAS_PARA_NOMBRE,
   PESO_POR_TIPO,
   TIPOS_DE_SENAL_DE_CORRUPCION,
+  TITULOS_ESTANDAR_DEL_CARGO_MAXIMO,
   UMBRAL_CERTEZA_ALTA,
   UMBRAL_CERTEZA_MEDIA,
   VERSION_REGLAS_CORRUPCION,
 } from "@/constants/filtro-corrupcion.js";
-import { CertezaCorrupcion, FaltanteCorrupcion, NivelCargo, TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
+import { CertezaCorrupcion, FaltanteCorrupcion, NivelCargo, TipoContacto, TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
+import { CATALOGO_ENTIDADES } from "@/services/filtro-corrupcion/catalogo-entidades.data.js";
 import {
   buscarCoincidencias,
   compilarPlantilla,
@@ -15,6 +18,7 @@ import {
   resolverChoques,
   type Coincidencia,
   type EntradaPonderada,
+  type IndicePorPrimeraPalabra,
   type Patron,
 } from "@/services/filtro-corrupcion/coincidencias.js";
 import type {
@@ -22,8 +26,10 @@ import type {
   ContextoEvaluacion,
   EntidadCatalogo,
   EntidadDetectada,
+  ReferenciaDerivacion,
   ResultadoCorrupcion,
   SenalDetectada,
+  TitularDetectado,
 } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 import {
   CARGOS,
@@ -135,25 +141,106 @@ function detectarActor(palabras: readonly string[]): { actor: ActorDetectado; se
 }
 
 interface EntradaDeEntidad extends EntradaPonderada {
-  entidad: EntidadDetectada;
+  entidad: EntidadCatalogo;
+}
+interface IndiceDeEntidades {
+  entradas: readonly { patron: Patron; entrada: EntradaDeEntidad }[];
+  indice: IndicePorPrimeraPalabra<EntradaDeEntidad>;
 }
 
-function detectarEntidad(
-  palabras: readonly string[],
-  entidades: readonly EntidadCatalogo[],
-): { entidad: EntidadDetectada; senal: SenalDetectada } | null {
-  const entradas = entidades.flatMap(({ codigo, nombre, alias = [] }) =>
-    [nombre, ...alias]
+const PARTICULAS_DE_NOMBRE = new Set(["de", "del", "la", "las", "los", "y"]);
+
+const INDICES_POR_CATALOGO = new WeakMap<readonly EntidadCatalogo[], IndiceDeEntidades>();
+
+/** El nombre y cada alias de cada entidad, como secuencias de palabras; se arma una vez por catálogo. */
+function indiceDeEntidades(entidades: readonly EntidadCatalogo[]): IndiceDeEntidades {
+  const guardado = INDICES_POR_CATALOGO.get(entidades);
+  if (guardado) return guardado;
+  const entradas = entidades.flatMap((entidad) =>
+    [entidad.nombre, ...(entidad.alias ?? [])]
       .map((texto) => tokenizar(texto))
       .filter((patron) => patron.length > 0)
       .map((patron) => ({
         patron,
-        entrada: { entidad: { codigo, nombre }, peso: PESO_POR_TIPO[TipoSenal.ENTIDAD], grupo: codigo } satisfies EntradaDeEntidad,
+        entrada: { entidad, peso: PESO_POR_TIPO[TipoSenal.ENTIDAD], grupo: entidad.codigo } satisfies EntradaDeEntidad,
       })),
   );
-  const [mejor] = buscarCoincidencias(palabras, crearIndice(entradas)).sort((a, b) => a.inicio - b.inicio || b.fin - a.fin);
+  const creado = { entradas, indice: crearIndice(entradas) };
+  INDICES_POR_CATALOGO.set(entidades, creado);
+  return creado;
+}
+
+/**
+ * Una coincidencia es ambigua si el texto sigue con la siguiente palabra de otra entidad cuyo nombre empieza igual:
+ * "Instituto Nacional de Salud del Niño" calza con el INS, pero también arranca el nombre de dos institutos del niño.
+ * En ese caso no se elige ninguna (no se adivina).
+ */
+function esAmbigua(c: Coincidencia<EntradaDeEntidad>, palabras: readonly string[], todas: IndiceDeEntidades["entradas"]): boolean {
+  const siguiente = palabras[c.fin];
+  if (siguiente === undefined) return false;
+  return todas.some(
+    ({ patron, entrada }) =>
+      entrada.entidad.codigo !== c.entrada.entidad.codigo &&
+      patron.length > c.patron.length &&
+      patron[c.patron.length] === siguiente &&
+      c.patron.every((palabra, i) => patron[i] === palabra),
+  );
+}
+
+/**
+ * Entidad del catálogo mencionada: la que aparece primero (a igual inicio, la de nombre más largo). "Ministerio" suelto no
+ * es el MINSA (puede ser cualquier ministerio): solo "ministerio de salud" o "minsa". Las siglas que son palabras comunes
+ * ("DIRIS LE") no son alias: se usa "DIRIS Lima Este".
+ */
+function detectarEntidad(
+  palabras: readonly string[],
+  entidades: readonly EntidadCatalogo[],
+): { entidad: EntidadDetectada; catalogo: EntidadCatalogo; senal: SenalDetectada } | null {
+  const { entradas, indice } = indiceDeEntidades(entidades);
+  const [mejor] = buscarCoincidencias(palabras, indice)
+    .filter((c) => !esAmbigua(c, palabras, entradas))
+    .sort((a, b) => a.inicio - b.inicio || b.fin - a.fin);
   if (!mejor) return null;
-  return { entidad: mejor.entrada.entidad, senal: { frase: textoDe(palabras, mejor), tipo: TipoSenal.ENTIDAD, peso: mejor.entrada.peso } };
+  const { codigo, nombre, tipo = null } = mejor.entrada.entidad;
+  return {
+    entidad: { codigo, nombre, tipo },
+    catalogo: mejor.entrada.entidad,
+    senal: { frase: textoDe(palabras, mejor), tipo: TipoSenal.ENTIDAD, peso: mejor.entrada.peso },
+  };
+}
+
+/** El texto nombra al titular: al menos dos palabras seguidas del nombre registrado (sin tildes ni mayúsculas). Solo informativo. */
+function mencionaAlTitular(palabras: readonly string[], nombreTitular: string | null | undefined): boolean {
+  if (!nombreTitular) return false;
+  const propias = new Set(tokenizar(nombreTitular).filter((palabra) => !PARTICULAS_DE_NOMBRE.has(palabra)));
+  let racha = 0;
+  for (const palabra of palabras) {
+    racha = propias.has(palabra) ? racha + 1 : 0;
+    if (racha >= PALABRAS_SEGUIDAS_PARA_NOMBRE) return true;
+  }
+  return false;
+}
+
+/** Titular = cargo máximo (o su equivalente). El nombre que coincide nunca entra al puntaje: es un dato para quien revisa. */
+function detectarTitular(
+  actor: ActorDetectado | null,
+  catalogo: EntidadCatalogo | undefined,
+  palabras: readonly string[],
+): TitularDetectado | null {
+  if (actor?.nivel !== NivelCargo.CARGO_MAXIMO) return null;
+  return {
+    cargo: actor.cargo,
+    esEquivalenteDelMaximo: !TITULOS_ESTANDAR_DEL_CARGO_MAXIMO.has(actor.cargo),
+    nombreCoincide: mencionaAlTitular(palabras, catalogo?.titular?.nombre),
+  };
+}
+
+/** Qué contactos de derivación tiene la entidad en el catálogo (la ficha completa es otra fase). */
+function referenciaDe(catalogo: EntidadCatalogo): ReferenciaDerivacion {
+  return {
+    codigoEntidad: catalogo.codigo,
+    contactosDisponibles: Object.values(TipoContacto).filter((tipo) => catalogo.contactos?.[tipo] != null),
+  };
 }
 
 /** Nombre propio (dos o más palabras con mayúscula inicial) que no sea un cargo. Solo informativo: no entra al puntaje. */
@@ -172,8 +259,8 @@ function certezaDe(puntaje: number, propuestaCorrupcion: boolean): CertezaCorrup
 }
 
 /**
- * Filtro de corrupción v1 por reglas (sin IA, sin base de datos, sin red). Suma señales del léxico, el actor y la
- * entidad, y resta las negativas; devuelve una PROPUESTA con su certeza. Quien revisa siempre confirma o corrige, y el
+ * Filtro de corrupción v1.1 por reglas (sin IA, sin base de datos, sin red). Suma señales del léxico, el actor y la
+ * entidad del catálogo (por defecto el oficial generado en `catalogo-entidades.data.ts`), y resta las negativas; devuelve una PROPUESTA con su certeza. Quien revisa siempre confirma o corrige, y el
  * destino de la incidencia no sale de aquí. Sin ninguna señal de corrupción (fuerte, media o débil) nunca se propone
  * corrupción, aunque el actor y la entidad sumen.
  */
@@ -189,14 +276,17 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
       actor: null,
       nombreMencionado: null,
       entidad: null,
+      titular: null,
       faltantes: [FaltanteCorrupcion.DATOS_INSUFICIENTES],
+      requiereOtrans: false,
+      referenciaDerivacion: null,
       versionReglas: VERSION_REGLAS_CORRUPCION,
     };
   }
 
   const palabras = quitarMontos(tokenizar(recortado));
   const actor = detectarActor(palabras);
-  const entidad = detectarEntidad(palabras, contexto.entidades ?? []);
+  const entidad = detectarEntidad(palabras, contexto.entidades ?? CATALOGO_ENTIDADES);
   const nombreMencionado = detectarNombreMencionado(recortado);
   const senales = [...detectarSenales(palabras), ...(actor ? [actor.senal] : []), ...(entidad ? [entidad.senal] : [])];
 
@@ -221,7 +311,10 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
     actor: actor?.actor ?? null,
     nombreMencionado,
     entidad: entidad?.entidad ?? null,
+    titular: detectarTitular(actor?.actor ?? null, entidad?.catalogo, palabras),
     faltantes,
+    requiereOtrans: propuestaCorrupcion,
+    referenciaDerivacion: propuestaCorrupcion && entidad ? referenciaDe(entidad.catalogo) : null,
     versionReglas: VERSION_REGLAS_CORRUPCION,
   };
 }

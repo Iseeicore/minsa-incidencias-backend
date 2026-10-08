@@ -1,15 +1,49 @@
-import type { CertezaCorrupcion, FaltanteCorrupcion, NivelCargo, TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
+import type {
+  CertezaCorrupcion,
+  FaltanteCorrupcion,
+  HuecoCatalogo,
+  NivelCargo,
+  TipoContacto,
+  TipoEntidad,
+  TipoSenal,
+} from "@/enums/filtro-corrupcion.enum.js";
 
-/** Una entidad del catálogo (plan de cierre, paso 2). El nombre y los alias se buscan como secuencias de palabras. */
+/** Una persona de contacto tal como figura en el directorio de la entidad. `null` en el correo: el directorio no lo muestra. */
+export interface Contacto {
+  nombre: string;
+  cargo: string;
+  correo: string | null;
+}
+
+/** Contactos de derivación de una entidad; `null` = el cargo no figura en el directorio (no que no exista). */
+export type ContactosEntidad = Readonly<Record<TipoContacto, readonly Contacto[] | null>>;
+
+/** Titular de la entidad (nota del catálogo, sección 1). El nombre rota: solo se compara como señal informativa. */
+export interface TitularCatalogo {
+  /** Cargo oficial como figura en gob.pe. */
+  cargo: string;
+  /** Otros títulos que cuentan como cargo máximo de la entidad (decisión del 2026-10-07). */
+  cargosEquivalentes: readonly string[];
+  nombre: string | null;
+}
+
+/**
+ * Una entidad del catálogo (plan de cierre, paso 2). El nombre y los alias se buscan como secuencias de palabras. Solo
+ * `codigo`, `nombre` y `alias` son obligatorios para buscar: un catálogo recibido por la ruta puede no traer el resto.
+ */
 export interface EntidadCatalogo {
   codigo: string;
   nombre: string;
+  tipo?: TipoEntidad;
   alias?: readonly string[];
+  titular?: TitularCatalogo | null;
+  contactos?: ContactosEntidad | null;
+  huecos?: readonly HuecoCatalogo[];
 }
 
 /** Datos que el filtro no puede sacar del texto. Todo es opcional: sin contexto el filtro solo lee el texto. */
 export interface ContextoEvaluacion {
-  /** Catálogo de entidades contra el que se compara el texto. Sin él no se detecta entidad. */
+  /** Catálogo contra el que se compara el texto. Sin este campo se usa el catálogo oficial generado; `[]` desactiva la detección. */
   entidades?: readonly EntidadCatalogo[];
   /** El establecimiento ya se conoce (por el QR): cuenta como "entidad donde ocurrió" para los faltantes. */
   establecimientoConocido?: boolean;
@@ -32,6 +66,23 @@ export interface ActorDetectado {
 export interface EntidadDetectada {
   codigo: string;
   nombre: string;
+  /** `null` solo si el catálogo recibido no trae el tipo. */
+  tipo: TipoEntidad | null;
+}
+
+/** Cargo máximo mencionado (con sus equivalentes). `nombreCoincide` es informativo: nunca suma ni decide la categoría. */
+export interface TitularDetectado {
+  cargo: string;
+  /** `true` si el título no es "director general" ni "jefe institucional" (director ejecutivo, superintendente, ministro...). */
+  esEquivalenteDelMaximo: boolean;
+  /** El texto nombra al titular que el catálogo registra para la entidad detectada (hay homónimos y los cargos rotan). */
+  nombreCoincide: boolean;
+}
+
+/** Referencia al catálogo para derivar (la ficha completa es otra fase): la entidad y qué contactos tiene el directorio. */
+export interface ReferenciaDerivacion {
+  codigoEntidad: string;
+  contactosDisponibles: TipoContacto[];
 }
 
 /** Resultado del filtro. Es una propuesta: la persona que revisa siempre confirma o corrige, y el destino no sale de aquí. */
@@ -47,7 +98,13 @@ export interface ResultadoCorrupcion {
   /** Nombre propio que escribió la persona. Solo informativo: nunca suma ni decide, y es una acusación sin comprobar. */
   nombreMencionado: string | null;
   entidad: EntidadDetectada | null;
+  /** Solo si el cargo detectado es el máximo de una entidad (o su equivalente). */
+  titular: TitularDetectado | null;
   /** Requisitos de la sección 3c que el texto aún no cumple (solo se calculan si se propone corrupción). */
   faltantes: FaltanteCorrupcion[];
+  /** Corrupción siempre pasa por la OTRANS (la base lo hace cumplir): `true` solo si se propone corrupción. */
+  requiereOtrans: boolean;
+  /** Solo si se propone corrupción y la entidad está en el catálogo; si no, `null` (no se busca ni se inventa). */
+  referenciaDerivacion: ReferenciaDerivacion | null;
   versionReglas: string;
 }

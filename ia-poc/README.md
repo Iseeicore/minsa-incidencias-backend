@@ -8,6 +8,11 @@ Prueba de concepto para clasificar incidencias con **reglas primero** (filtro de
 - `modelo/parametros.json`: parámetros fijos de todas las pruebas (temperatura 0, semilla 7, contexto 4096, razonamiento desactivado, `keep_alive` de 30 minutos).
 - `scripts/precalentar.mjs` (se corre con `node ia-poc/scripts/precalentar.mjs`) carga el modelo antes de una demostración.
 
+## Catálogo de entidades
+
+- `datos/alias-entidades.json`: alias y nombres cortos escritos a mano (los nombres oficiales y las siglas salen de la nota del vault).
+- `scripts/generar-catalogo.mjs` (se corre con `node ia-poc/scripts/generar-catalogo.mjs`) lee las secciones 1 y 2 de la nota «Catálogo de entidades y titulares - Denuncias de corrupción», mezcla los alias y genera `src/services/filtro-corrupcion/catalogo-entidades.data.ts`.
+
 ## Hardware medido
 
 RTX 3050 de 6 GB: el modelo se reparte 71 % GPU y 29 % CPU. Unos 15 tokens por segundo; de 4 a 8 segundos por caso con el modelo caliente y salida JSON corta; unos 2 minutos la primera vez en frío.

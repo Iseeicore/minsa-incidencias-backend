@@ -23,7 +23,7 @@ const evaluacionSchema = z.object({
 /**
  * Herramienta interna de solo lectura para probar el filtro de corrupción por reglas: no toca la base ni cambia ningún
  * caso, y no registra el texto. Devuelve una propuesta; la categoría y el destino de un caso siguen decidiéndose con
- * las acciones de `/incidencias` y las reglas de la base.
+ * las acciones de `/incidencias` y las reglas de la base. Sin `entidades` en el cuerpo se usa el catálogo oficial generado.
  */
 export function createFiltroCorrupcionRouter(): Router {
   const router = Router();

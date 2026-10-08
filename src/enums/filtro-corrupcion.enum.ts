@@ -33,3 +33,39 @@ export const FaltanteCorrupcion = {
   PRUEBAS: "PRUEBAS",
 } as const;
 export type FaltanteCorrupcion = (typeof FaltanteCorrupcion)[keyof typeof FaltanteCorrupcion];
+
+/** Clase de entidad del catálogo (se deduce del nombre oficial en `ia-poc/scripts/generar-catalogo.mjs`). */
+export const TipoEntidad = {
+  MINISTERIO: "MINISTERIO",
+  SIS: "SIS",
+  FONDO: "FONDO",
+  INSTITUTO: "INSTITUTO",
+  HOSPITAL: "HOSPITAL",
+  DIRIS: "DIRIS",
+  ORGANISMO: "ORGANISMO",
+  CENTRO: "CENTRO",
+  PROGRAMA: "PROGRAMA",
+} as const;
+export type TipoEntidad = (typeof TipoEntidad)[keyof typeof TipoEntidad];
+
+/** Contactos de derivación que la nota del catálogo registra por entidad (sección 2). */
+export const TipoContacto = {
+  OCI: "OCI",
+  SECRETARIA_TECNICA_PAD: "SECRETARIA_TECNICA_PAD",
+  INTEGRIDAD: "INTEGRIDAD",
+  PROCURADOR: "PROCURADOR",
+} as const;
+export type TipoContacto = (typeof TipoContacto)[keyof typeof TipoContacto];
+
+/** Lo que la nota del catálogo marca como faltante o por confirmar de una entidad. */
+export const HuecoCatalogo = {
+  SIN_NOMBRE_TITULAR: "SIN_NOMBRE_TITULAR",
+  TITULAR_POR_CONFIRMAR: "TITULAR_POR_CONFIRMAR",
+  SIN_OCI: "SIN_OCI",
+  SIN_SECRETARIA_TECNICA_PAD: "SIN_SECRETARIA_TECNICA_PAD",
+  SIN_INTEGRIDAD: "SIN_INTEGRIDAD",
+  SIN_PROCURADOR: "SIN_PROCURADOR",
+  SIN_CONTACTOS: "SIN_CONTACTOS",
+  DIRECTORIO_INCOMPLETO: "DIRECTORIO_INCOMPLETO",
+} as const;
+export type HuecoCatalogo = (typeof HuecoCatalogo)[keyof typeof HuecoCatalogo];

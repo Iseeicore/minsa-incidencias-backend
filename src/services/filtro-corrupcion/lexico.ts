@@ -121,7 +121,7 @@ export const CARGOS: readonly FraseDeCargo[] = [
     "{director|directora} {general|ejecutivo|ejecutiva}",
     "{ministro|ministra} de salud",
     "{jefe|jefa} institucional",
-    "{jefe|jefa} del {instituto|sis}",
+    "{jefe|jefa} del {instituto|sis|seguro integral de salud}",
     "{superintendente|superintendenta}",
     "{presidente|presidenta} {ejecutivo|ejecutiva}",
     "{director|directora} del hospital",

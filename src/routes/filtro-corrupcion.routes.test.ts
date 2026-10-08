@@ -57,8 +57,47 @@ describe("POST /filtro-corrupcion/evaluar", () => {
       puntaje: 4,
       certeza: "ALTA",
       propuestaCorrupcion: true,
-      versionReglas: "reglas-corrupcion-v1",
+      versionReglas: "reglas-corrupcion-v1.1",
+      requiereOtrans: true,
+      referenciaDerivacion: null,
+      entidad: null,
+      titular: { cargo: "director del hospital", esEquivalenteDelMaximo: true, nombreCoincide: false },
     });
+  });
+
+  it("sin catálogo en el cuerpo usa el catálogo oficial: devuelve entidad, titular, OTRANS y referencia de derivación", async () => {
+    const res = await request(montar(sesionCon(["GESTOR"])))
+      .post(RUTA)
+      .send({ texto: "La jefa del SIS, Zulma Anaya Chacón, me pidió plata para atenderme" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      aplica: true,
+      propuestaCorrupcion: true,
+      puntaje: 5,
+      certeza: "ALTA",
+      entidad: { codigo: "sis", nombre: "Seguro Integral de Salud", tipo: "SIS" },
+      titular: { cargo: "jefa del sis", esEquivalenteDelMaximo: true, nombreCoincide: true },
+      requiereOtrans: true,
+      referenciaDerivacion: { codigoEntidad: "sis", contactosDisponibles: ["OCI", "PROCURADOR"] },
+      versionReglas: "reglas-corrupcion-v1.1",
+    });
+    expect(Object.keys(res.body).sort()).toEqual(
+      [
+        "actor",
+        "aplica",
+        "certeza",
+        "entidad",
+        "faltantes",
+        "nombreMencionado",
+        "propuestaCorrupcion",
+        "puntaje",
+        "referenciaDerivacion",
+        "requiereOtrans",
+        "senales",
+        "titular",
+        "versionReglas",
+      ].sort(),
+    );
   });
 
   it("usa el catálogo y el contexto que recibe", async () => {
@@ -69,8 +108,16 @@ describe("POST /filtro-corrupcion/evaluar", () => {
         entidades: [{ codigo: "MINSA", nombre: "Ministerio de Salud", alias: ["ministerio"] }],
         tieneArchivos: true,
       });
-    expect(res.body.entidad).toEqual({ codigo: "MINSA", nombre: "Ministerio de Salud" });
+    expect(res.body.entidad).toEqual({ codigo: "MINSA", nombre: "Ministerio de Salud", tipo: null });
     expect(res.body.faltantes).toEqual(["AUTOR_O_CARGO"]);
+  });
+
+  it("un catálogo vacío en el cuerpo desactiva la detección de entidad", async () => {
+    const res = await request(montar(sesionCon(["GESTOR"])))
+      .post(RUTA)
+      .send({ texto: "en el SIS me pidieron plata para atenderme", entidades: [] });
+    expect(res.body.entidad).toBeNull();
+    expect(res.body.referenciaDerivacion).toBeNull();
   });
 
   it("un texto corto responde 200 con aplica en falso", async () => {

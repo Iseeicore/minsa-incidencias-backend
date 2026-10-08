@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { CertezaCorrupcion as C, FaltanteCorrupcion as F, NivelCargo, TipoSenal as T } from "@/enums/filtro-corrupcion.enum.js";
+import {
+  CertezaCorrupcion as C,
+  FaltanteCorrupcion as F,
+  NivelCargo,
+  TipoEntidad,
+  TipoSenal as T,
+} from "@/enums/filtro-corrupcion.enum.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
 import type { ContextoEvaluacion } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 
-const MINSA = { codigo: "MINSA", nombre: "Ministerio de Salud", alias: ["ministerio", "minsa"] };
-const CON_CATALOGO: ContextoEvaluacion = { entidades: [MINSA, { codigo: "SIS", nombre: "Seguro Integral de Salud", alias: ["sis"] }] };
+const CATALOGO_DE_PRUEBA: ContextoEvaluacion = {
+  entidades: [
+    { codigo: "MINSA", nombre: "Ministerio de Salud", alias: ["ministerio", "minsa"] },
+    { codigo: "SIS", nombre: "Seguro Integral de Salud", alias: ["sis"] },
+  ],
+};
+const SIN_CATALOGO: ContextoEvaluacion = { entidades: [] };
 
 describe("casos límite del léxico (sección 8)", () => {
   const casos: { texto: string; propuesta: boolean; certeza: C; puntaje: number }[] = [
@@ -12,7 +23,8 @@ describe("casos límite del léxico (sección 8)", () => {
     { texto: "Me cobraron 50 soles sin recibo para darme la cita", propuesta: true, certeza: C.ALTA, puntaje: 5 },
     { texto: "Pagué 20 soles en caja y me dieron boleta", propuesta: false, certeza: C.BAJA, puntaje: -2 },
     { texto: "No hay medicinas en la farmacia", propuesta: false, certeza: C.BAJA, puntaje: -1 },
-    { texto: "La enfermera vende las medicinas del SIS", propuesta: true, certeza: C.ALTA, puntaje: 4 },
+    // Puntaje 5 y no 4: "SIS" es una entidad del catálogo y suma +1 (léxico, sección 2). La propuesta y la certeza no cambian.
+    { texto: "La enfermera vende las medicinas del SIS", propuesta: true, certeza: C.ALTA, puntaje: 5 },
     { texto: "Mi médico me derivó a su clínica particular", propuesta: true, certeza: C.MEDIA, puntaje: 3 },
     { texto: "Contrataron a la sobrina del director", propuesta: true, certeza: C.ALTA, puntaje: 4 },
     { texto: "Me robaron el celular en emergencia", propuesta: false, certeza: C.BAJA, puntaje: -2 },
@@ -28,39 +40,62 @@ describe("casos límite del léxico (sección 8)", () => {
     expect(resultado.certeza).toBe(certeza);
     expect(resultado.puntaje).toBe(puntaje);
   });
+
+  it("con el catálogo desactivado solo el SIS cambia de puntaje, y solo en +1: la categoría y la certeza son las mismas", () => {
+    for (const { texto, propuesta, certeza, puntaje } of casos) {
+      const sin = evaluarTextoCorrupcion(texto, SIN_CATALOGO);
+      expect(sin.propuestaCorrupcion).toBe(propuesta);
+      expect(sin.certeza).toBe(certeza);
+      expect(sin.puntaje).toBe(texto.includes("SIS") ? puntaje - 1 : puntaje);
+    }
+  });
 });
 
 describe("ejemplo del ministro (plan de cierre, 3b)", () => {
   const texto =
     "he presenciado un caso de corrupción en el área del Ministerio del Perú, vi al ministro de salud Luis Williams Dyer Fernández y lo vi recibiendo coimas";
 
-  it("suma coimas (+3), corrupción (+1), ministro de salud (+1) y Ministerio (+1) = 6, certeza alta", () => {
-    const resultado = evaluarTextoCorrupcion(texto, CON_CATALOGO);
-    expect(resultado.puntaje).toBe(6);
+  it('v1.1: "Ministerio" suelto ya no es el MINSA: suma coimas (+3), corrupción (+1) y ministro de salud (+1) = 5, certeza alta', () => {
+    const resultado = evaluarTextoCorrupcion(texto);
+    expect(resultado.puntaje).toBe(5);
     expect(resultado.certeza).toBe(C.ALTA);
     expect(resultado.propuestaCorrupcion).toBe(true);
     expect(resultado.senales).toEqual([
       { frase: "corrupcion", tipo: T.DEBIL, peso: 1 },
       { frase: "coimas", tipo: T.FUERTE, peso: 3 },
       { frase: "ministro de salud", tipo: T.ACTOR, peso: 1 },
-      { frase: "ministerio", tipo: T.ENTIDAD, peso: 1 },
     ]);
     expect(resultado.actor).toEqual({ cargo: "ministro de salud", nivel: NivelCargo.CARGO_MAXIMO });
-    expect(resultado.entidad).toEqual({ codigo: "MINSA", nombre: "Ministerio de Salud" });
+    expect(resultado.titular).toEqual({ cargo: "ministro de salud", esEquivalenteDelMaximo: true, nombreCoincide: false });
+    expect(resultado.entidad).toBeNull();
     expect(resultado.nombreMencionado).toBe("Luis Williams Dyer Fernández");
-    expect(resultado.versionReglas).toBe("reglas-corrupcion-v1");
+    expect(resultado.versionReglas).toBe("reglas-corrupcion-v1.1");
   });
 
-  it("sin catálogo no hay entidad ni su punto", () => {
-    const resultado = evaluarTextoCorrupcion(texto);
+  it('si el texto dice "Ministerio de Salud" o MINSA, sí suma la entidad (+1 = 6)', () => {
+    for (const nombre of ["Ministerio de Salud", "MINSA"]) {
+      const resultado = evaluarTextoCorrupcion(texto.replace("Ministerio del Perú", nombre));
+      expect(resultado.puntaje).toBe(6);
+      expect(resultado.entidad).toEqual({ codigo: "minsa", nombre: "Ministerio de Salud", tipo: TipoEntidad.MINISTERIO });
+    }
+  });
+
+  it("con un catálogo recibido por el contexto se usa ese y no el oficial", () => {
+    const resultado = evaluarTextoCorrupcion(texto, CATALOGO_DE_PRUEBA);
+    expect(resultado.puntaje).toBe(6);
+    expect(resultado.entidad).toEqual({ codigo: "MINSA", nombre: "Ministerio de Salud", tipo: null });
+  });
+
+  it("con el catálogo vacío no hay entidad ni su punto", () => {
+    const resultado = evaluarTextoCorrupcion("vi al MINSA recibiendo coimas en el hospital", SIN_CATALOGO);
     expect(resultado.entidad).toBeNull();
-    expect(resultado.puntaje).toBe(5);
+    expect(resultado.puntaje).toBe(3);
   });
 
   it("el nombre propio es informativo: quitarlo o cambiarlo no cambia puntaje ni categoría", () => {
-    const base = evaluarTextoCorrupcion("vi al ministro de salud recibiendo coimas ayer", CON_CATALOGO);
-    const conNombre = evaluarTextoCorrupcion("vi al ministro de salud Pedro Pérez Gómez recibiendo coimas ayer", CON_CATALOGO);
-    const otroNombre = evaluarTextoCorrupcion("vi al ministro de salud Ana Torres Ruiz recibiendo coimas ayer", CON_CATALOGO);
+    const base = evaluarTextoCorrupcion("vi al ministro de salud recibiendo coimas ayer", CATALOGO_DE_PRUEBA);
+    const conNombre = evaluarTextoCorrupcion("vi al ministro de salud Pedro Pérez Gómez recibiendo coimas ayer", CATALOGO_DE_PRUEBA);
+    const otroNombre = evaluarTextoCorrupcion("vi al ministro de salud Ana Torres Ruiz recibiendo coimas ayer", CATALOGO_DE_PRUEBA);
     for (const resultado of [conNombre, otroNombre]) {
       expect(resultado.puntaje).toBe(base.puntaje);
       expect(resultado.certeza).toBe(base.certeza);
@@ -73,7 +108,7 @@ describe("ejemplo del ministro (plan de cierre, 3b)", () => {
   });
 
   it("un nombre sin ninguna señal tampoco propone corrupción", () => {
-    const resultado = evaluarTextoCorrupcion("Me atendió el doctor Juan Carlos Medina en consulta externa", CON_CATALOGO);
+    const resultado = evaluarTextoCorrupcion("Me atendió el doctor Juan Carlos Medina en consulta externa", CATALOGO_DE_PRUEBA);
     expect(resultado.nombreMencionado).toBe("Juan Carlos Medina");
     expect(resultado.propuestaCorrupcion).toBe(false);
   });
@@ -89,7 +124,7 @@ describe("texto corto", () => {
       propuestaCorrupcion: false,
       senales: [],
       faltantes: [F.DATOS_INSUFICIENTES],
-      versionReglas: "reglas-corrupcion-v1",
+      versionReglas: "reglas-corrupcion-v1.1",
     });
   });
 
@@ -145,9 +180,9 @@ describe("reglas de decisión", () => {
   });
 
   it("sin señal no se propone corrupción aunque el actor y la entidad sumen", () => {
-    const resultado = evaluarTextoCorrupcion("El director del hospital del Ministerio no me atendió bien hoy", CON_CATALOGO);
+    const resultado = evaluarTextoCorrupcion("El director del hospital del Ministerio de Salud no me atendió bien hoy");
     expect(resultado.actor?.cargo).toBe("director del hospital");
-    expect(resultado.entidad?.codigo).toBe("MINSA");
+    expect(resultado.entidad?.codigo).toBe("minsa");
     expect(resultado.puntaje).toBe(2);
     expect(resultado.propuestaCorrupcion).toBe(false);
     expect(resultado.certeza).toBe(C.BAJA);
@@ -187,7 +222,7 @@ describe("reglas de decisión", () => {
 
   it("la misma frase repetida cuenta una vez y una frase corta dentro de una larga no se suma dos veces", () => {
     expect(evaluarTextoCorrupcion("coima, coima y más coima en el hospital").puntaje).toBe(3);
-    expect(evaluarTextoCorrupcion("la técnica vende las medicinas del SIS a diario").puntaje).toBe(4);
+    expect(evaluarTextoCorrupcion("la técnica vende las medicinas del SIS a diario").puntaje).toBe(5); // 3 + técnica 1 + SIS 1
   });
 
   it("el hueco de la frase tolera hasta tres palabras en medio, no más", () => {
@@ -210,7 +245,7 @@ describe("faltantes (plan de cierre, 3c)", () => {
   });
 
   it("el cargo, la entidad del catálogo y la mención de pruebas los dan por cumplidos", () => {
-    const resultado = evaluarTextoCorrupcion("el médico del Ministerio me pidió plata para atenderme y tengo fotos", CON_CATALOGO);
+    const resultado = evaluarTextoCorrupcion("el médico del Ministerio de Salud me pidió plata para atenderme y tengo fotos");
     expect(resultado.propuestaCorrupcion).toBe(true);
     expect(resultado.faltantes).toEqual([]);
   });

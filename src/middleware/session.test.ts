@@ -1,9 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
 import { ErrorCode } from "@/enums/error-code.enum.js";
+import { RolCodigo } from "@/enums/rol-codigo.enum.js";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { AppError } from "@/errors/app-error.js";
-import { requireVista } from "@/middleware/session.js";
+import { requireRol, requireVista } from "@/middleware/session.js";
 import type { SesionActual } from "@/services/auth.types.js";
 
 const sesion = (vistas: VistaCodigo[]): SesionActual => ({
@@ -21,6 +22,24 @@ function ejecutar(vista: VistaCodigo, req: Partial<Request>, locals: Record<stri
   requireVista(vista)(req as Request, { locals } as unknown as Response, next);
   return next;
 }
+
+describe("requireRol", () => {
+  const conRoles = (roles: string[]): SesionActual => ({ ...sesion([]), roles });
+  const ejecutarRol = (req: Partial<Request>) => {
+    const next = vi.fn() as unknown as NextFunction & ReturnType<typeof vi.fn>;
+    requireRol(RolCodigo.GESTOR, RolCodigo.OTRANS)(req as Request, { locals: {} } as unknown as Response, next);
+    return next;
+  };
+
+  it("deja pasar a quien tiene alguno de los roles", () => {
+    expect(ejecutarRol({ sesion: conRoles(["OTRANS"]) })).toHaveBeenCalledWith();
+  });
+
+  it("responde 403 a quien no tiene ninguno y 401 a quien no tiene sesión", () => {
+    expect((ejecutarRol({ sesion: conRoles(["ESTABLECIMIENTO"]) }).mock.calls[0]?.[0] as AppError).statusCode).toBe(403);
+    expect((ejecutarRol({}).mock.calls[0]?.[0] as AppError).statusCode).toBe(401);
+  });
+});
 
 describe("requireVista", () => {
   it("deja pasar a quien tiene la vista", () => {

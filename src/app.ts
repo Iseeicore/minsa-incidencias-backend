@@ -16,6 +16,7 @@ import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
 import { SesionRepository } from "@/repositories/sesion.repository.js";
 import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
+import { createFiltroCorrupcionRouter } from "@/routes/filtro-corrupcion.routes.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
 import { AuthService } from "@/services/auth.service.js";
@@ -62,6 +63,7 @@ export function createApp(
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
   app.use(createIncidenciasRouter(incidencias));
+  app.use(createFiltroCorrupcionRouter());
 
   app.use(notFoundHandler);
   app.use(errorHandler);

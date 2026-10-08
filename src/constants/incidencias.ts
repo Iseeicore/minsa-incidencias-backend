@@ -7,6 +7,8 @@ import { ResultadoResolucion } from "@/enums/resultado-resolucion.enum.js";
 export const LISTADO_LIMITE_POR_DEFECTO = 20;
 export const LISTADO_LIMITE_MAXIMO = 100;
 export const CURSOR_LONGITUD_MAXIMA = 200;
+/** Días que puede abarcar el rango `desde`-`hasta` del listado (ambos extremos incluidos): evita recorrer toda la tabla. */
+export const LISTADO_RANGO_MAXIMO_DIAS = 366;
 export const AREA_CODIGO_LONGITUD_MAXIMA = 50;
 export const POR_VENCER_LISTA_MAXIMA = 10;
 export const TEXTO_BUSQUEDA_MAXIMO = 100;

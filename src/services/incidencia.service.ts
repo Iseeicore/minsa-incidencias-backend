@@ -77,6 +77,8 @@ function filtrosDe(consulta: ConsultaListado): FiltrosDeListado {
   if (consulta.texto) filtros.texto = consulta.texto;
   if (consulta.establecimiento) filtros.establecimiento = consulta.establecimiento;
   if (consulta.motivoArchivo) filtros.motivoArchivo = consulta.motivoArchivo;
+  if (consulta.desde) filtros.desde = consulta.desde;
+  if (consulta.hasta) filtros.hasta = consulta.hasta;
   return filtros;
 }
 

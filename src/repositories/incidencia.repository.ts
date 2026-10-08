@@ -30,6 +30,10 @@ export interface FiltrosDeListado {
   establecimiento?: string;
   /** Solo los archivados por este motivo. */
   motivoArchivo?: MotivoArchivo;
+  /** Primer día (`YYYY-MM-DD`) de llegada, inclusive, como día de Lima. */
+  desde?: string;
+  /** Último día (`YYYY-MM-DD`) de llegada, inclusive, como día de Lima. */
+  hasta?: string;
 }
 
 export interface DatosDeResolucion {
@@ -113,6 +117,9 @@ class Parametros {
 /** Los roles de estos tipos de área nunca ven un caso de categoría sensible, aunque la tabla de categorías lo permitiera. */
 const TIPOS_DE_AREA_SIN_SENSIBLES: readonly TipoArea[] = [TipoArea.ESTABLECIMIENTO, TipoArea.DIRIS];
 
+/** Los días del filtro `desde`/`hasta` son días de Lima; constante del código, nunca un valor del usuario. */
+const ZONA_DE_LIMA = "America/Lima";
+
 const ESTADOS_CONOCIDOS: readonly EstadoIncidencia[] = Object.values(EstadoIncidencia);
 
 /** Desde cuándo corre el plazo de atención: la última reapertura o, si nunca se reabrió, la llegada (igual que en la base). */
@@ -167,6 +174,9 @@ function condicionesDeFiltros(p: Parametros, filtros: FiltrosDeListado): string[
   }
   if (filtros.categoria) condiciones.push(`c.codigo = ${p.agregar(filtros.categoria)}`);
   if (filtros.sinCategoria) condiciones.push("i.categoria_id IS NULL");
+  // Días de Lima (UTC-5, sin horario de verano) sobre la fecha de llegada, ambos inclusivos; el instante queda sin envolver en una función para usar el índice.
+  if (filtros.desde) condiciones.push(`i.fecha_creacion >= (${p.agregar(filtros.desde)}::date)::timestamp AT TIME ZONE '${ZONA_DE_LIMA}'`);
+  if (filtros.hasta) condiciones.push(`i.fecha_creacion < ((${p.agregar(filtros.hasta)}::date) + 1)::timestamp AT TIME ZONE '${ZONA_DE_LIMA}'`);
   if (filtros.texto) {
     const patron = p.agregar(`%${escaparComodines(filtros.texto)}%`);
     condiciones.push(`(i.codigo ILIKE ${patron} ESCAPE '\\' OR i.descripcion ILIKE ${patron} ESCAPE '\\')`);

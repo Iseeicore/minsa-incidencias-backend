@@ -161,6 +161,62 @@ describe("rutas de incidencias", () => {
       },
     );
 
+    it("pasa desde y hasta como días y viaja junto al cursor y los demás filtros", async () => {
+      const app = montar(servicio, sesionConCasos);
+      await request(app).get("/incidencias").query({ desde: "2026-10-01", hasta: "2026-10-08" });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, desde: "2026-10-01", hasta: "2026-10-08" });
+
+      await request(app).get("/incidencias").query({ desde: " 2026-10-01 " });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, desde: "2026-10-01" });
+
+      await request(app).get("/incidencias").query({ hasta: "2026-10-08", desde: "" });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, hasta: "2026-10-08" });
+
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      await request(app).get("/incidencias").query({ desde: "2026-10-05", hasta: "2026-10-05", estado: "derivado", cursor: codificarCursor(posicion) });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, {
+        limite: 20,
+        despuesDe: posicion,
+        estado: "derivado",
+        desde: "2026-10-05",
+        hasta: "2026-10-05",
+      });
+    });
+
+    it("acepta un rango de un solo día y de exactamente 366 días", async () => {
+      const app = montar(servicio, sesionConCasos);
+      expect((await request(app).get("/incidencias").query({ desde: "2026-10-08", hasta: "2026-10-08" })).status).toBe(200);
+      expect((await request(app).get("/incidencias").query({ desde: "2024-01-01", hasta: "2024-12-31" })).status).toBe(200);
+    });
+
+    it.each([
+      [{ desde: "2026-02-31" }],
+      [{ hasta: "2026-02-31" }],
+      [{ desde: "2025-02-29" }],
+      [{ desde: "2026-13-01" }],
+      [{ desde: "08/10/2026" }],
+      [{ desde: "2026-10-8" }],
+      [{ desde: "2026-10-08T00:00:00Z" }],
+      [{ hasta: "ayer" }],
+      [{ desde: "2026-10-09", hasta: "2026-10-08" }],
+      [{ desde: "2025-01-01", hasta: "2026-01-02" }],
+      [{ desde: "2024-01-01", hasta: "2025-01-01" }],
+      [{ desde: "2026-02-31", hasta: "2026-01-01" }],
+    ])("rechaza el rango %j con 400 VALIDATION_FAILED y no llega al servicio", async (consulta) => {
+      const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query(consulta);
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.listar).not.toHaveBeenCalled();
+    });
+
+    it("explica por qué se rechaza un rango invertido o demasiado largo", async () => {
+      const app = montar(servicio, sesionConCasos);
+      const invertido = await request(app).get("/incidencias").query({ desde: "2026-10-09", hasta: "2026-10-08" });
+      expect(invertido.body.details).toEqual([{ path: "desde", message: "La fecha «desde» no puede ser posterior a «hasta»." }]);
+      const largo = await request(app).get("/incidencias").query({ desde: "2024-01-01", hasta: "2025-01-01" });
+      expect(largo.body.details).toEqual([{ path: "hasta", message: "El rango no puede abarcar más de 366 días." }]);
+    });
+
     it("rechaza un texto de búsqueda demasiado largo", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ texto: "a".repeat(101) });
       expect(res.status).toBe(400);

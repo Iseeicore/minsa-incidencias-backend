@@ -815,6 +815,204 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
     });
   });
 
+  describe("filtro por rango de fechas de llegada (días de Lima)", () => {
+    /** Fija el instante de llegada de un caso (con los disparadores apagados un momento, como hace el sembrado para dar edad). */
+    async function llegoEl(contexto: RollbackContext, caso: { id: string }, instante: string) {
+      await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente DISABLE TRIGGER USER");
+      await contexto.client.query("UPDATE chatbot.incidencia_paciente SET fecha_creacion = $2::timestamptz WHERE id = $1", [caso.id, instante]);
+      await contexto.client.query("ALTER TABLE chatbot.incidencia_paciente ENABLE TRIGGER USER");
+    }
+
+    async function sembrarBordes(contexto: RollbackContext, marcador: string) {
+      const sembrar = async (instante: string) => {
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+        await llegoEl(contexto, caso, instante);
+        return caso.codigo;
+      };
+      return {
+        anteriorAlDia9: await sembrar("2026-03-08T23:59:59-05:00"),
+        noche10: await sembrar("2026-03-10T23:30:00-05:00"),
+        inicio11: await sembrar("2026-03-11T00:00:00-05:00"),
+        fin11: await sembrar("2026-03-11T23:59:59.999-05:00"),
+        inicio12: await sembrar("2026-03-12T00:00:00-05:00"),
+      };
+    }
+
+    const verCodigos = async (agente: AgentePrueba, query: Record<string, string>) => {
+      const res = await agente.get("/incidencias").query({ limite: "100", ...query });
+      expect(res.status).toBe(200);
+      return (res.body.items as CasoDto[]).map((c) => c.codigo);
+    };
+
+    it("un caso que llegó a las 23:30 de Lima cuenta en ese día aunque en UTC ya sea el siguiente", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const c = await sembrarBordes(contexto, marcador);
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-10", hasta: "2026-03-10" })).toEqual([c.noche10]);
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-11", hasta: "2026-03-11" })).toEqual([c.fin11, c.inicio11]);
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-12", hasta: "2026-03-12" })).toEqual([c.inicio12]);
+      });
+    });
+
+    it("desde y hasta son inclusivos; con uno solo, el otro extremo queda abierto", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const c = await sembrarBordes(contexto, marcador);
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-10", hasta: "2026-03-11" })).toEqual([c.fin11, c.inicio11, c.noche10]);
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-11" })).toEqual([c.inicio12, c.fin11, c.inicio11]);
+        expect(await verCodigos(agente, { texto: marcador, hasta: "2026-03-10" })).toEqual([c.noche10, c.anteriorAlDia9]);
+        expect(await verCodigos(agente, { texto: marcador })).toHaveLength(5);
+        expect(await verCodigos(agente, { texto: marcador, desde: "2026-03-13" })).toEqual([]);
+      });
+    });
+
+    it("se combina con estado, categoría, texto y establecimiento", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const sembrar = async (opciones: OpcionesCaso, instante: string) => {
+          const caso = await sembrarCaso(contexto, { marcador, ...opciones });
+          await llegoEl(contexto, caso, instante);
+          return caso.codigo;
+        };
+        const dentro = "2026-03-11T10:00:00-05:00";
+        const quejaA = await sembrar({ categoria: C.QUEJA, establecimiento: a }, dentro);
+        const reclamoA = await sembrar({ categoria: C.RECLAMO, establecimiento: a }, dentro);
+        const derivadaB = await sembrar({ categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: b }, dentro);
+        await sembrar({ categoria: C.QUEJA, establecimiento: a }, "2026-03-20T10:00:00-05:00");
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const rango = { texto: marcador, desde: "2026-03-11", hasta: "2026-03-11" };
+
+        expect((await verCodigos(agente, rango)).sort()).toEqual([quejaA, reclamoA, derivadaB].sort());
+        expect(await verCodigos(agente, { ...rango, categoria: "reclamo" })).toEqual([reclamoA]);
+        expect(await verCodigos(agente, { ...rango, estado: "derivado" })).toEqual([derivadaB]);
+        expect((await verCodigos(agente, { ...rango, establecimiento: a.codigoRenipress })).sort()).toEqual([quejaA, reclamoA].sort());
+        expect(await verCodigos(agente, { ...rango, establecimiento: a.codigoRenipress, categoria: "reclamo", estado: "en-gestion" })).toEqual([]);
+      });
+    });
+
+    it("la bandeja de archivados también se acota por rango", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const dentro = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, archivar: { motivo: "NO_CORRESPONDE" } });
+        const fuera = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador, archivar: { motivo: "NO_CORRESPONDE" } });
+        await llegoEl(contexto, dentro, "2026-03-11T08:00:00-05:00");
+        await llegoEl(contexto, fuera, "2026-04-11T08:00:00-05:00");
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        expect(
+          await verCodigos(agente, { texto: marcador, estado: "archivado", motivoArchivo: "NO_CORRESPONDE", desde: "2026-03-01", hasta: "2026-03-31" }),
+        ).toEqual([dentro.codigo]);
+      });
+    });
+
+    it("no amplía la visibilidad: el establecimiento no recibe casos de otra área ni corrupción por estar en el rango", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const a = await crearEstablecimientoDePrueba(contexto);
+        const b = await crearEstablecimientoDePrueba(contexto);
+        const dia = "2026-03-11T10:00:00-05:00";
+        const propia = await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: a, marcador });
+        const deOtraArea = await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: b, marcador });
+        const corrupcion = await sembrarCaso(contexto, { categoria: C.DENUNCIA_CORRUPCION, establecimiento: a, marcador });
+        for (const caso of [propia, deOtraArea, corrupcion]) await llegoEl(contexto, caso, dia);
+        const app = construir(contexto);
+        const usuarioA = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+        const admin = await entrar(contexto, app, [R.ADMINISTRADOR]);
+        const otrans = await entrar(contexto, app, [R.OTRANS]);
+        const rango = { texto: marcador, desde: "2026-03-11", hasta: "2026-03-11" };
+
+        expect(await verCodigos(usuarioA.agente, rango)).toEqual([propia.codigo]);
+        expect(await verCodigos(usuarioA.agente, { texto: marcador, desde: "2026-03-01", hasta: "2026-03-31" })).toEqual([propia.codigo]);
+        expect((await verCodigos(admin.agente, rango)).sort()).toEqual([propia.codigo, deOtraArea.codigo, corrupcion.codigo].sort());
+        expect(await verCodigos(otrans.agente, rango)).toEqual([corrupcion.codigo]);
+      });
+    });
+
+    it("con cursor recorre el rango sin repetir ni saltar, y hayMas y siguiente no cambian de significado", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const dentro = [];
+        for (let n = 0; n < 7; n += 1) {
+          const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+          await llegoEl(contexto, caso, `2026-03-11T${String(22 - n).padStart(2, "0")}:00:00-05:00`);
+          dentro.push(caso);
+        }
+        // Dos casos con exactamente el mismo instante: se desempatan por id y el cursor no los repite.
+        const gemelos = [await sembrarCaso(contexto, { categoria: C.QUEJA, marcador }), await sembrarCaso(contexto, { categoria: C.QUEJA, marcador })];
+        for (const g of gemelos) await llegoEl(contexto, g, "2026-03-11T01:00:00-05:00");
+        const fuera = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+        await llegoEl(contexto, fuera, "2026-03-12T00:00:00-05:00");
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const esperado = await contexto.database.query<{ codigo: string }>(
+          `SELECT codigo FROM chatbot.incidencia_paciente
+            WHERE id = ANY($1) AND fecha_creacion < '2026-03-12T00:00:00-05:00'
+            ORDER BY fecha_creacion DESC, id DESC`,
+          [[...dentro, ...gemelos, fuera].map((c) => c.id)],
+        );
+
+        for (const limite of [1, 2, 4, 9, 50]) {
+          const vistos: string[] = [];
+          let cursor: string | undefined;
+          let paginas = 0;
+          do {
+            const res = await agente
+              .get("/incidencias")
+              .query({ texto: marcador, desde: "2026-03-11", hasta: "2026-03-11", limite: String(limite), ...(cursor ? { cursor } : {}) });
+            expect(res.status).toBe(200);
+            vistos.push(...(res.body.items as CasoDto[]).map((c) => c.codigo));
+            expect(res.body.hayMas).toBe(res.body.siguiente !== null);
+            cursor = res.body.siguiente ?? undefined;
+            paginas += 1;
+          } while (cursor);
+          expect(vistos).toEqual(esperado.map((f) => f.codigo));
+          expect(paginas).toBe(Math.ceil(9 / limite));
+        }
+
+        // Un cursor emitido sin rango sigue siendo válido al añadirle el rango: es solo la posición del último caso.
+        const sinRango = await agente.get("/incidencias").query({ texto: marcador, limite: "1" });
+        const conRango = await agente.get("/incidencias").query({ texto: marcador, limite: "100", desde: "2026-03-11", hasta: "2026-03-11", cursor: sinRango.body.siguiente });
+        expect(conRango.status).toBe(200);
+        expect((conRango.body.items as CasoDto[]).map((c) => c.codigo)).toEqual(esperado.map((f) => f.codigo));
+      });
+    });
+
+    it("rechaza con 400 una fecha inexistente, un rango invertido y uno de más de 366 días", async () => {
+      await usar(async (contexto) => {
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        for (const query of [
+          { desde: "2026-02-31" },
+          { hasta: "2026-13-01" },
+          { desde: "2026-03-12", hasta: "2026-03-11" },
+          { desde: "2025-01-01", hasta: "2026-01-02" },
+          { desde: "1'; DROP TABLE chatbot.incidencia_paciente; --" },
+        ]) {
+          const res = await agente.get("/incidencias").query(query);
+          expect(res.status).toBe(400);
+          expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        }
+        expect((await agente.get("/incidencias").query({ desde: "2025-03-11", hasta: "2026-03-11" })).status).toBe(200);
+      });
+    });
+
+    it("la búsqueda por texto encuentra el código solo con su número, sin el prefijo MINSA-AAAA-", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const numero = caso.codigo.split("-").at(-1) as string;
+        expect(numero).toMatch(/^\d{6,}$/);
+        expect(await verCodigos(agente, { texto: numero })).toContain(caso.codigo);
+        expect(await verCodigos(agente, { texto: caso.codigo })).toEqual([caso.codigo]);
+        expect(await verCodigos(agente, { texto: caso.codigo.toLowerCase() })).toEqual([caso.codigo]);
+      });
+    });
+  });
+
   describe("acciones", () => {
     it("confirmar: la base firma al usuario, el caso queda revisado y se copia al entrenamiento", async () => {
       await usar(async (contexto) => {

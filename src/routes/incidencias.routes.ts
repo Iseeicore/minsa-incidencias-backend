@@ -9,6 +9,7 @@ import {
   ESTADOS_API,
   LISTADO_LIMITE_MAXIMO,
   LISTADO_LIMITE_POR_DEFECTO,
+  LISTADO_RANGO_MAXIMO_DIAS,
   MOTIVOS_DE_ARCHIVO,
   MOTIVOS_DE_ARCHIVO_MANUAL,
   REAPERTURA_MOTIVO_LONGITUD_MAXIMA,
@@ -27,9 +28,24 @@ import { AppError } from "@/errors/app-error.js";
 import { requireSession, requireVista } from "@/middleware/session.js";
 import type { SesionActual } from "@/services/auth.types.js";
 import { decodificarCursor } from "@/utils/cursor-listado.js";
+import { diasDelRango, medianocheDe } from "@/utils/rango-fechas.js";
 import type { DatosAccion, IncidenciaServicio } from "@/services/incidencia.types.js";
 
-const listadoSchema = z.object({
+/** Un día `YYYY-MM-DD` real (rechaza 2026-02-31); vacío equivale a no filtrar. */
+const diaDelListado = z
+  .string()
+  .trim()
+  .optional()
+  .transform((dia, contexto) => {
+    if (!dia) return undefined;
+    if (medianocheDe(dia) === null) {
+      contexto.addIssue({ code: "custom", message: "La fecha debe ser un día real con el formato AAAA-MM-DD." });
+      return undefined;
+    }
+    return dia;
+  });
+
+const camposDelListado = z.object({
   limite: z.coerce.number().int().min(1).max(LISTADO_LIMITE_MAXIMO).default(LISTADO_LIMITE_POR_DEFECTO),
   cursor: z
     .string()
@@ -64,6 +80,20 @@ const listadoSchema = z.object({
       }
       return canonico;
     }),
+  // Días de llegada (hora de Lima), ambos inclusivos; si solo viene uno, el otro queda abierto.
+  desde: diaDelListado,
+  hasta: diaDelListado,
+});
+
+const listadoSchema = camposDelListado.superRefine(({ desde, hasta }, contexto) => {
+  if (!desde || !hasta) return;
+  const dias = diasDelRango(desde, hasta);
+  if (dias === null) return;
+  if (dias < 1) {
+    contexto.addIssue({ code: "custom", path: ["desde"], message: "La fecha «desde» no puede ser posterior a «hasta»." });
+  } else if (dias > LISTADO_RANGO_MAXIMO_DIAS) {
+    contexto.addIssue({ code: "custom", path: ["hasta"], message: `El rango no puede abarcar más de ${LISTADO_RANGO_MAXIMO_DIAS} días.` });
+  }
 });
 
 const sinDatosSchema = z.object({});

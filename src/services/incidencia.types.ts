@@ -18,6 +18,10 @@ export interface ConsultaListado {
   establecimiento?: string;
   /** Solo los archivados por este motivo. */
   motivoArchivo?: MotivoArchivo;
+  /** Primer día (`YYYY-MM-DD`, hora de Lima, inclusive) de llegada del caso. */
+  desde?: string;
+  /** Último día (`YYYY-MM-DD`, hora de Lima, inclusive) de llegada del caso. */
+  hasta?: string;
 }
 
 export interface DatosAccion {

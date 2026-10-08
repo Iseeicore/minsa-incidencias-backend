@@ -4,6 +4,7 @@ import {
   CATEGORIAS_API,
   AREA_CODIGO_LONGITUD_MAXIMA,
   CODIGO_INCIDENCIA_PATRON,
+  CODIGO_RENIPRESS_PATRON,
   CURSOR_LONGITUD_MAXIMA,
   ESTADOS_API,
   LISTADO_LIMITE_MAXIMO,
@@ -42,6 +43,20 @@ const listadoSchema = z.object({
     .max(TEXTO_BUSQUEDA_MAXIMO)
     .optional()
     .transform((texto) => (texto ? texto : undefined)),
+  // Código RENIPRESS: se quitan los ceros a la izquierda y debe quedar de 1 a 8 dígitos sin cero inicial.
+  establecimiento: z
+    .string()
+    .trim()
+    .optional()
+    .transform((codigo, contexto) => {
+      if (!codigo) return undefined;
+      const canonico = codigo.replace(/^0+/, "");
+      if (!CODIGO_RENIPRESS_PATRON.test(canonico)) {
+        contexto.addIssue({ code: "custom", message: "El código del establecimiento no es válido." });
+        return undefined;
+      }
+      return canonico;
+    }),
 });
 
 const sinDatosSchema = z.object({});

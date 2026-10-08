@@ -233,7 +233,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
           prioridad: null,
           organismo: null,
           area: null,
-          establecimiento: { codigoRenipress: eess.codigoRenipress, nombre: eess.nombre },
+          establecimiento: { codigoRenipress: eess.codigoRenipress, nombre: eess.nombre, nivelAtencion: null, categoria: null },
           responsable: "Ana Prueba",
           estado: "clasificado",
           horasDesdeLlegada: 20,
@@ -257,7 +257,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(texto).not.toContain("trace");
         expect(texto).not.toContain("roles");
         expect(texto).not.toContain(revisor);
-        expect(Object.keys(res.body.establecimiento)).toEqual(["codigoRenipress", "nombre"]);
+        expect(Object.keys(res.body.establecimiento)).toEqual(["codigoRenipress", "nombre", "nivelAtencion", "categoria"]);
         expect(texto).not.toContain("areaId");
         expect(texto).not.toContain("wa_id");
         expect(texto).not.toContain("dni");
@@ -275,7 +275,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
 
         const a = await agente.get(`/incidencias/${derivado.codigo}`);
         expect(a.body.area).toEqual({ codigo: destino.areaCodigo, nombre: destino.areaNombre });
-        expect(a.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
+        expect(a.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre, nivelAtencion: null, categoria: null });
         expect(Object.keys(a.body.area)).toEqual(["codigo", "nombre"]);
 
         const b = await agente.get(`/incidencias/${sinOrigen.codigo}`);
@@ -283,7 +283,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
 
         const c = await agente.get(`/incidencias/${corrupcion.codigo}`);
         expect(c.body.area).toEqual({ codigo: "OTRANS", nombre: "OTRANS" });
-        expect(c.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
+        expect(c.body.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre, nivelAtencion: null, categoria: null });
       });
     });
 
@@ -561,6 +561,114 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         expect(res.body.hayMas).toBe(false);
       });
     });
+
+    it("el establecimiento de origen trae nivel de atención y categoría, en la lista y en el detalle", async () => {
+      await usar(async (contexto) => {
+        const marcador = marcaDePrueba();
+        const eess = await crearEstablecimientoDePrueba(contexto);
+        await contexto.database.transaction("sistema:prueba", (tx) =>
+          tx.query(
+            "UPDATE catalogo.establecimiento_salud SET categoria = 'I-3', nivel_atencion_id = (SELECT id FROM catalogo.nivel_atencion WHERE codigo = 'I') WHERE id = $1",
+            [eess.establecimientoId],
+          ),
+        );
+        const caso = await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: eess, marcador });
+        const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+        const esperado = { codigoRenipress: eess.codigoRenipress, nombre: eess.nombre, nivelAtencion: "I", categoria: "I-3" };
+
+        const lista = await agente.get("/incidencias").query({ texto: marcador });
+        expect((lista.body.items as { establecimiento: unknown }[])[0]?.establecimiento).toEqual(esperado);
+        expect((await agente.get(`/incidencias/${caso.codigo}`)).body.establecimiento).toEqual(esperado);
+      });
+    });
+
+    describe("filtro por establecimiento de origen", () => {
+      it("filtra por el código RENIPRESS, acepta ceros a la izquierda y un código sin casos o inexistente da lista vacía", async () => {
+        await usar(async (contexto) => {
+          const marcador = marcaDePrueba();
+          const a = await crearEstablecimientoDePrueba(contexto);
+          const b = await crearEstablecimientoDePrueba(contexto);
+          const vacio = await crearEstablecimientoDePrueba(contexto);
+          const deA = await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: a, marcador });
+          const deB = await sembrarCaso(contexto, { categoria: C.RECLAMO, establecimiento: b, marcador });
+          const sinOrigen = await sembrarCaso(contexto, { categoria: C.QUEJA, marcador });
+          const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+          const ver = async (establecimiento: string) => {
+            const res = await agente.get("/incidencias").query({ texto: marcador, establecimiento });
+            expect(res.status).toBe(200);
+            return (res.body.items as CasoDto[]).map((c) => c.codigo);
+          };
+
+          expect(await ver(a.codigoRenipress)).toEqual([deA.codigo]);
+          expect(await ver(`000${b.codigoRenipress}`)).toEqual([deB.codigo]);
+          expect(await ver(vacio.codigoRenipress)).toEqual([]);
+          expect(await ver("12345678")).toEqual([]);
+          expect(sinOrigen.codigo).toBeDefined();
+        });
+      });
+
+      it("nunca amplía la visibilidad: un establecimiento solo ve lo destinado a su área aunque filtre por otro origen", async () => {
+        await usar(async (contexto) => {
+          const marcador = marcaDePrueba();
+          const a = await crearEstablecimientoDePrueba(contexto);
+          const b = await crearEstablecimientoDePrueba(contexto);
+          const origenAdestinoB = await sembrarCaso(contexto, {
+            categoria: C.RECLAMO, revision: "confirmada", estado: "DERIVADO", establecimiento: a, destino: b, marcador,
+          });
+          const origenAdestinoA = await sembrarCaso(contexto, { categoria: C.QUEJA, revision: "confirmada", estado: "DERIVADO", establecimiento: a, marcador });
+          const app = construir(contexto);
+          const delA = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, a);
+          const delB = await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, b);
+          const gestor = await entrar(contexto, app, [R.GESTOR]);
+          const ver = async (agente: AgentePrueba, establecimiento: string) =>
+            ((await agente.get("/incidencias").query({ texto: marcador, establecimiento })).body.items as CasoDto[]).map((c) => c.codigo).sort();
+
+          expect(await ver(delA.agente, a.codigoRenipress)).toEqual([origenAdestinoA.codigo]);
+          expect(await ver(delA.agente, b.codigoRenipress)).toEqual([]);
+          expect(await ver(delB.agente, a.codigoRenipress)).toEqual([origenAdestinoB.codigo]);
+          expect(await ver(gestor.agente, a.codigoRenipress)).toEqual([origenAdestinoA.codigo, origenAdestinoB.codigo].sort());
+        });
+      });
+
+      it("se combina con otros filtros y con el cursor: recorre todo sin repetir ni saltar", async () => {
+        await usar(async (contexto) => {
+          const marcador = marcaDePrueba();
+          const a = await crearEstablecimientoDePrueba(contexto);
+          const b = await crearEstablecimientoDePrueba(contexto);
+          const deA = [];
+          for (let n = 0; n < 5; n += 1) deA.push(await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: a, marcador, edadHoras: 10 + n }));
+          const reclamoA = await sembrarCaso(contexto, { categoria: C.RECLAMO, establecimiento: a, marcador, edadHoras: 3 });
+          await sembrarCaso(contexto, { categoria: C.QUEJA, establecimiento: b, marcador, edadHoras: 1 });
+          const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+          const vistos: string[] = [];
+          let cursor: string | undefined;
+          do {
+            const res = await agente
+              .get("/incidencias")
+              .query({ texto: marcador, establecimiento: a.codigoRenipress, limite: "2", ...(cursor ? { cursor } : {}) });
+            expect(res.status).toBe(200);
+            vistos.push(...(res.body.items as CasoDto[]).map((c) => c.codigo));
+            cursor = res.body.siguiente ?? undefined;
+          } while (cursor);
+          expect(vistos).toEqual([reclamoA, ...deA].map((c) => c.codigo));
+
+          const soloQuejas = await agente.get("/incidencias").query({ texto: marcador, establecimiento: a.codigoRenipress, categoria: "queja", limite: "100" });
+          expect((soloQuejas.body.items as CasoDto[]).map((c) => c.codigo)).toEqual(deA.map((c) => c.codigo));
+        });
+      });
+
+      it("un código con formato inválido responde 400", async () => {
+        await usar(async (contexto) => {
+          const { agente } = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+          for (const establecimiento of ["abc", "0", "000", "123456789", "12 34", "1'; DROP TABLE x", "-5"]) {
+            const res = await agente.get("/incidencias").query({ establecimiento });
+            expect(res.status).toBe(400);
+            expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+          }
+        });
+      });
+    });
   });
 
   describe("acciones", () => {
@@ -700,7 +808,7 @@ describe.skipIf(!url)("incidencias contra PostgreSQL real", () => {
         const res = await gestor.agente.post(`/incidencias/${caso.codigo}/derivar`).send({ areaDestino: destino.areaCodigo });
         expect(res.status).toBe(200);
         expect(res.body.caso.area).toEqual({ codigo: destino.areaCodigo, nombre: destino.areaNombre });
-        expect(res.body.caso.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre });
+        expect(res.body.caso.establecimiento).toEqual({ codigoRenipress: origen.codigoRenipress, nombre: origen.nombre, nivelAtencion: null, categoria: null });
 
         expect((await (await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, destino)).agente.get(`/incidencias/${caso.codigo}`)).status).toBe(200);
         expect((await (await entrar(contexto, app, [R.ESTABLECIMIENTO], undefined, origen)).agente.get(`/incidencias/${caso.codigo}`)).status).toBe(404);

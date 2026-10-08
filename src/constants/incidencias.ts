@@ -10,6 +10,7 @@ export const POR_VENCER_LISTA_MAXIMA = 10;
 export const TEXTO_BUSQUEDA_MAXIMO = 100;
 export const RESOLUCION_LONGITUD_MAXIMA = 4000;
 export const CODIGO_INCIDENCIA_PATRON = /^MINSA-\d{4}-\d{6,}$/;
+export const CODIGO_RENIPRESS_PATRON = /^[1-9][0-9]{0,7}$/;
 export const MILISEGUNDOS_POR_HORA = 3_600_000;
 export const HORAS_POR_DIA = 24;
 export const SIN_CATEGORIA_API = "sin-categoria";

@@ -12,6 +12,8 @@ export interface ConsultaListado {
   estado?: EstadoApi;
   categoria?: CategoriaApi | "sin-categoria";
   texto?: string;
+  /** Código RENIPRESS canónico (sin ceros a la izquierda) del establecimiento de origen. */
+  establecimiento?: string;
 }
 
 export interface DatosAccion {
@@ -29,6 +31,9 @@ export interface AreaDto {
 export interface EstablecimientoDto {
   codigoRenipress: string;
   nombre: string;
+  /** Código del nivel de atención del catálogo (I, II, III). */
+  nivelAtencion: string | null;
+  categoria: string | null;
 }
 
 export interface CasoResumenDto {

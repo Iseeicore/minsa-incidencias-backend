@@ -121,6 +121,35 @@ describe("rutas de incidencias", () => {
       expect(servicio.listar).not.toHaveBeenCalled();
     });
 
+    it("pasa el establecimiento con el código canónico: sin ceros a la izquierda ni espacios", async () => {
+      const app = montar(servicio, sesionConCasos);
+      for (const entrada of ["6206", "0006206", "  00006206 ", "12345678"]) {
+        servicio.listar.mockClear();
+        const res = await request(app).get("/incidencias").query({ establecimiento: entrada });
+        expect(res.status).toBe(200);
+        expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20, establecimiento: entrada.trim().replace(/^0+/, "") });
+      }
+    });
+
+    it("un establecimiento vacío equivale a no filtrar y viaja junto al cursor", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: "" });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
+
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: "0123", cursor: codificarCursor(posicion) });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, despuesDe: posicion, establecimiento: "123" });
+    });
+
+    it.each(["abc", "0", "000", "123456789", "000123456789", "12 34", "-5", "1e3", "12.5", "1'; DROP TABLE x"])(
+      "rechaza establecimiento=%s con 400 y no llega al servicio",
+      async (valor) => {
+        const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: valor });
+        expect(res.status).toBe(400);
+        expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        expect(servicio.listar).not.toHaveBeenCalled();
+      },
+    );
+
     it("rechaza un texto de búsqueda demasiado largo", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ texto: "a".repeat(101) });
       expect(res.status).toBe(400);

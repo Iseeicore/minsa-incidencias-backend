@@ -69,6 +69,7 @@ function filtrosDe(consulta: ConsultaListado): FiltrosDeListado {
   if (consulta.categoria === SIN_CATEGORIA_API) filtros.sinCategoria = true;
   else if (consulta.categoria) filtros.categoria = CATEGORIA_DESDE_API[consulta.categoria];
   if (consulta.texto) filtros.texto = consulta.texto;
+  if (consulta.establecimiento) filtros.establecimiento = consulta.establecimiento;
   return filtros;
 }
 
@@ -197,7 +198,12 @@ export class IncidenciaService implements IncidenciaServicio {
       area: fila.areaCodigo && fila.areaNombre ? { codigo: fila.areaCodigo, nombre: fila.areaNombre } : null,
       establecimiento:
         fila.establecimientoCodigo && fila.establecimientoNombre
-          ? { codigoRenipress: fila.establecimientoCodigo, nombre: fila.establecimientoNombre }
+          ? {
+              codigoRenipress: fila.establecimientoCodigo,
+              nombre: fila.establecimientoNombre,
+              nivelAtencion: fila.establecimientoNivel,
+              categoria: fila.establecimientoCategoria,
+            }
           : null,
       responsable: fila.responsable,
       estado: ESTADO_API[fila.estado],

@@ -24,6 +24,8 @@ export interface FiltrosDeListado {
   categoria?: CategoriaIncidencia | null;
   sinCategoria?: boolean;
   texto?: string;
+  /** Código RENIPRESS canónico del establecimiento de origen. */
+  establecimiento?: string;
 }
 
 export interface FilaCaso {
@@ -43,6 +45,8 @@ export interface FilaCaso {
   areaOrigenId: number | null;
   establecimientoCodigo: string | null;
   establecimientoNombre: string | null;
+  establecimientoNivel: string | null;
+  establecimientoCategoria: string | null;
   responsable: string | null;
   resolucion: string | null;
   descripcion: string;
@@ -122,8 +126,14 @@ function condicionesBase(p: Parametros, visible: VisibilidadCasos): string[] {
   return ["i.activo", `e.codigo = ANY(${p.agregar(ESTADOS_CONOCIDOS)}::text[])`, visibilidad(p, visible)];
 }
 
-function condicionesDeFiltros(p: Parametros, filtros: Pick<FiltrosDeListado, "estado" | "categoria" | "sinCategoria" | "texto">): string[] {
+function condicionesDeFiltros(p: Parametros, filtros: FiltrosDeListado): string[] {
   const condiciones: string[] = [];
+  // Por el id del establecimiento: así usa el índice (establecimiento_id, fecha_creacion). Un código que no existe no devuelve nada.
+  if (filtros.establecimiento) {
+    condiciones.push(
+      `i.establecimiento_id = (SELECT f.id FROM catalogo.establecimiento_salud f WHERE f.codigo_renipress = ${p.agregar(filtros.establecimiento)})`,
+    );
+  }
   if (filtros.estado) condiciones.push(`e.codigo = ${p.agregar(filtros.estado)}`);
   if (filtros.categoria) condiciones.push(`c.codigo = ${p.agregar(filtros.categoria)}`);
   if (filtros.sinCategoria) condiciones.push("i.categoria_id IS NULL");
@@ -156,6 +166,8 @@ function consultaDeCaso(p: Parametros): string {
            es.area_id AS "areaOrigenId",
            es.codigo_renipress AS "establecimientoCodigo",
            es.nombre AS "establecimientoNombre",
+           na.codigo AS "establecimientoNivel",
+           es.categoria AS "establecimientoCategoria",
            CASE WHEN ui.id IS NOT NULL THEN ui.nombre_completo
                 WHEN starts_with(resp.actor, ${prefijoSistema}) THEN 'Sistema'
            END AS responsable,
@@ -173,6 +185,7 @@ function consultaDeCaso(p: Parametros): string {
       LEFT JOIN catalogo.categoria_incidencia cia ON cia.id = i.categoria_ia_id
       LEFT JOIN catalogo.area ad ON ad.id = i.area_destino_id
       LEFT JOIN catalogo.establecimiento_salud es ON es.id = i.establecimiento_id
+      LEFT JOIN catalogo.nivel_atencion na ON na.id = es.nivel_atencion_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(
                  (SELECT a.actor

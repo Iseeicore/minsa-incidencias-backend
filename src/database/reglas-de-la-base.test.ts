@@ -53,6 +53,17 @@ describe("traducirErrorDeBase", () => {
     expect(traducirErrorDeBase(errorDeBase(mensajeDeLaBase))).toMatchObject({ statusCode: 422, errorCode: ErrorCode.UNPROCESSABLE, message: esperado });
   });
 
+  it("el tope de 3 usuarios activos por establecimiento es un 409 con su código estable", () => {
+    const traducido = traducirErrorDeBase(errorDeBase("usuario_interno: el establecimiento ya tiene 3 usuarios activos"));
+    expect(traducido).toBeInstanceOf(AppError);
+    expect(traducido).toMatchObject({
+      statusCode: 409,
+      errorCode: ErrorCode.LIMITE_USUARIOS_ESTABLECIMIENTO,
+      message: "Este establecimiento ya tiene 3 usuarios activos. Desactiva a uno para agregar o reactivar otro.",
+    });
+    expect((traducido as AppError).message).not.toContain("usuario_interno");
+  });
+
   it("una regla que no conocemos también es un 409, sin repetir el texto técnico de la base", () => {
     const traducido = traducirErrorDeBase(errorDeBase("ck_incidencia_paciente_estado: algo raro"));
     expect(traducido).toMatchObject({

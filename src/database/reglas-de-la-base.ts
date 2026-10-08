@@ -1,3 +1,4 @@
+import { DEFAULT_ERROR_MESSAGES } from "@/constants/error-messages.js";
 import { ErrorCode } from "@/enums/error-code.enum.js";
 import { HttpStatus } from "@/enums/http-status.enum.js";
 import { AppError } from "@/errors/app-error.js";
@@ -10,6 +11,8 @@ interface ReglaDeLaBase {
   mensaje: string;
   /** Un dato que quien lo envía puede corregir es un 422; un choque con el estado del caso, un 409. */
   corregible?: boolean;
+  /** Código estable de la respuesta cuando el cliente debe reconocer la regla (por defecto, `CONFLICT`). */
+  codigo?: ErrorCode;
 }
 
 const REGLAS_CONOCIDAS: readonly ReglaDeLaBase[] = [
@@ -86,6 +89,11 @@ const REGLAS_CONOCIDAS: readonly ReglaDeLaBase[] = [
     corregible: true,
   },
   { fragmento: "el rol esta desactivado y no se puede asignar", mensaje: "El rol está desactivado y no se puede asignar.", corregible: true },
+  {
+    fragmento: "el establecimiento ya tiene 3 usuarios activos",
+    mensaje: DEFAULT_ERROR_MESSAGES[ErrorCode.LIMITE_USUARIOS_ESTABLECIMIENTO],
+    codigo: ErrorCode.LIMITE_USUARIOS_ESTABLECIMIENTO,
+  },
 ];
 
 /**
@@ -98,5 +106,5 @@ export function traducirErrorDeBase(error: unknown): unknown {
   if (!(error instanceof Error) || (error as { code?: unknown }).code !== CHECK_VIOLATION) return error;
   const regla = REGLAS_CONOCIDAS.find(({ fragmento }) => error.message.includes(fragmento));
   if (regla?.corregible) return new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ErrorCode.UNPROCESSABLE, regla.mensaje);
-  return new AppError(HttpStatus.CONFLICT, ErrorCode.CONFLICT, regla?.mensaje ?? MENSAJE_REGLA_DESCONOCIDA);
+  return new AppError(HttpStatus.CONFLICT, regla?.codigo ?? ErrorCode.CONFLICT, regla?.mensaje ?? MENSAJE_REGLA_DESCONOCIDA);
 }

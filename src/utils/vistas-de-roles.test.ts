@@ -4,14 +4,14 @@ import { RolCodigo } from "@/enums/rol-codigo.enum.js";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { vistasDeRoles } from "@/utils/vistas-de-roles.js";
 
-const TODAS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES, VistaCodigo.QR];
-const SIN_QR = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES];
-const SIN_DERIVACIONES_NI_QR = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS];
-const SIN_DERIVACIONES = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.QR];
+const TODAS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES, VistaCodigo.QR, VistaCodigo.USUARIOS];
+const SIN_QR_NI_USUARIOS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES];
+const SOLO_CASOS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS];
+const SIN_DERIVACIONES = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.QR, VistaCodigo.USUARIOS];
 const VISTAS_POR_ROL = [
   [RolCodigo.ADMINISTRADOR, TODAS],
-  [RolCodigo.GESTOR, SIN_QR],
-  [RolCodigo.OTRANS, SIN_DERIVACIONES_NI_QR],
+  [RolCodigo.GESTOR, SIN_QR_NI_USUARIOS],
+  [RolCodigo.OTRANS, SOLO_CASOS],
   [RolCodigo.ESTABLECIMIENTO, SIN_DERIVACIONES],
 ] as const;
 
@@ -42,6 +42,19 @@ describe("PERMISOS_POR_ROL", () => {
       .sort();
     expect(conQr).toEqual([RolCodigo.ADMINISTRADOR, RolCodigo.ESTABLECIMIENTO].sort());
   });
+
+  it("solo el administrador y el establecimiento ven Usuarios, y son los mismos que pueden gestionarlos", () => {
+    const conVista = Object.entries(PERMISOS_POR_ROL)
+      .filter(([, permisos]) => permisos.vistas.includes(VistaCodigo.USUARIOS))
+      .map(([rol]) => rol)
+      .sort();
+    const queGestionan = Object.entries(PERMISOS_POR_ROL)
+      .filter(([, permisos]) => permisos.usuarios !== null)
+      .map(([rol]) => rol)
+      .sort();
+    expect(conVista).toEqual([RolCodigo.ADMINISTRADOR, RolCodigo.ESTABLECIMIENTO].sort());
+    expect(queGestionan).toEqual(conVista);
+  });
 });
 
 describe("vistasDeRoles", () => {
@@ -70,7 +83,7 @@ describe("vistasDeRoles", () => {
 
   it("ignora los roles que la tabla no conoce, incluido DIRIS, que está desactivado", () => {
     expect(vistasDeRoles([RolCodigo.DIRIS])).toEqual([]);
-    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(SIN_QR);
+    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(SIN_QR_NI_USUARIOS);
   });
 
   it("no confunde un rol con propiedades heredadas del objeto", () => {
@@ -80,6 +93,6 @@ describe("vistasDeRoles", () => {
   it("devuelve siempre un arreglo nuevo que se puede modificar sin tocar la tabla", () => {
     const vistas = vistasDeRoles([RolCodigo.GESTOR]);
     vistas.pop();
-    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(SIN_QR);
+    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(SIN_QR_NI_USUARIOS);
   });
 });

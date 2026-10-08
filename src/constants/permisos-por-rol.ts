@@ -15,8 +15,23 @@ export interface ReglaDeAccion {
   categoriasDestino?: readonly CategoriaIncidencia[];
 }
 
+/** Hasta dónde llega quien gestiona usuarios: todas las áreas, o solo la suya. */
+export const AlcanceDeUsuarios = {
+  TODAS: "todas",
+  SU_AREA: "su-area",
+} as const;
+export type AlcanceDeUsuarios = (typeof AlcanceDeUsuarios)[keyof typeof AlcanceDeUsuarios];
+
+export interface GestionDeUsuarios {
+  alcance: AlcanceDeUsuarios;
+  /** Qué roles puede asignar al crear o cambiar un usuario. */
+  rolesAsignables: readonly RolVigente[];
+}
+
 export interface PermisosDelRol {
   vistas: readonly VistaCodigo[];
+  /** Si crea, edita y desactiva usuarios (vista `USUARIOS`); `null` si no gestiona usuarios. */
+  usuarios: GestionDeUsuarios | null;
   veSinCategoria: boolean;
   /** Si puede listar todas las áreas (`GET /areas`, para filtrar por establecimiento o elegir el destino); si no, solo ve la suya. */
   veTodasLasAreas: boolean;
@@ -27,9 +42,12 @@ export interface PermisosDelRol {
 
 const TODAS_LAS_VISTAS: readonly VistaCodigo[] = Object.values(VistaCodigo);
 const sin = (...excluidas: readonly VistaCodigo[]): readonly VistaCodigo[] => TODAS_LAS_VISTAS.filter((vista) => !excluidas.includes(vista));
-/** `QR` (generador de códigos QR de WhatsApp por establecimiento) solo la tienen el administrador y los establecimientos. */
-const VISTAS_DEL_GESTOR = sin(VistaCodigo.QR);
-const VISTAS_DE_OTRANS = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR);
+/**
+ * `QR` (generador de códigos QR de WhatsApp por establecimiento) solo la tienen el administrador y los establecimientos;
+ * `USUARIOS` (gestión de usuarios) también: solo quien puede crear usuarios la abre.
+ */
+const VISTAS_DEL_GESTOR = sin(VistaCodigo.QR, VistaCodigo.USUARIOS);
+const VISTAS_DE_OTRANS = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR, VistaCodigo.USUARIOS);
 const VISTAS_DEL_ESTABLECIMIENTO = sin(VistaCodigo.DERIVACIONES);
 
 const { CLASIFICADO, DERIVADO, EN_GESTION, ARCHIVADO } = EstadoIncidencia;
@@ -61,10 +79,18 @@ const ACCIONES_DE_REVISION_EN_EL_AREA: readonly ReglaDeAccion[] = [
  * mismo con la corrupción. No derivan: derivar (cambiar el área de destino) solo lo hacen OTRANS y el administrador. El
  * administrador revisa, deriva, archiva y reabre cualquier caso, pero no toma ni resuelve: ese trabajo lo hace el área.
  * Solo el administrador lista todas las áreas; los demás roles ven la suya.
+ *
+ * Usuarios: el administrador crea y gestiona los de cualquier área y asigna cualquier rol; el responsable del
+ * establecimiento, solo los de su propio establecimiento y solo los roles GESTOR o ESTABLECIMIENTO (nunca
+ * ADMINISTRADOR ni OTRANS). El gestor y OTRANS no gestionan usuarios.
  */
 export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   [RolCodigo.ADMINISTRADOR]: {
     vistas: TODAS_LAS_VISTAS,
+    usuarios: {
+      alcance: AlcanceDeUsuarios.TODAS,
+      rolesAsignables: [RolCodigo.ADMINISTRADOR, RolCodigo.GESTOR, RolCodigo.OTRANS, RolCodigo.ESTABLECIMIENTO],
+    },
     veSinCategoria: true,
     veTodasLasAreas: true,
     avisaTodoLoAbierto: true,
@@ -78,6 +104,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   },
   [RolCodigo.GESTOR]: {
     vistas: VISTAS_DEL_GESTOR,
+    usuarios: null,
     veSinCategoria: false,
     veTodasLasAreas: false,
     avisaTodoLoAbierto: false,
@@ -85,6 +112,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   },
   [RolCodigo.OTRANS]: {
     vistas: VISTAS_DE_OTRANS,
+    usuarios: null,
     veSinCategoria: false,
     veTodasLasAreas: false,
     avisaTodoLoAbierto: false,
@@ -101,6 +129,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   },
   [RolCodigo.ESTABLECIMIENTO]: {
     vistas: VISTAS_DEL_ESTABLECIMIENTO,
+    usuarios: { alcance: AlcanceDeUsuarios.SU_AREA, rolesAsignables: [RolCodigo.GESTOR, RolCodigo.ESTABLECIMIENTO] },
     veSinCategoria: false,
     veTodasLasAreas: false,
     avisaTodoLoAbierto: false,

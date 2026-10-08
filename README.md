@@ -116,12 +116,12 @@ En el MVP los permisos son una **tabla fija en el código** (`src/constants/perm
 
 | Rol | Área | Vistas |
 |---|---|---|
-| `ADMINISTRADOR` | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES`, `QR` |
-| `GESTOR` (revisa y atiende los casos de su establecimiento) | el área de su establecimiento (`EESS-<renipress>`), siempre | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` (sin `QR`) |
-| `OTRANS` (denuncias por corrupción) | área `OTRANS` | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES` ni `QR`) |
-| `ESTABLECIMIENTO` | el área de su establecimiento (`EESS-<renipress>`) | `INICIO`, `CASOS`, `BANDEJAS`, `QR` (sin `DERIVACIONES`) |
+| `ADMINISTRADOR` | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES`, `QR`, `USUARIOS` |
+| `GESTOR` (revisa y atiende los casos de su establecimiento) | el área de su establecimiento (`EESS-<renipress>`), siempre | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` (sin `QR` ni `USUARIOS`) |
+| `OTRANS` (denuncias por corrupción) | área `OTRANS` | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES`, `QR` ni `USUARIOS`) |
+| `ESTABLECIMIENTO` (responsable del establecimiento) | el área de su establecimiento (`EESS-<renipress>`) | `INICIO`, `CASOS`, `BANDEJAS`, `QR`, `USUARIOS` (sin `DERIVACIONES`) |
 
-`QR` es la pantalla del generador de códigos QR de WhatsApp por establecimiento. No tiene endpoint propio: el cliente usa `GET /areas?tipo=ESTABLECIMIENTO` (el administrador lista todos; un establecimiento solo el suyo, con `establecimiento.codigoRenipress`).
+`QR` es la pantalla del generador de códigos QR de WhatsApp por establecimiento. No tiene endpoint propio: el cliente usa `GET /areas?tipo=ESTABLECIMIENTO` (el administrador lista todos; un establecimiento solo el suyo, con `establecimiento.codigoRenipress`). `USUARIOS` es la gestión de usuarios (ver [Usuarios por establecimiento](#usuarios-por-establecimiento)): solo la tienen quienes pueden crearlos.
 
 El rol `DIRIS` existe en la base pero está **desactivado**: solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista. Los roles `REVISOR`, `AREA_QUEJA`, `AREA_RECLAMO` y `AREA_DENUNCIA_CORRUPCION` ya no existen.
 
@@ -198,11 +198,35 @@ El detalle agrega:
 | `GESTOR` y `ESTABLECIMIENTO` (mismas capacidades) | Queja, reclamo y otro destinados al área de **su** establecimiento (nunca corrupción) | `confirmar` y `corregir` (solo a queja, reclamo u otro) en `clasificado` sin revisar; `tomar` en `clasificado` ya revisado y en `derivado`; `resolver` en `derivado` y `en-gestion`; `archivar` en `clasificado`, `derivado` y `en-gestion`; `reabrir` en `archivado`. **No derivan** |
 | `OTRANS` | Solo corrupción destinada a `OTRANS` | `confirmar` y `corregir` en `clasificado` sin revisar; `derivar` en `clasificado` ya revisado; `tomar` directo desde `clasificado` ya revisado y en `derivado`; `resolver` en `derivado` y `en-gestion`; `archivar` en `clasificado`, `derivado` y `en-gestion`; `reabrir` en `archivado` |
 
-El `GESTOR` ya no es global: pertenece siempre a un establecimiento y solo ve su área.
+El `GESTOR` ya no es global: pertenece siempre a un establecimiento y solo ve su área. Quien tiene `ESTABLECIMIENTO` además gestiona los usuarios de su establecimiento (ver [Usuarios por establecimiento](#usuarios-por-establecimiento)).
 
 **Errores.** `401` sin sesión; `403` si la persona no tiene la vista o la acción no le corresponde en el estado actual del caso (el cálculo es el mismo de `acciones`); `404` si el código no existe o la persona no lo ve; `400` si la consulta o el cuerpo no son válidos; `422` si la categoría nueva es igual a la actual, si el destino de la derivación no sirve (sin destino, área inexistente, desactivada o de un tipo que no recibe el caso; también si la base rechaza el área, p. ej. una corrupción hacia un establecimiento) o si la base rechaza un texto por corto; `409` si la base rechaza el cambio por una regla (ya se corrigió una vez, ya se confirmó, transición no permitida, establecimiento de origen inmutable, motivo de archivo, un archivado por vigencia que no se reabre), por ejemplo cuando dos personas actúan a la vez: el servicio bloquea el caso (`FOR UPDATE`) y la base sigue siendo la última barrera. El mensaje de la base nunca se repite tal cual (`src/database/reglas-de-la-base.ts` lo traduce). Las marcas `derivado_*`, `tomado_*`, `archivado_en` y `reabierto_*` las llena la base con el actor declarado: esta API no las envía.
 
 **Cada acción firma a quien la hace.** Corre en una transacción con el actor `usuario:{correo}` y la base llena quién y cuándo (`categoria_corregida_por`, `categoria_confirmada_por`, `resuelto_por`, historial). Confirmar y corregir copian el caso a `ia.entrenamiento_categoria`; archivar a mano la marca no apta (`apto_entrenamiento = false`) y reabrir la vuelve a marcar apta. El archivado por vencimiento **no** lo dispara este servicio todavía. Pendiente: el plazo de atención de un caso reabierto cuenta desde la reapertura en la base, pero el campo `plazo` y la campana aún lo calculan desde la llegada del caso.
+
+## Usuarios por establecimiento
+
+Piden sesión y la vista `USUARIOS` (solo `ADMINISTRADOR` y `ESTABLECIMIENTO`; el gestor y OTRANS reciben `403`). Qué puede hacer cada rol sale de la tabla de permisos (`usuarios` en `src/constants/permisos-por-rol.ts`).
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /usuarios` | Query: `q` (sin tildes ni mayúsculas, sobre el nombre o el correo, máximo 100), `area` (código del área; solo lo respeta el administrador), `limite` (50 por defecto, máximo 200) y `cursor` (opaco, keyset por nombre e id). Responde `{ items, siguiente, hayMas }` con `items: [{ id, nombreCompleto, correo, rol, activo, area }]` (`area` es `{ codigo, nombre }` o `null`; los desactivados también salen, con `activo: false`). Sin total. Un cursor inválido responde `400` |
+| `POST /usuarios` | Cuerpo `{ "nombreCompleto", "correo", "rol", "area"? }`. Responde `201 { usuario, claveInicial }` |
+| `PATCH /usuarios/:id` | Cuerpo con al menos uno de `{ "nombreCompleto"?, "rol"?, "activo"?, "area"? }`. Responde `200 { usuario }`. Desactivar es `activo: false`: **nunca se borra** |
+| `POST /usuarios/:id/restablecer-clave` | Sin cuerpo. Responde `200 { usuario, claveInicial }` |
+
+**Reglas**
+
+- **Responsable del establecimiento (`ESTABLECIMIENTO`)**: solo ve, crea, edita, desactiva y restablece la clave de usuarios de **su** establecimiento. El área de un usuario nuevo **sale siempre de su sesión**: cualquier `area` del cuerpo se ignora. Solo asigna los roles `GESTOR` o `ESTABLECIMIENTO` (otro rol responde `403`). Un usuario de otra área, de OTRANS o un administrador responde `404`, igual que uno que no existe. No cambia el área de nadie (`403`; reenviar la que ya tiene no hace nada).
+- **`ADMINISTRADOR`**: gestiona usuarios de cualquier área y asigna cualquier rol vigente (`DIRIS` está desactivado). `area` (su código) es obligatoria para `GESTOR`, `ESTABLECIMIENTO` y `OTRANS`, y está prohibida para `ADMINISTRADOR` (`422`). Solo él cambia el área de un usuario; al pasar a administrador se le quita el área.
+- **Nadie cambia su propio rol ni se desactiva a sí mismo**: `409 AUTOEDICION_NO_PERMITIDA` (también el administrador).
+- **Sesiones**: desactivar o cambiar el área cierran las sesiones del usuario (lo hacen los disparadores de la base; la API no lo duplica). Cambiar el rol y restablecer la clave las cierran desde la API.
+- **El correo** se guarda sin espacios y en minúsculas. El nombre lleva de 3 a 120 caracteres.
+- **Auditoría**: quien crea o cambia queda como actor (`usuario:{correo}`) en `usuario_creacion`, `usuario_modificacion` y `eliminado_por`.
+
+**Errores con código estable** (el cliente decide por `errorCode`): `409 LIMITE_USUARIOS_ESTABLECIMIENTO` (tope de **3 usuarios activos por establecimiento**, de cualquier rol, también para el administrador y al reactivar o mover a alguien; lo hace cumplir la base y aquí se traduce), `409 CORREO_REPETIDO` y `409 AUTOEDICION_NO_PERMITIDA`; además `400` (cuerpo inválido), `403`, `404` y `422` (área obligatoria, prohibida, inexistente, desactivada o de un tipo que no corresponde al rol).
+
+**La clave inicial** (`claveInicial`) la **genera el sistema**: 20 caracteres aleatorios con `crypto.randomInt`, sin caracteres ambiguos (`0 O 1 l I`). Se devuelve **una sola vez**, en la respuesta de crear y de restablecer, con `Cache-Control: no-store`; no hay forma de consultarla después. En la base solo queda su huella Argon2id (la del hasher de siempre). **Nunca** pasa por los logs (el cuerpo de las peticiones no se registra y el logger oculta `claveInicial`, `password`, las huellas y el detalle de los errores de la base), la auditoría de casos ni los mensajes de error. Quien crea el usuario debe entregársela por un canal seguro. **No hay cambio obligatorio de clave en el primer ingreso**: queda como mejora futura (junto con la pantalla de cambio de clave).
 
 ### Crear el primer administrador
 
@@ -292,13 +316,13 @@ src/
   enums/               ErrorCode, HttpStatus, RolCodigo, VistaCodigo y los de incidencias (acción, categoría, estado, plazo, tipo de área)
   errors/app-error.ts  AppError (estado HTTP, código interno y mensaje)
   middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
-  repositories/        Acceso a la base: usuario, sesion e incidencia (consultas parametrizadas)
-  services/            auth.service (login, sesión, cierre), administrador.service e incidencia.service (casos y acciones)
-  routes/              salud, auth, incidencias y áreas
+  repositories/        Acceso a la base: usuario, sesion, incidencia, area y usuario-gestion (consultas parametrizadas)
+  services/            auth.service (login, sesión, cierre), administrador.service, incidencia.service (casos y acciones), area.service y usuario.service (usuarios por establecimiento)
+  routes/              salud, auth, incidencias, áreas y usuarios
   scripts/             crear-admin (primer administrador)
   types/               Ampliación de Request con la sesión actual
   utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,
-                       plazo-incidencia, historial-incidencia, reclamante
+                       gestion-de-usuarios, clave-inicial, cursor-usuarios, plazo-incidencia, historial-incidencia, reclamante
   test-utils/          Ayudas de pruebas: base de pruebas con retroceso, usuarios y casos sintéticos (no entra al build)
 ```
 
@@ -311,7 +335,7 @@ Las reglas del backend (capas, errores, cookies, CORS, límites) están en el va
 - Un rol de base de datos propio; declarar el actor (`set_config('app.actor', ..., true)`) en cada transacción que escriba.
 - Las reglas de negocio de la incidencia las hace cumplir la base, no este código.
 - La cookie de sesión solo lleva un identificador opaco, firmado, `HttpOnly`, `SameSite=Strict`; se lee siempre con `readSessionId` y el estado vive en la base para poder revocarla. Nunca viajan roles ni el id del usuario.
-- No registrar DNI, nombres, tokens ni texto de incidencias en los logs: cada petición solo registra id, método, ruta **sin query**, IP, estado y duración; nunca cabeceras ni cookies.
+- No registrar DNI, nombres, tokens ni texto de incidencias en los logs: cada petición solo registra id, método, ruta **sin query**, IP, estado y duración; nunca cabeceras, cookies ni el cuerpo. Las claves (`claveInicial`, `password`), las huellas y el detalle de un error de la base (`err.detail`, que puede copiar la fila rechazada) se ocultan además en el logger.
 - Ningún secreto en el repositorio: el `.env` está ignorado y solo se versiona `.env.example`.
 
 ## Pruebas

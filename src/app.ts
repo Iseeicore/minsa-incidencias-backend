@@ -15,14 +15,17 @@ import { attachSession } from "@/middleware/session.js";
 import { AreaRepository } from "@/repositories/area.repository.js";
 import { IncidenciaRepository } from "@/repositories/incidencia.repository.js";
 import { SesionRepository } from "@/repositories/sesion.repository.js";
+import { UsuarioGestionRepository } from "@/repositories/usuario-gestion.repository.js";
 import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { createAreasRouter } from "@/routes/areas.routes.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
+import { createUsuariosRouter } from "@/routes/usuarios.routes.js";
 import { AreaService } from "@/services/area.service.js";
 import { AuthService } from "@/services/auth.service.js";
 import { IncidenciaService, plazosDeEntorno } from "@/services/incidencia.service.js";
+import { UsuarioService } from "@/services/usuario.service.js";
 import { ArgonPasswordHasher, type PasswordHasher } from "@/utils/password-hasher.js";
 import { TokenBucketLimiter } from "@/utils/token-bucket.js";
 
@@ -52,6 +55,7 @@ export function createApp(
   const incidencias = new IncidenciaService(new IncidenciaRepository(database), database, plazosDeEntorno(env));
 
   const areas = new AreaService(new AreaRepository(database));
+  const usuarios = new UsuarioService(new UsuarioGestionRepository(database), database, hasher);
 
   const app = express();
   app.disable("x-powered-by");
@@ -68,6 +72,7 @@ export function createApp(
   app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
   app.use(createIncidenciasRouter(incidencias));
   app.use(createAreasRouter(areas));
+  app.use(createUsuariosRouter(usuarios));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -247,6 +247,16 @@ docker compose run --rm \
 
 Opcionalmente `-e ADMIN_AREA="OTRANS"` (o `EESS-6206`) le da un área por su código (debe existir y estar activa; la compatibilidad rol-área la verifica el disparador de la base). Guarda la huella Argon2id (nunca la clave), asigna el rol `ADMINISTRADOR` y firma con el actor `sistema:crear-admin`. Rechaza un correo repetido y una clave de menos de 12 caracteres. La clave queda en el historial de tu terminal: úsalo solo para el primer acceso y cámbiala cuando exista esa pantalla.
 
+## Filtro de corrupción por reglas (`reglas-corrupcion-v1`)
+
+Función pura, sin IA, sin base de datos y sin red (`src/services/filtro-corrupcion/`), pensada para correr en el backend y para que la reutilice después el bot: `evaluarTextoCorrupcion(texto, contexto?)`. **Solo propone**: la persona siempre confirma o corrige la categoría, y el filtro nunca asigna destino (la corrupción sigue yendo a OTRANS por la base). Aún **no está conectado** a la creación ni a la confirmación de casos: guardar la propuesta en `chatbot.incidencia_analisis` (`senales`, `categoria_confianza`, `version_clasificador`) espera la migración del repo del bot.
+
+- **Entrada:** el texto (desde 20 caracteres con `trim`; menos devuelve `aplica: false` y el faltante `DATOS_INSUFICIENTES`) y, opcionalmente, `{ entidades, establecimientoConocido, tieneArchivos }`. `entidades` es el catálogo (`{ codigo, nombre, alias? }`); sin él no se detecta entidad.
+- **Cómo puntúa:** normaliza (minúsculas, sin tildes ni signos, sin montos), busca frases como secuencias de palabras y suma: fuerte +3, media +2, débil +1, cargo +1, entidad del catálogo +1, negativa decisiva −2, negativa leve −1 (cada una cuenta una vez; las negativas, una por tipo). **4 o más: alta; 2 o 3: media; 0 o 1: baja (no corrupción).** Sin al menos una señal fuerte, media o débil nunca se propone corrupción, aunque el cargo y la entidad sumen. "denuncia", "abuso", "cobro" y "pago" nunca son señal.
+- **Salida:** `{ aplica, puntaje, certeza, propuestaCorrupcion, senales: [{ frase, tipo, peso }], actor, nombreMencionado, entidad, faltantes, versionReglas }`. `nombreMencionado` es solo informativo (una acusación sin comprobar): no suma ni decide. `faltantes` (`AUTOR_O_CARGO`, `ENTIDAD`, `PRUEBAS`) sale de la sección 3c del plan de cierre y solo se calcula si se propone corrupción.
+- **Léxico:** datos en `lexico.ts`, pesos y umbrales en `src/constants/filtro-corrupcion.ts`. Es un borrador por validar con el área usuaria y mensajes reales. Al cambiar una frase o un peso, sube la versión (`VERSION_REGLAS_CORRUPCION`).
+- **Probarlo:** `POST /filtro-corrupcion/evaluar` con `{ "texto": "...", "entidades": [...], "establecimientoConocido": false, "tieneArchivos": false }` (`texto` máximo 5000). Solo lectura: no toca la base ni guarda ni registra el texto. Piden sesión con rol `ADMINISTRADOR`, `GESTOR` u `OTRANS` (`403` para los demás). Responde `200` con el resultado de arriba.
+
 ## Conexión con el frontend (CORS)
 
 El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así que el navegador exige CORS. Se configura con una lista de orígenes exactos en `CORS_ORIGINS`:
@@ -323,7 +333,8 @@ src/
   middleware/          cors, rate-limit, session (attachSession, requireSession, requireVista), error-handler
   repositories/        Acceso a la base: usuario, sesion, incidencia, area y usuario-gestion (consultas parametrizadas)
   services/            auth.service (login, sesión, cierre), administrador.service, incidencia.service (casos y acciones), area.service y usuario.service (usuarios por establecimiento)
-  routes/              salud, auth, incidencias, áreas y usuarios
+                       y filtro-corrupcion/ (filtro por reglas, función pura)
+  routes/              salud, auth, incidencias, áreas, usuarios y filtro-corrupcion (evaluación de prueba)
   scripts/             crear-admin (primer administrador)
   types/               Ampliación de Request con la sesión actual
   utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,

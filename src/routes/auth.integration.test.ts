@@ -76,7 +76,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
       expect(me.body.roles).toEqual(["ADMINISTRADOR"]);
       expect(me.body.area).toBeNull();
       expect(me.body.nombreCompleto).toBe("Ana Prueba");
-      expect(me.body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+      expect(me.body.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES", "QR"]);
     });
   });
 
@@ -89,7 +89,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
     });
   });
 
-  it("OTRANS y establecimiento no ven Derivaciones; el gestor y el administrador sí", async () => {
+  it("Derivaciones solo para gestor y administrador; Códigos QR solo para establecimiento y administrador", async () => {
     await usar(async (contexto) => {
       const eess = await crearEstablecimientoDePrueba(contexto);
       await crearUsuario(contexto, "otrans@minsa.gob.pe", [RolCodigo.OTRANS], "OTRANS", "OTRANS");
@@ -102,7 +102,7 @@ describe.skipIf(!url)("autenticación contra PostgreSQL real", () => {
         return (await agente.get("/auth/me")).body.vistas as string[];
       };
       expect(await vistasDe("otrans@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
-      expect(await vistasDe("eess@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
+      expect(await vistasDe("eess@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS", "QR"]);
       expect(await vistasDe("gestor@minsa.gob.pe")).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
     });
   });

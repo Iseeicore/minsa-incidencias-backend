@@ -20,6 +20,12 @@ export interface FilaArea {
   categoria: string | null;
 }
 
+/** El código RENIPRESS que pide un texto solo de dígitos (sin ceros a la izquierda), o `null` si el texto no lo es. */
+export function codigoRenipressBuscado(texto: string): string | null {
+  const limpio = texto.trim();
+  return /^\d+$/.test(limpio) ? limpio.replace(/^0+(?=\d)/, "") : null;
+}
+
 export class AreaRepository {
   constructor(private readonly database: Database) {}
 
@@ -45,7 +51,10 @@ export class AreaRepository {
     if (filtros.tipo) condiciones.push(`ta.codigo = ${marcador(filtros.tipo)}`);
     if (filtros.texto) {
       const patron = marcador(`%${escaparComodines(filtros.texto)}%`);
-      condiciones.push(`COALESCE(es.nombre_busqueda, public.f_unaccent(a.nombre)) LIKE public.f_unaccent(${patron}) ESCAPE '\\'`);
+      const porNombre = `COALESCE(es.nombre_busqueda, public.f_unaccent(a.nombre)) LIKE public.f_unaccent(${patron}) ESCAPE '\\'`;
+      // Un texto solo de dígitos también busca por código RENIPRESS exacto (canónico, sin ceros a la izquierda).
+      const codigo = codigoRenipressBuscado(filtros.texto);
+      condiciones.push(codigo ? `(${porNombre} OR es.codigo_renipress = ${marcador(codigo)})` : porNombre);
     }
     if (despuesDe) condiciones.push(`(a.nombre, a.id) > (${marcador(despuesDe.nombre)}::text, ${marcador(despuesDe.id)}::int)`);
 

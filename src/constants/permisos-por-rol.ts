@@ -22,7 +22,11 @@ export interface PermisosDelRol {
 }
 
 const TODAS_LAS_VISTAS: readonly VistaCodigo[] = Object.values(VistaCodigo);
-const VISTAS_SIN_DERIVACIONES: readonly VistaCodigo[] = TODAS_LAS_VISTAS.filter((vista) => vista !== VistaCodigo.DERIVACIONES);
+const sin = (...excluidas: readonly VistaCodigo[]): readonly VistaCodigo[] => TODAS_LAS_VISTAS.filter((vista) => !excluidas.includes(vista));
+/** `QR` (generador de códigos QR de WhatsApp por establecimiento) solo la tienen el administrador y los establecimientos. */
+const VISTAS_DEL_GESTOR = sin(VistaCodigo.QR);
+const VISTAS_DE_OTRANS = sin(VistaCodigo.DERIVACIONES, VistaCodigo.QR);
+const VISTAS_DEL_ESTABLECIMIENTO = sin(VistaCodigo.DERIVACIONES);
 
 const { CLASIFICADO, DERIVADO, EN_GESTION } = EstadoIncidencia;
 const { DENUNCIA_CORRUPCION, QUEJA, RECLAMO, OTRO } = CategoriaIncidencia;
@@ -44,7 +48,7 @@ const CATEGORIAS_PARA_DERIVAR: readonly CategoriaIncidencia[] = [QUEJA, RECLAMO]
 export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
   [RolCodigo.ADMINISTRADOR]: { vistas: TODAS_LAS_VISTAS, veSinCategoria: true, veTodasLasAreas: true, acciones: [] },
   [RolCodigo.GESTOR]: {
-    vistas: TODAS_LAS_VISTAS,
+    vistas: VISTAS_DEL_GESTOR,
     veSinCategoria: true,
     veTodasLasAreas: true,
     acciones: [
@@ -54,7 +58,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
     ],
   },
   [RolCodigo.OTRANS]: {
-    vistas: VISTAS_SIN_DERIVACIONES,
+    vistas: VISTAS_DE_OTRANS,
     veSinCategoria: false,
     veTodasLasAreas: false,
     acciones: [
@@ -66,7 +70,7 @@ export const PERMISOS_POR_ROL: Readonly<Record<RolVigente, PermisosDelRol>> = {
     ],
   },
   [RolCodigo.ESTABLECIMIENTO]: {
-    vistas: VISTAS_SIN_DERIVACIONES,
+    vistas: VISTAS_DEL_ESTABLECIMIENTO,
     veSinCategoria: false,
     veTodasLasAreas: false,
     acciones: [

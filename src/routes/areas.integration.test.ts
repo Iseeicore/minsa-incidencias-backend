@@ -151,6 +151,31 @@ describe.skipIf(!url)("áreas contra PostgreSQL real", () => {
     });
   });
 
+  it("q solo de dígitos también encuentra por código RENIPRESS exacto (sin ceros a la izquierda) y mantiene la búsqueda por nombre", async () => {
+    await usar(async (contexto) => {
+      const marca = marcaDeNombre();
+      const [uno, dos] = await sembrar(contexto, marca);
+      const [a, b] = [uno as EstablecimientoDePrueba, dos as EstablecimientoDePrueba];
+      // Nombres sin el código dentro, para que solo la búsqueda por código los encuentre.
+      for (const [e, nombre] of [[a, `${marca} Sin Codigo A`], [b, `${marca} Sin Codigo B`]] as const) {
+        await contexto.database.transaction("sistema:prueba", (tx) =>
+          tx.query("UPDATE catalogo.establecimiento_salud SET nombre = $1 WHERE id = $2", [nombre, e.establecimientoId]),
+        );
+      }
+      const agente = await entrar(contexto, construir(contexto), [R.ADMINISTRADOR]);
+
+      expect(await nombres(agente, { q: a.codigoRenipress })).toEqual([a.nombre]);
+      expect(await nombres(agente, { q: `00${b.codigoRenipress}` })).toEqual([b.nombre]);
+      expect(await nombres(agente, { q: a.codigoRenipress.slice(0, -1) })).not.toContain(a.nombre);
+      expect(await nombres(agente, { q: a.codigoRenipress, tipo: "OTRANS" })).toEqual([]);
+      expect(await nombres(agente, { q: `${marca} sin codigo a` })).toEqual([a.nombre]);
+
+      const propio = await entrar(contexto, construir(contexto), [R.ESTABLECIMIENTO], a.areaCodigo);
+      expect(await nombres(propio, { q: a.codigoRenipress })).toEqual([a.nombre]);
+      expect(await nombres(propio, { q: b.codigoRenipress })).toEqual([]);
+    });
+  });
+
   it("también busca sin tildes en las áreas que no son establecimientos (sin nombre_busqueda)", async () => {
     await usar(async (contexto) => {
       const marca = marcaDeNombre();

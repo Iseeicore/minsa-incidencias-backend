@@ -116,10 +116,12 @@ En el MVP los permisos son una **tabla fija en el código** (`src/constants/perm
 
 | Rol | Área | Vistas |
 |---|---|---|
-| `ADMINISTRADOR` | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` |
-| `GESTOR` (revisa y deriva) | sin área | las cuatro |
-| `OTRANS` (denuncias por corrupción) | área `OTRANS` | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES`) |
-| `ESTABLECIMIENTO` | el área de su establecimiento (`EESS-<renipress>`) | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES`) |
+| `ADMINISTRADOR` | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES`, `QR` |
+| `GESTOR` (revisa y deriva) | sin área | `INICIO`, `CASOS`, `BANDEJAS`, `DERIVACIONES` (sin `QR`) |
+| `OTRANS` (denuncias por corrupción) | área `OTRANS` | `INICIO`, `CASOS`, `BANDEJAS` (sin `DERIVACIONES` ni `QR`) |
+| `ESTABLECIMIENTO` | el área de su establecimiento (`EESS-<renipress>`) | `INICIO`, `CASOS`, `BANDEJAS`, `QR` (sin `DERIVACIONES`) |
+
+`QR` es la pantalla del generador de códigos QR de WhatsApp por establecimiento. No tiene endpoint propio: el cliente usa `GET /areas?tipo=ESTABLECIMIENTO` (el administrador lista todos; un establecimiento solo el suyo, con `establecimiento.codigoRenipress`).
 
 El rol `DIRIS` existe en la base pero está **desactivado**: solo se consultan roles activos y la tabla no lo conoce, así que no da ninguna vista. Los roles `REVISOR`, `AREA_QUEJA`, `AREA_RECLAMO` y `AREA_DENUNCIA_CORRUPCION` ya no existen.
 
@@ -135,7 +137,7 @@ Pide solo sesión (sin vista concreta): qué áreas ve cada persona lo decide el
 
 | Ruta | Qué hace |
 |---|---|
-| `GET /areas` | Query: `tipo` (`ESTABLECIMIENTO`, `OTRANS`, `DIRIS`, `INSTITUTO` u `ORGANISMO`), `q` (texto, sin tildes ni mayúsculas, máximo 100; usa `nombre_busqueda` en los establecimientos y `f_unaccent(nombre)` en las demás áreas), `limite` (50 por defecto, máximo 200) y `cursor` (opaco, keyset por nombre e id). Responde `{ items, siguiente, hayMas }` con `items: [{ id, codigo, nombre, tipoArea, establecimiento }]`, donde `establecimiento` es `null` o `{ codigoRenipress, nivelAtencion, categoria }`. Orden estable por nombre e id; sin total. Un cursor inválido o un `tipo` desconocido responde `400` |
+| `GET /areas` | Query: `tipo` (`ESTABLECIMIENTO`, `OTRANS`, `DIRIS`, `INSTITUTO` u `ORGANISMO`), `q` (texto, sin tildes ni mayúsculas, máximo 100; usa `nombre_busqueda` en los establecimientos y `f_unaccent(nombre)` en las demás áreas, sin filtrar por nivel de atención; si `q` son solo dígitos, además coincide el código RENIPRESS exacto, sin ceros a la izquierda), `limite` (50 por defecto, máximo 200) y `cursor` (opaco, keyset por nombre e id). Responde `{ items, siguiente, hayMas }` con `items: [{ id, codigo, nombre, tipoArea, establecimiento }]`, donde `establecimiento` es `null` o `{ codigoRenipress, nivelAtencion, categoria }`. Orden estable por nombre e id; sin total. Un cursor inválido o un `tipo` desconocido responde `400` |
 
 - **Quién ve qué** (`veTodasLasAreas` en la tabla de permisos): `GESTOR` (es quien deriva) y `ADMINISTRADOR` (filtra por establecimiento) listan todas; `OTRANS` y `ESTABLECIMIENTO` solo ven **su propia área** (una sola; ninguna si no tienen área), porque no derivan. Con varios roles basta que uno lo permita.
 - Cada item trae su `codigo`: es el que se envía como `areaDestino` en `POST /incidencias/:codigo/derivar` (en un establecimiento, `EESS-<codigoRenipress>`). El `id` numérico es solo informativo.

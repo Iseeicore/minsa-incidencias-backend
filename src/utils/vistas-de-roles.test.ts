@@ -4,12 +4,14 @@ import { RolCodigo } from "@/enums/rol-codigo.enum.js";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
 import { vistasDeRoles } from "@/utils/vistas-de-roles.js";
 
-const TODAS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES];
-const SIN_DERIVACIONES = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS];
+const TODAS = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES, VistaCodigo.QR];
+const SIN_QR = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.DERIVACIONES];
+const SIN_DERIVACIONES_NI_QR = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS];
+const SIN_DERIVACIONES = [VistaCodigo.INICIO, VistaCodigo.CASOS, VistaCodigo.BANDEJAS, VistaCodigo.QR];
 const VISTAS_POR_ROL = [
   [RolCodigo.ADMINISTRADOR, TODAS],
-  [RolCodigo.GESTOR, TODAS],
-  [RolCodigo.OTRANS, SIN_DERIVACIONES],
+  [RolCodigo.GESTOR, SIN_QR],
+  [RolCodigo.OTRANS, SIN_DERIVACIONES_NI_QR],
   [RolCodigo.ESTABLECIMIENTO, SIN_DERIVACIONES],
 ] as const;
 
@@ -31,6 +33,14 @@ describe("PERMISOS_POR_ROL", () => {
       .map(([rol]) => rol)
       .sort();
     expect(conDerivaciones).toEqual([RolCodigo.ADMINISTRADOR, RolCodigo.GESTOR].sort());
+  });
+
+  it("solo el administrador y el establecimiento ven Códigos QR", () => {
+    const conQr = Object.entries(PERMISOS_POR_ROL)
+      .filter(([, permisos]) => permisos.vistas.includes(VistaCodigo.QR))
+      .map(([rol]) => rol)
+      .sort();
+    expect(conQr).toEqual([RolCodigo.ADMINISTRADOR, RolCodigo.ESTABLECIMIENTO].sort());
   });
 });
 
@@ -60,7 +70,7 @@ describe("vistasDeRoles", () => {
 
   it("ignora los roles que la tabla no conoce, incluido DIRIS, que está desactivado", () => {
     expect(vistasDeRoles([RolCodigo.DIRIS])).toEqual([]);
-    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(TODAS);
+    expect(vistasDeRoles(["ROL_INVENTADO", RolCodigo.GESTOR])).toEqual(SIN_QR);
   });
 
   it("no confunde un rol con propiedades heredadas del objeto", () => {
@@ -70,6 +80,6 @@ describe("vistasDeRoles", () => {
   it("devuelve siempre un arreglo nuevo que se puede modificar sin tocar la tabla", () => {
     const vistas = vistasDeRoles([RolCodigo.GESTOR]);
     vistas.pop();
-    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(TODAS);
+    expect(vistasDeRoles([RolCodigo.GESTOR])).toEqual(SIN_QR);
   });
 });

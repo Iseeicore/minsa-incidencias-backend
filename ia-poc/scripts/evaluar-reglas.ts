@@ -1,10 +1,13 @@
 // Evalúa el filtro de corrupción por reglas contra un conjunto de mensajes etiquetados (JSON Lines).
-// Uso (desde la raíz del repo):  npx tsx ia-poc/scripts/evaluar-reglas.ts ia-poc/evaluacion/desarrollo.jsonl [--json=salida.json] [--sin-listas]
+// Uso (desde la raíz del repo):  npx tsx ia-poc/scripts/evaluar-reglas.ts ia-poc/evaluacion/desarrollo.jsonl [--json=salida.json] [--sin-listas] [--sin-textos]
 // Positivo = `categoria_esperada` DENUNCIA_CORRUPCION; "predicho" = `propuestaCorrupcion` del filtro. Solo lee el texto (sin contexto).
 // Zona gris: el filtro pidió segunda opinión (`requiereSegundaOpinion`) o quedó a un punto de proponer corrupción con alguna señal.
+// Identidad: casos que el filtro propone solo por identidad (`origenPropuesta` IDENTIDAD, certeza baja) y cuántos eran corrupción de verdad.
+// Con --sin-textos las listas y el JSON llevan solo ids y puntajes: así se mide un conjunto limpio (T2) sin copiar sus textos.
 import { readFileSync, writeFileSync } from "node:fs";
 import { UMBRAL_CERTEZA_MEDIA, TIPOS_DE_SENAL_DE_CORRUPCION } from "@/constants/filtro-corrupcion.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
+import { OrigenPropuesta, ViaEntidad } from "@/enums/filtro-corrupcion.enum.js";
 import type { ResultadoCorrupcion } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 
 interface Mensaje {
@@ -14,6 +17,7 @@ interface Mensaje {
   dificultad?: string | null;
   estilo?: string | null;
   contra_titular?: boolean | null;
+  sigla?: string | null;
 }
 
 interface Evaluado {
@@ -41,6 +45,7 @@ const argumentos = process.argv.slice(2);
 const rutaEntrada = argumentos.find((a) => !a.startsWith("--"));
 const rutaJson = argumentos.find((a) => a.startsWith("--json="))?.slice("--json=".length);
 const sinListas = argumentos.includes("--sin-listas");
+const sinTextos = argumentos.includes("--sin-textos");
 if (!rutaEntrada) {
   console.error("Falta la ruta del archivo .jsonl");
   process.exit(2);
@@ -52,8 +57,18 @@ const leerMensajes = (ruta: string): Mensaje[] =>
     .filter((linea) => linea.trim() !== "")
     .map((linea) => JSON.parse(linea) as Mensaje);
 
-const pedidaSegundaOpinion = (resultado: ResultadoCorrupcion): boolean =>
-  (resultado as { requiereSegundaOpinion?: boolean }).requiereSegundaOpinion === true;
+const pedidaSegundaOpinion = (resultado: ResultadoCorrupcion): boolean => resultado.requiereSegundaOpinion;
+
+/** Código de la entidad a partir de la sigla del mensaje, como lo arma `generar-catalogo.mjs` ("H.H" -> "hh", "DIRIS LE" -> "diris-le"). */
+const codigoDeSigla = (sigla: string): string =>
+  sigla
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\./g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/ /g, "-");
 
 function evaluar(mensaje: Mensaje): Evaluado {
   const resultado = evaluarTextoCorrupcion(mensaje.texto);
@@ -145,7 +160,60 @@ const falsosNegativos = evaluados.filter((e) => e.positivoEsperado && !e.positiv
 const falsosPositivos = evaluados.filter((e) => !e.positivoEsperado && e.positivoPredicho);
 const grises = evaluados.filter((e) => e.enZonaGris);
 const lineaDe = (e: Evaluado): string =>
-  `  ${e.mensaje.id} [puntaje ${e.resultado.puntaje}, esperado ${e.mensaje.categoria_esperada}] ${e.mensaje.texto}`;
+  `  ${e.mensaje.id} [puntaje ${e.resultado.puntaje}, esperado ${e.mensaje.categoria_esperada}]${sinTextos ? "" : ` ${e.mensaje.texto}`}`;
+const entradaDeLista = (e: Evaluado) => ({
+  id: e.mensaje.id,
+  ...(sinTextos ? {} : { texto: e.mensaje.texto }),
+  puntaje: e.resultado.puntaje,
+});
+
+const activacionesZonaGris = evaluados.filter((e) => pedidaSegundaOpinion(e.resultado));
+const porIdentidad = evaluados.filter((e) => e.resultado.origenPropuesta === OrigenPropuesta.IDENTIDAD);
+const porIdentidadCorrupcion = porIdentidad.filter((e) => e.positivoEsperado);
+const porIdentidadFalsosPositivos = porIdentidad.filter((e) => !e.positivoEsperado);
+const porReglas = evaluados.filter((e) => e.resultado.origenPropuesta === OrigenPropuesta.REGLAS);
+
+/** Detección de la entidad etiquetada (`sigla`): si el filtro la encontró, si encontró otra, o ninguna. Solo cuenta los mensajes que traen sigla. */
+const conSigla = evaluados.filter((e) => e.mensaje.sigla);
+const estadoDeEntidad = (e: Evaluado): "correcta" | "otra" | "ninguna" => {
+  const detectada = e.resultado.entidad?.codigo;
+  if (!detectada) return "ninguna";
+  return detectada === codigoDeSigla(e.mensaje.sigla ?? "") ? "correcta" : "otra";
+};
+const entidadesPorSigla = new Map<string, { total: number; correcta: number; otra: number; ninguna: number; porUbicacion: number }>();
+for (const e of conSigla) {
+  const sigla = e.mensaje.sigla ?? "";
+  const fila = entidadesPorSigla.get(sigla) ?? { total: 0, correcta: 0, otra: 0, ninguna: 0, porUbicacion: 0 };
+  fila.total++;
+  fila[estadoDeEntidad(e)]++;
+  if (!e.resultado.entidad && e.resultado.identidad.ubicacion) fila.porUbicacion++;
+  entidadesPorSigla.set(sigla, fila);
+}
+const entidadesDetectadas = {
+  conSigla: conSigla.length,
+  correcta: conSigla.filter((e) => estadoDeEntidad(e) === "correcta").length,
+  otra: conSigla.filter((e) => estadoDeEntidad(e) === "otra").length,
+  ninguna: conSigla.filter((e) => estadoDeEntidad(e) === "ninguna").length,
+  porNombreDelTitular: evaluados.filter((e) => e.resultado.identidad.viaEntidad === ViaEntidad.NOMBRE_TITULAR).length,
+  soloUbicacion: evaluados.filter((e) => !e.resultado.entidad && e.resultado.identidad.ubicacion).length,
+  porSigla: Object.fromEntries([...entidadesPorSigla.entries()].sort(([a], [b]) => a.localeCompare(b))),
+};
+
+console.log(
+  `\nZona gris activada (requiereSegundaOpinion): ${activacionesZonaGris.length} mensajes (${activacionesZonaGris.filter((e) => e.positivoEsperado).length} son corrupción esperada)`,
+);
+console.log(
+  `Propuestas por REGLAS: ${porReglas.length} | por IDENTIDAD: ${porIdentidad.length} (${porIdentidadCorrupcion.length} eran corrupción de verdad, ${porIdentidadFalsosPositivos.length} falsos positivos)`,
+);
+if (conSigla.length > 0) {
+  console.log(
+    `Entidad etiquetada detectada: ${entidadesDetectadas.correcta}/${conSigla.length} correcta, ${entidadesDetectadas.otra} otra entidad, ${entidadesDetectadas.ninguna} sin entidad (${entidadesDetectadas.soloUbicacion} de los sin entidad con ubicación)`,
+  );
+  for (const [sigla, f] of entidadesPorSigla)
+    console.log(
+      `  ${sigla.padEnd(14)} n=${String(f.total).padStart(3)}  correcta=${f.correcta} otra=${f.otra} ninguna=${f.ninguna} (con ubicación ${f.porUbicacion})`,
+    );
+}
 
 console.log(`\nZona gris: ${grises.length} mensajes (${grises.filter((e) => e.positivoEsperado).length} son corrupción esperada)`);
 if (!sinListas) {
@@ -166,8 +234,17 @@ if (rutaJson) {
     porEstilo,
     porTitular,
     zonaGris: grises.map((e) => e.mensaje.id),
-    falsosNegativos: falsosNegativos.map((e) => ({ id: e.mensaje.id, texto: e.mensaje.texto, puntaje: e.resultado.puntaje })),
-    falsosPositivos: falsosPositivos.map((e) => ({ id: e.mensaje.id, texto: e.mensaje.texto, puntaje: e.resultado.puntaje })),
+    activacionesZonaGris: activacionesZonaGris.map((e) => e.mensaje.id),
+    propuestasPorReglas: porReglas.length,
+    porIdentidad: {
+      total: porIdentidad.length,
+      corrupcionReal: porIdentidadCorrupcion.length,
+      falsosPositivos: porIdentidadFalsosPositivos.map(entradaDeLista),
+      ids: porIdentidad.map((e) => e.mensaje.id),
+    },
+    entidadesDetectadas,
+    falsosNegativos: falsosNegativos.map(entradaDeLista),
+    falsosPositivos: falsosPositivos.map(entradaDeLista),
   };
   writeFileSync(rutaJson, JSON.stringify(resumen, null, 2) + "\n");
   console.log(`\nResumen guardado en ${rutaJson}`);

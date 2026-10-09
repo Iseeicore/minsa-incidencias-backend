@@ -32,7 +32,7 @@ node ia-poc/scripts/precalentar.mjs        # una vez; sin esto la primera llamad
 npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2 --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl --limite=100 --estratificado --max-minutos=35
 ```
 
-- `--variante=V1|V2|V3` (V1: prompt completo; V2: V1 + señales y entidad de las reglas como pistas; V3: V2 + ejemplos resueltos; V4, RAG, es un hueco documentado en `src/services/analisis-ia/prompts.ts`).
+- `--variante=V1|V2|V3|V2C` (V1: prompt completo; V2: V1 + señales y entidad de las reglas como pistas; V3: V2 + ejemplos resueltos; **V2C**: V2 con salida compacta, ver abajo; V4, RAG, es un hueco documentado en `src/services/analisis-ia/prompts.ts`).
 - `--limite=N` toma los primeros N; con `--estratificado` toma una muestra reproducible repartida por `tipo_caso` y categoría.
 - Se consulta de a un mensaje (una sola GPU), con el modelo caliente y ~10 a 15 s por caso (~300 tokens de salida a ~15 tokens por segundo: lo que domina es lo que el modelo escribe). Una corrida de 100 mensajes tarda unos 20 a 25 minutos: lánzala en segundo plano con un registro (`> corrida.log 2>&1`) y revisa el avance.
 - **Reanudable:** cada respuesta válida se guarda en `evaluacion/cache/modelo-<variante>-<conjunto>.jsonl` (no se versiona: deriva de los textos). Si se corta, se repite el mismo comando y solo consulta lo que falta. Si cambias el prompt, **borra la caché de esa variante**. `--solo-cache` recalcula las métricas sin llamar al modelo.
@@ -58,6 +58,27 @@ npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2 --conjunto=ia-poc/eva
 - **Límites de la medición:** muestras de 100 y 120, intervalos de confianza amplios (± 8 a 10 puntos); conjuntos sintéticos con ~60 % de corrupción, así que la precisión se ve optimista; el piso se calibró en el mismo conjunto de desarrollo; el rendimiento real con mensajes de ciudadanos no se midió.
 
 **Protocolo.** Los prompts se ajustan solo mirando `desarrollo-v2`; `prueba-v2` se mide una sola vez con la mejor variante ya congelada; `reserva-v2` se guarda para la medición final de todo el sistema; `prueba-t1` está contaminada en parte. Los ejemplos de V3 salen solo de la tabla de casos límite del léxico o son inventados.
+
+## V2C: salida compacta y comparación por pares
+
+**Qué es.** V2 con la salida compacta: el modelo escribe solo `categoria`, `peso_corrupcion` y `posible_corrupcion` (~38 tokens, ~3 s) en lugar de ~215 tokens (~15 s). El prompt es el de V2 sin las reglas duras que hablaban de `informacion_faltante` y `alternativas` (renumeradas) y, desde la iteración 1, con una regla más (cobrar por un servicio gratuito o dar algo a cambio de atención, un resultado o un trámite es posible corrupción aunque falten datos). El cliente pide el esquema compacto con `num_predict` 80; un JSON cortado o inválido sigue el reintento y el degradado de siempre. V1, V2 y V3 no cambian (hay una prueba con sus hashes).
+
+**Paquete sin depender del modelo** (`src/services/analisis-ia/plantillas-paquete.ts`): la explicación sale de una plantilla con el puntaje y las señales de las reglas, la entidad y el titular o cargo detectados, y la categoría, el peso y la marca del modelo, más por qué se propone OTRANS o no; la información faltante, de los faltantes del filtro; los fundamentos, de las señales de las reglas; la ficha de derivación, como siempre. **Pérdida conocida:** sin `alternativas` no se detecta el empate queja/reclamo del modelo; el paquete trae `sinDesempateQuejaReclamo: true` y sigue con revisión humana donde ya la tenía.
+
+**Cómo medir y comparar** (una sola GPU, de a un mensaje; la primera línea de cada caché se excluye de las latencias):
+
+```
+node ia-poc/scripts/precalentar.mjs
+npx tsx ia-poc/scripts/precalentar-variante.ts --variante=V2C      # calienta el prefijo del prompt, sin guardar nada
+npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2C --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl
+npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2C --conjunto=ia-poc/evaluacion/prueba-v2.jsonl --ids-de=V2   # mismos ids que V2
+npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2 --b=V2C --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl
+npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2 --b=V2C --conjunto=ia-poc/evaluacion/prueba-v2.jsonl --universo-b=ids-de-a --desarrollo=ia-poc/evaluacion/resultados/iter1-comparacion-V2-V2C-desarrollo-v2.json
+```
+
+`comparar-variantes.ts` no llama al modelo: lee las cachés por variante e id y compara solo los ids presentes en ambas (los criterios absolutos de B usan todo lo que B midió con `--universo-b=conjunto`, o los ids de A con `ids-de-a`). Informa recall y precisión con reglas + modelo (con piso), tasa de FP sobre negativos, exactitud de las 4 categorías, acuerdo queja/reclamo, JSON al primer intento, latencia media y p90, intervalos de Wilson al 95 %, pares discordantes (id, tipo de caso y lado, sin textos) y el veredicto que codifica **exactamente** Q1 a Q5, S1 y S2 de la sección 21 de la nota del vault (`src/services/analisis-ia/comparacion-variantes.ts`, con pruebas). Con `--desarrollo=` agrega el veredicto final que exige cada criterio en los dos conjuntos. Resultados sin textos en `resultados/comparacion-<A>-<B>-<conjunto>.json`; las cifras de cada iteración del prompt están en `resultados/iter0-*` y `resultados/iter1-*`.
+
+**Resultado (V2 frente a V2C, 2026-10-09).** Veredicto final: **Viable con reservas**. Desarrollo-v2 (303, iteración 1): recall reglas + modelo 97,3 % (IC 93,8 a 98,8), FP 7,5 %, JSON al primer intento 100 %, latencia media 3,14 s, p90 3,76 s, 4,7 veces más rápida que V2; solo falla Q4 por 0,12 puntos (acuerdo queja/reclamo 84,88 % frente a 85 %, un mensaje). Prueba-v2 (119 ids de V2, una sola corrida): cumple todo (recall 100 %, FP 8,5 % frente a 10,6 % de V2, latencia 3,07 s, p90 3,56 s). Detalle y límites en la sección 22 de la nota del vault.
 
 ## Contrato del peso del modelo (`peso_corrupcion`)
 

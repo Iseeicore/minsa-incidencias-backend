@@ -71,7 +71,7 @@ export const plazosDeEntorno = (env: Pick<Env, "PLAZO_ATENCION_DIAS" | "VIGENCIA
 
 const noEncontrado = () => new AppError(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, MENSAJE_CASO_NO_ENCONTRADO);
 
-function visibilidadDe(sesion: SesionActual): VisibilidadCasos {
+export function visibilidadDe(sesion: SesionActual): VisibilidadCasos {
   return { roles: sesion.roles, verSinCategoria: veCasosSinCategoria(sesion.roles), areaId: sesion.area?.id ?? null };
 }
 

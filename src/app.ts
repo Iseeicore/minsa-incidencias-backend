@@ -20,11 +20,14 @@ import { UsuarioRepository } from "@/repositories/usuario.repository.js";
 import { createAreasRouter } from "@/routes/areas.routes.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
 import { createFiltroCorrupcionRouter } from "@/routes/filtro-corrupcion.routes.js";
+import { createAnalisisIncidenciaRouter } from "@/routes/analisis-incidencia.routes.js";
 import { createIaPocRouter } from "@/routes/ia-poc.routes.js";
 import { crearRecuperadorPgTrgm } from "@/services/analisis-ia/casos/recuperar-casos.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
 import { createUsuariosRouter } from "@/routes/usuarios.routes.js";
+import { AnalisisIncidenciaRepository } from "@/repositories/analisis-incidencia.repository.js";
+import { AnalisisIncidenciaService } from "@/services/analisis-incidencia/analisis-incidencia.service.js";
 import { AreaService } from "@/services/area.service.js";
 import { AuthService } from "@/services/auth.service.js";
 import { IncidenciaService, plazosDeEntorno } from "@/services/incidencia.service.js";
@@ -55,7 +58,9 @@ export function createApp(
   setInterval(() => limiter.sweep(), RATE_LIMIT_SWEEP_INTERVAL_MS).unref();
 
   const auth = new AuthService(new UsuarioRepository(database), new SesionRepository(database), hasher, env);
-  const incidencias = new IncidenciaService(new IncidenciaRepository(database), database, plazosDeEntorno(env));
+  const casos = new IncidenciaRepository(database);
+  const incidencias = new IncidenciaService(casos, database, plazosDeEntorno(env));
+  const analisisIa = new AnalisisIncidenciaService(casos, new AnalisisIncidenciaRepository(database));
 
   const areas = new AreaService(new AreaRepository(database));
   const usuarios = new UsuarioService(new UsuarioGestionRepository(database), database, hasher);
@@ -73,6 +78,7 @@ export function createApp(
   app.use(rateLimit(limiter, createGeneralResolver(env, (req) => req.sesion?.usuarioId ?? null)));
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(createAuthRouter(auth, env, rateLimit(limiter, createLoginResolver(env))));
+  app.use(createAnalisisIncidenciaRouter(analisisIa));
   app.use(createIncidenciasRouter(incidencias));
   app.use(createAreasRouter(areas));
   app.use(createUsuariosRouter(usuarios));

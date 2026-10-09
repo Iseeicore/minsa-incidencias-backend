@@ -138,6 +138,39 @@ describe("POST /filtro-corrupcion/evaluar", () => {
     expect(res.body).toMatchObject({ propuestaCorrupcion: true, requiereOtrans: true, entidad: { codigo: "fissal" } });
   });
 
+  it("sin pesoIa la respuesta no trae combinacion; con pesoIa suma la combinación reglas + modelo", async () => {
+    const app = montar(sesionCon(["GESTOR"]));
+    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan";
+    expect((await request(app).post(RUTA).send({ texto })).body).not.toHaveProperty("combinacion");
+
+    const sube = await request(app).post(RUTA).send({ texto, pesoIa: 6 });
+    expect(sube.status).toBe(200);
+    expect(sube.body.propuestaCorrupcion).toBe(false); // las reglas no cambian: la combinación va aparte
+    expect(sube.body.combinacion).toMatchObject({
+      pesoIa: 6,
+      puntajeReglas: 2,
+      puntajeTotal: 8,
+      propuestaCorrupcion: true,
+      subidaPorIa: true,
+      revisionOtrans: true,
+    });
+    expect(sube.body.combinacion.confianza).toBeLessThanOrEqual(95);
+  });
+
+  it("pesoIa null (modelo no disponible) con zona gris: revisión de OTRANS por defecto; un peso fuera de rango se recorta", async () => {
+    const app = montar(sesionCon(["OTRANS"]));
+    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan";
+    const sinModelo = await request(app).post(RUTA).send({ texto, pesoIa: null });
+    expect(sinModelo.body.combinacion).toMatchObject({ pesoIa: null, revisionOtrans: true, propuestaCorrupcion: false });
+    const recortado = await request(app).post(RUTA).send({ texto, pesoIa: 99 });
+    expect(recortado.body.combinacion.pesoIa).toBe(10);
+  });
+
+  it("rechaza con 400 un pesoIa que no es número", async () => {
+    const app = montar(sesionCon(["GESTOR"]));
+    expect((await request(app).post(RUTA).send({ texto: TEXTO, pesoIa: "alto" })).status).toBe(400);
+  });
+
   it("usa el catálogo y el contexto que recibe", async () => {
     const res = await request(montar(sesionCon(["GESTOR"])))
       .post(RUTA)

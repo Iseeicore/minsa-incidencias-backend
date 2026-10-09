@@ -20,3 +20,31 @@ RTX 3050 de 6 GB: el modelo se reparte 71 % GPU y 29 % CPU. Unos 15 tokens por s
 ## Evaluación
 
 `evaluacion/` recibirá el set de mensajes etiquetados (JSON Lines) y sus resultados. Formato por línea: `id`, `texto`, `establecimiento`, `renipress`, `anonimo`, `cargo_mencionado`, `nombre_mencionado`, `categoria_esperada`, `destino_esperado`, `dificultad`, `estilo`. Las categorías son las 4 de `catalogo.categoria_incidencia`.
+
+## Contrato del peso del modelo (`peso_corrupcion`)
+
+El modelo **no decide** la categoría: da un peso que se **suma** al puntaje de las reglas (`combinarReglasConIa` en `src/services/filtro-corrupcion/combinar-reglas-con-ia.ts`).
+
+**Qué debe entregar el modelo.** En el esquema JSON de salida del prompt, un campo `peso_corrupcion`:
+
+```json
+{ "peso_corrupcion": 7 }
+```
+
+- Entero de **0 a 10** (`PESO_MAXIMO_IA`, en `src/constants/filtro-corrupcion.ts`). 0: nada sugiere corrupción; 5: hay indicios; 10: el texto describe con claridad cobro, soborno, apropiación o nepotismo por parte de un servidor público.
+- Si el modelo no responde, responde algo que no es un número o la salida no valida contra el esquema, se pasa `null` (modelo no disponible). No se inventa un 0.
+- Un número fuera de rango se recorta a 0 o a 10 y un decimal se redondea al entero más cercano; `NaN` cuenta como `null`.
+- La explicación del modelo no entra a la combinación (solo se muestra a quien revisa).
+
+**Cómo se combina.**
+
+| Regla | Detalle |
+|---|---|
+| Total | `puntajeTotal = puntaje de las reglas + peso del modelo` (0 si es `null`). |
+| Subir | Si las reglas no proponían corrupción y el total **supera** `UMBRAL_TOTAL_CORRUPCION` (valor inicial 5, a calibrar en F4), se propone corrupción y va a OTRANS (`subidaPorIa: true`). |
+| Nunca bajar | Si las reglas ya proponían corrupción, la propuesta se mantiene con cualquier peso, también 0. |
+| Sin modelo | Con `null` solo valen las reglas. Si las reglas dejaron una duda (`requiereSegundaOpinion`, la zona gris), la salida marca `revisionOtrans: true` por defecto (ante la duda, OTRANS). |
+| Confianza | Se deriva del **acuerdo**, no del número que escribe el modelo; se devuelve como porcentaje con dos decimales y **nunca pasa de 95**. Coinciden con señales fuertes: 80 a 95. Coinciden con señales débiles: 65 a 80. Solo uno ve corrupción (o sin modelo): 45 a 65. Discrepan: 30 a 50 y revisión humana marcada. Son las bandas de la sección 6 del plan; se calibran con el set de evaluación. |
+| Revisión | Corrupción propuesta siempre pasa por una persona (`requiereRevisionHumana`). |
+
+**Por la ruta de prueba.** `POST /filtro-corrupcion/evaluar` acepta además `pesoIa` (número o `null`) y, si llega, agrega `combinacion` con `propuestaCorrupcion`, `puntajeReglas`, `pesoIa` (ya recortado), `puntajeTotal`, `umbral`, `subidaPorIa`, `acuerdo`, `confianza`, `requiereOtrans`, `revisionOtrans` y `requiereRevisionHumana`. Sin `pesoIa` la respuesta es la de siempre (más los campos aditivos de la v1.2).

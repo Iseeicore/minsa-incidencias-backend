@@ -1,5 +1,6 @@
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import type {
+  AcuerdoReglasIa,
   CertezaCorrupcion,
   FaltanteCorrupcion,
   HuecoCatalogo,
@@ -140,4 +141,27 @@ export interface ResultadoCorrupcion {
   /** Acoso contra un cargo mayor (director, jefe, administrador, titular o equivalente): conviene que OTRANS lo evalúe o reasigne. */
   escalarAOtrans: boolean;
   versionReglas: string;
+}
+
+/** Qué salió de sumar el peso del modelo al puntaje de las reglas (`combinarReglasConIa`). La persona que revisa siempre confirma o corrige. */
+export interface ResultadoCombinacion {
+  /** Propuesta final: las reglas ya la proponían, o el total supera el umbral. Nunca baja una propuesta de las reglas. */
+  propuestaCorrupcion: boolean;
+  puntajeReglas: number;
+  /** Peso del modelo ya recortado a un entero de 0 a `PESO_MAXIMO_IA`; `null` si el modelo no estuvo disponible. */
+  pesoIa: number | null;
+  /** Puntaje de las reglas más el peso del modelo (0 si no hubo modelo). */
+  puntajeTotal: number;
+  umbral: number;
+  /** `true` si el modelo llevó a corrupción un caso que las reglas solas no proponían. */
+  subidaPorIa: boolean;
+  acuerdo: AcuerdoReglasIa;
+  /** Porcentaje con dos decimales, derivado del acuerdo y nunca mayor que `TOPE_CONFIANZA` (95). */
+  confianza: number;
+  /** Corrupción propuesta: va a OTRANS. */
+  requiereOtrans: boolean;
+  /** OTRANS debe mirarlo: corrupción propuesta, o duda de las reglas (zona gris) sin modelo que la resuelva (ante la duda, OTRANS). */
+  revisionOtrans: boolean;
+  /** Una persona debe confirmar: corrupción propuesta, discrepancia o duda. */
+  requiereRevisionHumana: boolean;
 }

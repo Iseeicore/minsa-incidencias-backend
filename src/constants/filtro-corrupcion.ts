@@ -52,3 +52,27 @@ export const TITULOS_ESTANDAR_DEL_CARGO_MAXIMO: ReadonlySet<string> = new Set([
 
 /** Para coincidir con el nombre del titular hacen falta al menos dos palabras seguidas del nombre (un nombre de pila suelto no basta). */
 export const PALABRAS_SEGUIDAS_PARA_NOMBRE = 2;
+
+/**
+ * Combinación de las reglas con el modelo (decisión del 2026-10-08): el modelo no decide, aporta un peso entero de 0 a
+ * `PESO_MAXIMO_IA` que se SUMA al puntaje de las reglas.
+ */
+export const PESO_MAXIMO_IA = 10;
+
+/** El total (reglas + peso del modelo) debe SUPERAR este valor para proponer corrupción cuando las reglas solas no la proponían. Valor inicial: se calibra en F4. */
+export const UMBRAL_TOTAL_CORRUPCION = 5;
+
+/** Desde este peso se considera que el modelo ve corrupción; hasta `PESO_IA_DESCARTA_CORRUPCION` la descarta. Entre los dos no opina claro. */
+export const PESO_IA_VE_CORRUPCION = 5;
+export const PESO_IA_DESCARTA_CORRUPCION = 2;
+
+/** La confianza nunca llega a 100 (plan de PoC, sección 6). */
+export const TOPE_CONFIANZA = 95;
+
+/** Bandas de confianza en porcentaje (plan de PoC, sección 6): punto de partida, se calibran con el set de evaluación. */
+export const BANDAS_DE_CONFIANZA = {
+  COINCIDEN_FUERTE: { minimo: 80, maximo: TOPE_CONFIANZA },
+  COINCIDEN_DEBIL: { minimo: 65, maximo: 80 },
+  SOLO_UNO: { minimo: 45, maximo: 65 },
+  DISCREPAN: { minimo: 30, maximo: 50 },
+} as const;

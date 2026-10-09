@@ -75,3 +75,16 @@ export const SenalSensible = {
   ACOSO: "ACOSO",
 } as const;
 export type SenalSensible = (typeof SenalSensible)[keyof typeof SenalSensible];
+
+/** Cómo se ponen de acuerdo las reglas y el modelo (plan de PoC, sección 6): de ahí sale la banda de confianza. */
+export const AcuerdoReglasIa = {
+  /** Reglas y modelo ven lo mismo (los dos corrupción, o los dos no). */
+  COINCIDEN: "COINCIDEN",
+  /** Solo uno de los dos ve corrupción y el otro no dice lo contrario, o hizo falta sumar los dos para llegar al umbral. */
+  SOLO_UNO: "SOLO_UNO",
+  /** Uno ve corrupción y el otro la descarta: se marca revisión. */
+  DISCREPAN: "DISCREPAN",
+  /** El modelo no estuvo disponible: solo hay reglas. */
+  SIN_MODELO: "SIN_MODELO",
+} as const;
+export type AcuerdoReglasIa = (typeof AcuerdoReglasIa)[keyof typeof AcuerdoReglasIa];

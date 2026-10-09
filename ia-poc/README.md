@@ -23,6 +23,42 @@ RTX 3050 de 6 GB: el modelo se reparte 71 % GPU y 29 % CPU. Unos 15 tokens por s
 
 `evaluacion/` tiene los conjuntos de mensajes etiquetados (JSON Lines: `desarrollo.jsonl` para ajustar el léxico y `prueba-t1.jsonl` solo para medir) y los resultados por versión de reglas (`resultados/`); se corre con `npx tsx ia-poc/scripts/evaluar-reglas.ts <archivo.jsonl>` (ver `evaluacion/README.md`; con `--sin-textos` imprime y guarda solo ids, para medir un conjunto sin leerlo). Formato por línea: `id`, `texto`, `establecimiento`, `renipress`, `anonimo`, `cargo_mencionado`, `nombre_mencionado`, `categoria_esperada`, `destino_esperado`, `dificultad`, `estilo`. Las categorías son las 4 de `catalogo.categoria_incidencia`.
 
+## Evaluar con el modelo real
+
+`scripts/evaluar-con-modelo.ts` corre reglas + modelo (a través de `analizarMensaje`, la misma ruta que usará el producto) sobre un conjunto etiquetado. Los datos nunca salen de localhost.
+
+```
+node ia-poc/scripts/precalentar.mjs        # una vez; sin esto la primera llamada tarda ~2 minutos
+npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2 --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl --limite=100 --estratificado --max-minutos=35
+```
+
+- `--variante=V1|V2|V3` (V1: prompt completo; V2: V1 + señales y entidad de las reglas como pistas; V3: V2 + ejemplos resueltos; V4, RAG, es un hueco documentado en `src/services/analisis-ia/prompts.ts`).
+- `--limite=N` toma los primeros N; con `--estratificado` toma una muestra reproducible repartida por `tipo_caso` y categoría.
+- Se consulta de a un mensaje (una sola GPU), con el modelo caliente y ~10 a 15 s por caso (~300 tokens de salida a ~15 tokens por segundo: lo que domina es lo que el modelo escribe). Una corrida de 100 mensajes tarda unos 20 a 25 minutos: lánzala en segundo plano con un registro (`> corrida.log 2>&1`) y revisa el avance.
+- **Reanudable:** cada respuesta válida se guarda en `evaluacion/cache/modelo-<variante>-<conjunto>.jsonl` (no se versiona: deriva de los textos). Si se corta, se repite el mismo comando y solo consulta lo que falta. Si cambias el prompt, **borra la caché de esa variante**. `--solo-cache` recalcula las métricas sin llamar al modelo.
+- `--max-minutos=N` corta la corrida y reporta lo medido hasta ahí.
+- **Resultado sin textos:** `evaluacion/resultados/modelo-<variante>-<conjunto>.json`.
+
+**Cómo leer el resultado.** `corrupcion.soloReglas` frente a `corrupcion.reglasMasIa`: VP, FN, FP, recall y precisión. `recuperadasPorElModelo` son corrupciones que las reglas perdían y la suma con el peso del modelo sí propone; `falsosPositivosNuevos` son los no-corrupción que el modelo hace subir a OTRANS. `tasaFalsosPositivosSobreNegativos` (FP / negativos) importa más que la precisión: los conjuntos tienen ~60 % de corrupción y la realidad será mucho menor, así que la precisión se ve optimista. `porTipoDeCaso` desglosa recall y FP (mira `enganosa` y `corrup_dudosa`). `corrupcionQueSigueAlEstablecimiento` son las corrupciones que la propuesta final no manda a OTRANS (el error que no se puede permitir); `conRevisionOtrans` cuántas de ellas igual quedan marcadas para OTRANS. `categoriasDelModelo` trae la exactitud y la matriz de confusión (filas: esperada; columnas: la del modelo). `quejaFrenteAReclamo` mide el acuerdo solo entre queja y reclamo, del modelo y de la propuesta final (los empates se proponen como Reclamo). `distribucionPesoPorCategoriaEsperada` es el histograma del peso de 0 a 10. `sensibilidadAlPisoDePosibleCorrupcion` recalcula, sin llamar al modelo, qué pasaría si `posible_corrupcion` subiera el peso a un mínimo.
+
+**Resultados (reglas v1.3 + `qwen3.5-9b-local`, piso 6, 2026-10-08).** Muestra estratificada de 100 mensajes de `desarrollo-v2` (60 corrupción, 40 negativos) y de 120 de `prueba-v2` (72 corrupción, 48 negativos; medida una sola vez con V2 ya congelada). Una respuesta de cada conjunto no se consulta porque el texto tiene menos de 20 caracteres.
+
+| Conjunto | Variante | Recall solo reglas → reglas + IA | Precisión solo reglas → reglas + IA | Recuperadas | FP nuevos | FP / negativos | JSON válido | Latencia media / p90 | Categorías del modelo |
+|---|---|---|---|---|---|---|---|---|---|
+| desarrollo-v2 (100) | V1 | 55,0 % → 98,3 % | 91,7 % → 93,7 % | 26 de 27 | 1 | 7,5 % → 10,0 % | 99/99 | 12,9 s / 15,8 s | 89,9 % |
+| desarrollo-v2 (100) | **V2** | 55,0 % → 96,7 % | 91,7 % → 95,1 % | 25 de 27 | 0 | 7,5 % → 7,5 % | 99/99 | 15,1 s / 17,8 s | 89,9 % |
+| desarrollo-v2 (100) | V3 | 55,0 % → 100 % | 91,7 % → 92,3 % | 27 de 27 | 2 | 7,5 % → 12,5 % | 99/99 | 15,5 s / 18,0 s | 87,9 % |
+| **prueba-v2 (120)** | **V2** | 63,9 % → **100 %** | 92,0 % → 93,5 % | 26 de 26 | 1 | 8,3 % → 10,4 % | 119/119 | 16,3 s / 19,6 s | 89,1 % |
+
+- **Sin el piso** (el peso crudo del modelo, que escribe 3 a 6 aunque acierte la categoría) el recall en desarrollo-v2 era solo 75 %: el modelo marca `categoria` DENUNCIA_CORRUPCION en 58 de 60 corrupciones, pero con pesos conservadores que, sumados a pocas señales de las reglas, no superan el umbral 5. El piso 6 para `posible_corrupcion` (`PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO`) se eligió **mirando solo desarrollo-v2** (con 5: 93 %; con 6: 97 %; mismos FP). En prueba-v2, sin piso el recall habría sido 86 % (62 de 72) y con 6 fue 100 %.
+- **Elección de variante:** V1 y V2 empatan en corrupción; V3 acierta una más pero introduce más falsos positivos (`enganosa` 4 de 10) y baja la exactitud de categorías. Con la prevalencia real, muy inferior al ~60 % de estos conjuntos, pesan más los FP que dos casos de recall: se congeló V2. Las diferencias entre variantes (2 a 3 casos) están dentro del ruido.
+- **FP por tipo de caso (prueba-v2):** `enganosa` 1 → 2 de 12, `reclamo` 3 → 3 de 12, `queja` y `otro` 0. El FP que el modelo agrega es un solo mensaje (D2-0209).
+- **Queja frente a reclamo** (solo el modelo, entre los esperados queja o reclamo): 91,2 % en prueba-v2 y 86,7 % en desarrollo-v2 (V2); la propuesta final 93,5 % y 85,2 %. El modelo confunde sobre todo reclamo → queja y `otro` (7 de 11 bien en prueba-v2; el resto cae en queja o reclamo).
+- **Dónde falla el modelo:** en desarrollo-v2 dos corrupciones (D2-0327, D2-0949) no suben (el modelo las clasificó como otra categoría y las reglas no las veían); 10 mensajes de desarrollo-v2 y 13 de prueba-v2 (V2) tienen categoría distinta de la etiqueta, casi todos entre queja, reclamo y otro. Ids en `resultados/modelo-V2-*.json` (`idsConDesacuerdo`).
+- **Límites de la medición:** muestras de 100 y 120, intervalos de confianza amplios (± 8 a 10 puntos); conjuntos sintéticos con ~60 % de corrupción, así que la precisión se ve optimista; el piso se calibró en el mismo conjunto de desarrollo; el rendimiento real con mensajes de ciudadanos no se midió.
+
+**Protocolo.** Los prompts se ajustan solo mirando `desarrollo-v2`; `prueba-v2` se mide una sola vez con la mejor variante ya congelada; `reserva-v2` se guarda para la medición final de todo el sistema; `prueba-t1` está contaminada en parte. Los ejemplos de V3 salen solo de la tabla de casos límite del léxico o son inventados.
+
 ## Contrato del peso del modelo (`peso_corrupcion`)
 
 El modelo **no decide** la categoría: da un peso que se **suma** al puntaje de las reglas (`combinarReglasConIa` en `src/services/filtro-corrupcion/combinar-reglas-con-ia.ts`).

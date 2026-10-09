@@ -31,6 +31,14 @@ export interface DatosNormas {
   /** `false`: el Anexo C se transcribió a ojo desde imágenes y no se cotejó con el original. */
   transcripcionAnexoCCotejada: boolean;
   avisoTranscripcion: string;
+  /** Comparación del Anexo C con un segundo texto que pegó el usuario. No reemplaza el cotejo con el documento oficial. */
+  cotejoConTextoDelUsuario: {
+    fecha: string;
+    comparados: number;
+    coincidenLiteralmente: number;
+    difierenSoloEnMayusculas: string[];
+    nota: string;
+  };
   fuentes: FuenteDeNormas[];
   fragmentos: FragmentoNorma[];
 }

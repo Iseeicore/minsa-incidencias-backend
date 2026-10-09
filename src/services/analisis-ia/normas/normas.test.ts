@@ -90,6 +90,11 @@ describe("datos de las normas", () => {
     expect(cuenta(TipoFragmentoNorma.DELITO)).toBe(9);
     expect(DATOS_NORMAS.transcripcionAnexoCCotejada).toBe(false);
     expect(DATOS_NORMAS.avisoTranscripcion).toContain("sin OCR");
+    expect(DATOS_NORMAS.cotejoConTextoDelUsuario).toMatchObject({
+      comparados: 20,
+      coincidenLiteralmente: 18,
+      difierenSoloEnMayusculas: ["ANEXO_C-III-e", "ANEXO_C-III-g"],
+    });
   });
 
   it("los ids no se repiten, todo fragmento tiene texto y el cohecho activo no se cita solo", () => {

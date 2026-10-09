@@ -2,7 +2,17 @@
   "version": "normas-v1",
   "aviso": "Fragmentos de normas para la trazabilidad del análisis (RAG fase 1). Son una referencia orientativa: la calificación la hace OTRANS.",
   "transcripcionAnexoCCotejada": false,
-  "avisoTranscripcion": "El Anexo C (20 supuestos) se transcribió a ojo desde las dos imágenes EMF del Word «Supuestos establecidos en la norma.docx», sin OCR y sin cotejar con el documento oficial: hay que compararlo antes de darlo por bueno. Los fragmentos de la ayuda memoria salen del texto del Word, párrafo por párrafo, con sus erratas.",
+  "avisoTranscripcion": "El Anexo C (20 supuestos) se transcribió a ojo desde las dos imágenes EMF del Word «Supuestos establecidos en la norma.docx», sin OCR, y no se ha cotejado con el documento oficial de la PCM. Sí se comparó con un segundo texto que pegó el usuario (ver cotejoConTextoDelUsuario). Los fragmentos de la ayuda memoria salen del texto del Word, párrafo por párrafo, con sus erratas.",
+  "cotejoConTextoDelUsuario": {
+    "fecha": "2026-10-09",
+    "comparados": 20,
+    "coincidenLiteralmente": 18,
+    "difierenSoloEnMayusculas": [
+      "ANEXO_C-III-e",
+      "ANEXO_C-III-g"
+    ],
+    "nota": "El usuario pegó el Anexo C como texto. 18 de 20 supuestos son idénticos palabra por palabra; III-e y III-g difieren solo en mayúsculas (la imagen trae «Enriquecimiento Ilícito» y «Negociación Incompatible»; el texto pegado, en minúscula) y se conserva la versión de la imagen. Son dos transcripciones sin el documento oficial a la vista: no sustituyen el cotejo con la PCM."
+  },
   "fuentes": [
     {
       "id": "DIRECTIVA_002_2023_PCM_SIP",

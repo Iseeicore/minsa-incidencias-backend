@@ -5,10 +5,12 @@ import type {
   FaltanteCorrupcion,
   HuecoCatalogo,
   NivelCargo,
+  OrigenPropuesta,
   SenalSensible,
   TipoContacto,
   TipoEntidad,
   TipoSenal,
+  ViaEntidad,
 } from "@/enums/filtro-corrupcion.enum.js";
 
 /** Una persona de contacto tal como figura en el directorio de la entidad. `null` en el correo: el directorio no lo muestra. */
@@ -50,11 +52,24 @@ export interface EntidadCatalogo {
   nombre: string;
   tipo?: TipoEntidad;
   alias?: readonly string[];
+  /** Variantes generadas del nombre oficial y la sigla (sin "Hospital"/"Nacional"/"de", con artículo, con faltas de ortografía). Se buscan igual que `alias`. */
+  aliasDerivados?: readonly string[];
   titular?: TitularCatalogo | null;
   /** `null` o ausente: la fuente no trae destino para esta entidad (no se inventa). */
   destinoSiTitular?: DestinoSiTitular | null;
   contactos?: ContactosEntidad | null;
   huecos?: readonly HuecoCatalogo[];
+}
+
+/** Zona asociada a una entidad (distrito o barrio donde queda). Es aproximada: suma poco y nunca decide por sí sola. */
+export interface UbicacionEntidad {
+  zona: string;
+  codigoEntidad: string;
+  /**
+   * La zona también es el nombre del establecimiento del QR (p. ej. Chosica): si el establecimiento ya se conoce no se suma, porque el
+   * texto probablemente solo nombra el lugar donde se escribió.
+   */
+  ambiguaConEstablecimiento: boolean;
 }
 
 /** Datos que el filtro no puede sacar del texto. Todo es opcional: sin contexto el filtro solo lee el texto. */
@@ -84,6 +99,31 @@ export interface EntidadDetectada {
   nombre: string;
   /** `null` solo si el catálogo recibido no trae el tipo. */
   tipo: TipoEntidad | null;
+}
+
+export interface UbicacionDetectada {
+  zona: string;
+  /** Entidad a la que la tabla asocia la zona (aproximado). No es la entidad detectada: la ubicación no identifica por sí sola. */
+  codigoEntidad: string;
+}
+
+/**
+ * Identidad del texto (decisión del 2026-10-08, segunda ronda): lo que más pesa son los nombres, la ubicación y las entidades. Suma
+ * entidad (nombre, sigla o alias) + titular o jefatura + nombre del titular + ubicación, con tope `TOPE_PUNTOS_IDENTIDAD`.
+ */
+export interface IdentidadDetectada {
+  /** Puntos de identidad (con tope). Con `PUNTOS_IDENTIDAD_PARA_OTRANS` o más y algún indicio de corrupción, el caso va a OTRANS con certeza baja. */
+  puntos: number;
+  /** La entidad que identifica el texto: por nombre, sigla o alias, o por el nombre de su titular aunque no se nombre. */
+  entidad: EntidadDetectada | null;
+  /** Cómo se llegó a la entidad; `null` si no hay. */
+  viaEntidad: ViaEntidad | null;
+  /** Titular nombrado (por su cargo máximo o por su nombre en el catálogo). */
+  titular: TitularDetectado | null;
+  /** El texto nombra al titular registrado en el catálogo (al menos dos palabras del nombre, una de ellas un apellido). */
+  nombreCoincide: boolean;
+  /** Solo se llena si no hay entidad: con entidad detectada la ubicación ya no suma. */
+  ubicacion: UbicacionDetectada | null;
 }
 
 /** Cargo máximo mencionado (con sus equivalentes). `nombreCoincide` es informativo: nunca suma ni decide la categoría. */
@@ -116,11 +156,15 @@ export interface ResultadoCorrupcion {
   puntaje: number;
   certeza: CertezaCorrupcion;
   propuestaCorrupcion: boolean;
+  /** De dónde sale la propuesta: las reglas del léxico, o la identidad con un indicio y puntaje bajo (certeza baja). `null` sin propuesta. */
+  origenPropuesta: OrigenPropuesta | null;
   senales: SenalDetectada[];
   actor: ActorDetectado | null;
   /** Nombre propio que escribió la persona. Solo informativo: nunca suma ni decide, y es una acusación sin comprobar. */
   nombreMencionado: string | null;
   entidad: EntidadDetectada | null;
+  /** Identidad del texto (nombre, ubicación y entidad). Aditivo: no reemplaza `entidad` ni `titular`. */
+  identidad: IdentidadDetectada;
   /** Solo si el cargo detectado es el máximo de una entidad (o su equivalente). */
   titular: TitularDetectado | null;
   /** Requisitos de la sección 3c que el texto aún no cumple (solo se calculan si se propone corrupción). */

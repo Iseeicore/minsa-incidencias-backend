@@ -7,6 +7,10 @@ export const TipoSenal = {
   NEGATIVA_LEVE: "NEGATIVA_LEVE",
   ACTOR: "ACTOR",
   ENTIDAD: "ENTIDAD",
+  /** El texto nombra al titular que el catálogo registra para la entidad (al menos dos palabras del nombre). */
+  NOMBRE_TITULAR: "NOMBRE_TITULAR",
+  /** El texto nombra una zona asociada a una entidad que el texto no nombra. */
+  UBICACION: "UBICACION",
 } as const;
 export type TipoSenal = (typeof TipoSenal)[keyof typeof TipoSenal];
 
@@ -24,6 +28,22 @@ export const NivelCargo = {
   PERSONAL: "PERSONAL",
 } as const;
 export type NivelCargo = (typeof NivelCargo)[keyof typeof NivelCargo];
+
+/** Quién hizo la propuesta de corrupción. `IDENTIDAD`: puntaje bajo pero con entidad, titular, nombre o ubicación y algún indicio; lo corrige OTRANS. */
+export const OrigenPropuesta = {
+  REGLAS: "REGLAS",
+  IDENTIDAD: "IDENTIDAD",
+} as const;
+export type OrigenPropuesta = (typeof OrigenPropuesta)[keyof typeof OrigenPropuesta];
+
+/** Cómo se llegó a la entidad de la identidad. */
+export const ViaEntidad = {
+  /** El texto nombra la entidad (nombre oficial, sigla, alias o alias derivado). */
+  NOMBRE_O_ALIAS: "NOMBRE_O_ALIAS",
+  /** El texto nombra al titular del catálogo y eso identifica a su entidad aunque no se nombre. */
+  NOMBRE_TITULAR: "NOMBRE_TITULAR",
+} as const;
+export type ViaEntidad = (typeof ViaEntidad)[keyof typeof ViaEntidad];
 
 /** Requisitos de la sección 3c del plan de cierre que el texto aún no cumple. */
 export const FaltanteCorrupcion = {

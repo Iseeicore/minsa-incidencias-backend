@@ -84,7 +84,7 @@ export const FRASES_DEBILES: readonly string[] = [
 /** Sección 7, decisivas (-2): pago legítimo y delito común sin servidor. */
 export const FRASES_NEGATIVAS_DECISIVAS: readonly string[] = [
   "{pague|pagamos|pagaron|pago} en caja",
-  "me {dieron|dio|entregaron} {la|mi|} boleta",
+  "me {dieron|dio|entregaron} {la|mi|el|un|} {boleta|recibo}",
   "con {recibo|boleta}",
   "segun el tarifario",
   "{tarifa|tasa|tarifario|tupa|precio|costo|monto} {oficial|publicada|publicado|vigente|legal|autorizada|autorizado|regular|publico}",

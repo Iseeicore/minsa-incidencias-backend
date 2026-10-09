@@ -4,8 +4,17 @@ import { SenalSensible } from "@/enums/filtro-corrupcion.enum.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
 
 describe("zona gris: entidad + titular o jefatura + verbo de cobro", () => {
-  it("marca segunda opinión sin proponer corrupción por sí misma", () => {
+  it("marca segunda opinión y, por la identidad, la propone con certeza baja para OTRANS (v1.3)", () => {
     const resultado = evaluarTextoCorrupcion("El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan");
+    expect(resultado.requiereSegundaOpinion).toBe(true);
+    expect(resultado.propuestaCorrupcion).toBe(true);
+    expect(resultado.origenPropuesta).toBe("IDENTIDAD");
+    expect(resultado.certeza).toBe("BAJA");
+    expect(resultado.requiereOtrans).toBe(true);
+  });
+
+  it("un pago legítimo (negativa decisiva) gana: sigue la duda pero no se propone corrupción", () => {
+    const resultado = evaluarTextoCorrupcion("El director del Hospital Dos de Mayo pide cosas a los pacientes que pagaron en caja");
     expect(resultado.requiereSegundaOpinion).toBe(true);
     expect(resultado.propuestaCorrupcion).toBe(false);
     expect(resultado.requiereOtrans).toBe(false);

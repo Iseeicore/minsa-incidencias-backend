@@ -8,7 +8,10 @@ const PROPUESTA_ALTA = evaluarTextoCorrupcion("El director del Hospital Dos de M
 const PROPUESTA_MEDIA = evaluarTextoCorrupcion("hay trato preferencial para algunos pacientes del hospital");
 const NEUTRO = evaluarTextoCorrupcion("La atencion del hospital fue lenta y me gritaron en la puerta");
 const PUNTAJE_UNO = evaluarTextoCorrupcion("el doctor del hospital me atendio tarde en la consulta de hoy");
-const ZONA_GRIS = evaluarTextoCorrupcion("El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan");
+// Con un pago legítimo (negativa decisiva) la identidad no propone por sí sola: queda la duda de la zona gris.
+const ZONA_GRIS = evaluarTextoCorrupcion("El director del Hospital Dos de Mayo pide cosas a los pacientes que pagaron en caja");
+// Entidad + titular + verbo de cobro sin frase del léxico y sin pago legítimo: las reglas lo mandan a OTRANS con certeza baja.
+const POR_IDENTIDAD = evaluarTextoCorrupcion("El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan");
 
 describe("los textos de apoyo", () => {
   it("son los casos que cada prueba necesita", () => {
@@ -18,6 +21,12 @@ describe("los textos de apoyo", () => {
     expect(NEUTRO.puntaje).toBeLessThanOrEqual(0);
     expect(PUNTAJE_UNO).toMatchObject({ propuestaCorrupcion: false, puntaje: 1 });
     expect(ZONA_GRIS).toMatchObject({ propuestaCorrupcion: false, requiereSegundaOpinion: true });
+    expect(POR_IDENTIDAD).toMatchObject({
+      propuestaCorrupcion: true,
+      origenPropuesta: "IDENTIDAD",
+      certeza: "BAJA",
+      requiereSegundaOpinion: true,
+    });
   });
 });
 
@@ -119,6 +128,19 @@ describe("combinarReglasConIa: sin modelo (null) y ante la duda, OTRANS", () => 
     expect(sube).toMatchObject({ propuestaCorrupcion: true, subidaPorIa: true, revisionOtrans: true });
   });
 
+  it("propuesta por identidad: el modelo no la baja, y si la descarta (peso 0) discrepan y una persona revisa", () => {
+    for (const peso of [null, 0, 2, 5, 10]) {
+      const resultado = combinarReglasConIa(POR_IDENTIDAD, peso);
+      expect(resultado, `peso ${peso}`).toMatchObject({
+        propuestaCorrupcion: true,
+        requiereOtrans: true,
+        revisionOtrans: true,
+        subidaPorIa: false,
+      });
+    }
+    expect(combinarReglasConIa(POR_IDENTIDAD, 0)).toMatchObject({ acuerdo: AcuerdoReglasIa.DISCREPAN, requiereRevisionHumana: true });
+  });
+
   it("sin duda y sin modelo: solo valen las reglas", () => {
     expect(combinarReglasConIa(NEUTRO, null)).toMatchObject({
       propuestaCorrupcion: false,
@@ -178,7 +200,7 @@ describe("combinarReglasConIa: confianza derivada del acuerdo, nunca 100", () =>
   });
 
   it("sin modelo: banda de 'solo uno'", () => {
-    for (const reglas of [PROPUESTA_ALTA, PROPUESTA_MEDIA, NEUTRO, ZONA_GRIS]) {
+    for (const reglas of [PROPUESTA_ALTA, PROPUESTA_MEDIA, NEUTRO, ZONA_GRIS, POR_IDENTIDAD]) {
       const resultado = combinarReglasConIa(reglas, null);
       expect(resultado.acuerdo).toBe(AcuerdoReglasIa.SIN_MODELO);
       dentroDe(resultado.confianza, BANDAS_DE_CONFIANZA.SOLO_UNO);
@@ -190,7 +212,7 @@ describe("combinarReglasConIa: confianza derivada del acuerdo, nunca 100", () =>
       "El director general del Hospital Dos de Mayo recibe coimas, me pidio plata para firmar y vende las medicinas del SIS, tengo fotos",
     );
     expect(combinarReglasConIa(mejor, 10).confianza).toBeLessThan(100);
-    for (const reglas of [mejor, PROPUESTA_ALTA, PROPUESTA_MEDIA, PUNTAJE_UNO, NEUTRO, ZONA_GRIS]) {
+    for (const reglas of [mejor, PROPUESTA_ALTA, PROPUESTA_MEDIA, PUNTAJE_UNO, NEUTRO, ZONA_GRIS, POR_IDENTIDAD]) {
       for (const peso of [null, ...Array.from({ length: 12 }, (_, i) => i)]) {
         const { confianza } = combinarReglasConIa(reglas, peso);
         expect(confianza).toBeLessThanOrEqual(TOPE_CONFIANZA);

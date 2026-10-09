@@ -57,10 +57,12 @@ describe("POST /filtro-corrupcion/evaluar", () => {
       puntaje: 4,
       certeza: "ALTA",
       propuestaCorrupcion: true,
-      versionReglas: "reglas-corrupcion-v1.2",
+      origenPropuesta: "REGLAS",
+      versionReglas: "reglas-corrupcion-v1.3",
       requiereOtrans: true,
       referenciaDerivacion: null,
       entidad: null,
+      identidad: { puntos: 1, entidad: null, viaEntidad: null, nombreCoincide: false, ubicacion: null },
       titular: { cargo: "director del hospital", esEquivalenteDelMaximo: true, nombreCoincide: false },
     });
   });
@@ -73,9 +75,17 @@ describe("POST /filtro-corrupcion/evaluar", () => {
     expect(res.body).toMatchObject({
       aplica: true,
       propuestaCorrupcion: true,
-      puntaje: 5,
+      puntaje: 7, // pide plata (3) + jefa del SIS (1) + SIS (1) + el nombre de la titular del catálogo (2)
       certeza: "ALTA",
       entidad: { codigo: "sis", nombre: "Seguro Integral de Salud", tipo: "SIS" },
+      identidad: {
+        puntos: 4,
+        entidad: { codigo: "sis" },
+        viaEntidad: "NOMBRE_O_ALIAS",
+        titular: { cargo: "jefa del sis", nombreCoincide: true },
+        nombreCoincide: true,
+        ubicacion: null,
+      },
       titular: { cargo: "jefa del sis", esEquivalenteDelMaximo: true, nombreCoincide: true },
       requiereOtrans: true,
       referenciaDerivacion: {
@@ -84,7 +94,7 @@ describe("POST /filtro-corrupcion/evaluar", () => {
         destinoSiTitular: { entidadDestinoCodigo: "st-pad-minsa" },
         aplicaAlTitular: true,
       },
-      versionReglas: "reglas-corrupcion-v1.2",
+      versionReglas: "reglas-corrupcion-v1.3",
     });
     expect(Object.keys(res.body).sort()).toEqual(
       [
@@ -93,7 +103,9 @@ describe("POST /filtro-corrupcion/evaluar", () => {
         "certeza",
         "entidad",
         "faltantes",
+        "identidad",
         "nombreMencionado",
+        "origenPropuesta",
         "propuestaCorrupcion",
         "puntaje",
         "categoriaSugerida",
@@ -109,13 +121,16 @@ describe("POST /filtro-corrupcion/evaluar", () => {
     );
   });
 
-  it("devuelve los campos de zona gris y acoso: la zona gris pide segunda opinión sin proponer; el acoso contra un cargo mayor escala", async () => {
+  it("devuelve los campos de zona gris y acoso: la zona gris pide segunda opinión y va a OTRANS por identidad; el acoso contra un cargo mayor escala", async () => {
     const app = montar(sesionCon(["OTRANS"]));
     const gris = await request(app)
       .post(RUTA)
       .send({ texto: "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan" });
     expect(gris.body).toMatchObject({
-      propuestaCorrupcion: false,
+      propuestaCorrupcion: true,
+      origenPropuesta: "IDENTIDAD",
+      certeza: "BAJA",
+      requiereOtrans: true,
       requiereSegundaOpinion: true,
       senalSensible: null,
       categoriaSugerida: null,
@@ -131,6 +146,22 @@ describe("POST /filtro-corrupcion/evaluar", () => {
     });
   });
 
+  it("el nombre del titular identifica la entidad aunque no se nombre, y la ubicación suma sola sin entidad", async () => {
+    const app = montar(sesionCon(["OTRANS"]));
+    const porNombre = await request(app)
+      .post(RUTA)
+      .send({ texto: "Eduardo Franklin Yong Motta me pidio plata para atenderme en consulta" });
+    expect(porNombre.body).toMatchObject({
+      entidad: { codigo: "hnal" },
+      identidad: { viaEntidad: "NOMBRE_TITULAR", nombreCoincide: true, puntos: 2 },
+    });
+    const porZona = await request(app).post(RUTA).send({ texto: "En Huaycan me pidieron plata para atenderme en consulta" });
+    expect(porZona.body).toMatchObject({
+      entidad: null,
+      identidad: { puntos: 1, entidad: null, ubicacion: { zona: "Huaycán", codigoEntidad: "hh" } },
+    });
+  });
+
   it("detecta el cobro generalizado por la ruta: el jefe del FISSAL que pide plata a los proveedores", async () => {
     const res = await request(montar(sesionCon(["GESTOR"])))
       .post(RUTA)
@@ -140,7 +171,7 @@ describe("POST /filtro-corrupcion/evaluar", () => {
 
   it("sin pesoIa la respuesta no trae combinacion; con pesoIa suma la combinación reglas + modelo", async () => {
     const app = montar(sesionCon(["GESTOR"]));
-    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan";
+    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que pagaron en caja";
     expect((await request(app).post(RUTA).send({ texto })).body).not.toHaveProperty("combinacion");
 
     const sube = await request(app).post(RUTA).send({ texto, pesoIa: 6 });
@@ -148,8 +179,8 @@ describe("POST /filtro-corrupcion/evaluar", () => {
     expect(sube.body.propuestaCorrupcion).toBe(false); // las reglas no cambian: la combinación va aparte
     expect(sube.body.combinacion).toMatchObject({
       pesoIa: 6,
-      puntajeReglas: 2,
-      puntajeTotal: 8,
+      puntajeReglas: 0,
+      puntajeTotal: 6,
       propuestaCorrupcion: true,
       subidaPorIa: true,
       revisionOtrans: true,
@@ -159,7 +190,7 @@ describe("POST /filtro-corrupcion/evaluar", () => {
 
   it("pesoIa null (modelo no disponible) con zona gris: revisión de OTRANS por defecto; un peso fuera de rango se recorta", async () => {
     const app = montar(sesionCon(["OTRANS"]));
-    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan";
+    const texto = "El director del Hospital Dos de Mayo pide cosas a los pacientes que pagaron en caja";
     const sinModelo = await request(app).post(RUTA).send({ texto, pesoIa: null });
     expect(sinModelo.body.combinacion).toMatchObject({ pesoIa: null, revisionOtrans: true, propuestaCorrupcion: false });
     const recortado = await request(app).post(RUTA).send({ texto, pesoIa: 99 });

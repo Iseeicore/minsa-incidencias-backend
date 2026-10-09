@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODIGO_DESTINO_ST_PAD_MINSA } from "@/constants/filtro-corrupcion.js";
+import { CODIGO_DESTINO_ST_PAD_MINSA, PUNTOS_NOMBRE_TITULAR } from "@/constants/filtro-corrupcion.js";
 import { CertezaCorrupcion as C, TipoContacto, TipoEntidad } from "@/enums/filtro-corrupcion.enum.js";
 import { CATALOGO_ENTIDADES } from "@/services/filtro-corrupcion/catalogo-entidades.data.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
@@ -33,7 +33,7 @@ describe("catálogo generado", () => {
 
 describe("entidad: las 37 se detectan por su nombre y por cada alias (incluida la sigla)", () => {
   const formas = CATALOGO_ENTIDADES.flatMap((e) =>
-    [e.nombre, ...(e.alias ?? [])].map((forma) => ({ codigo: e.codigo, tipo: e.tipo, forma })),
+    [e.nombre, ...(e.alias ?? []), ...(e.aliasDerivados ?? [])].map((forma) => ({ codigo: e.codigo, tipo: e.tipo, forma })),
   );
 
   it.each(formas)("$codigo: «$forma»", ({ codigo, tipo, forma }) => {
@@ -174,19 +174,27 @@ describe("titular: el nombre solo informa", () => {
     expect(evaluarTextoCorrupcion("el director general del hospital loayza, Eduardo, me pidió coima").titular?.nombreCoincide).toBe(false);
   });
 
-  it("sin entidad detectada o sin nombre registrado (MINSA) no hay coincidencia posible", () => {
-    expect(evaluarTextoCorrupcion("el director general Eduardo Franklin Yong Motta me pidió coima").titular?.nombreCoincide).toBe(false);
+  it("sin entidad nombrada el nombre del titular la identifica (v1.3); sin nombre registrado (MINSA) no hay coincidencia posible", () => {
+    const sinEntidad = evaluarTextoCorrupcion("el director general Eduardo Franklin Yong Motta me pidió coima");
+    expect(sinEntidad.titular?.nombreCoincide).toBe(true);
+    expect(sinEntidad.entidad?.codigo).toBe("hnal");
     expect(evaluarTextoCorrupcion("el ministro de salud del MINSA, Juan Carlos Pérez, me pidió coima").titular?.nombreCoincide).toBe(false);
   });
 
-  it("que el nombre coincida, falte o sea otro NO cambia el puntaje, la certeza, la propuesta ni las señales", () => {
+  it("que el nombre coincida suma PUNTOS_NOMBRE_TITULAR; que falte o sea otro no cambia nada: puntaje, certeza, propuesta y señales", () => {
     const base = evaluarTextoCorrupcion(BASE);
-    for (const texto of [CON_NOMBRE, OTRO_NOMBRE]) {
-      const resultado = evaluarTextoCorrupcion(texto);
-      expect(resultado.puntaje).toBe(base.puntaje);
+    const otro = evaluarTextoCorrupcion(OTRO_NOMBRE);
+    expect(otro.puntaje).toBe(base.puntaje);
+    expect(otro.senales).toEqual(base.senales);
+    const conNombre = evaluarTextoCorrupcion(CON_NOMBRE);
+    expect(conNombre.puntaje).toBe(base.puntaje + PUNTOS_NOMBRE_TITULAR);
+    expect(conNombre.senales).toEqual([
+      ...base.senales,
+      { frase: "eduardo franklin yong motta", tipo: "NOMBRE_TITULAR", peso: PUNTOS_NOMBRE_TITULAR },
+    ]);
+    for (const resultado of [conNombre, otro]) {
       expect(resultado.certeza).toBe(base.certeza);
       expect(resultado.propuestaCorrupcion).toBe(base.propuestaCorrupcion);
-      expect(resultado.senales).toEqual(base.senales);
       expect(resultado.requiereOtrans).toBe(base.requiereOtrans);
     }
   });

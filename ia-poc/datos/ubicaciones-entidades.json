@@ -1,0 +1,34 @@
+{
+  "_comentario": "Escrito a mano y APROXIMADO (distrito o zona donde queda el establecimiento, según el conocimiento general de Lima, no verificado contra el directorio oficial). Lo lee ia-poc/scripts/generar-catalogo.mjs y genera src/services/filtro-corrupcion/ubicaciones-entidades.data.ts. Una zona = una sola entidad: si queda en dos, va a 'omitidas'. La ubicación suma +1 al filtro solo si el texto NO nombra la entidad, y nunca identifica por sí sola un cargo.",
+  "zonas": [
+    { "zona": "Huaycán", "entidad": "hh" },
+    { "zona": "Chosica", "entidad": "hjatch", "ambiguaConEstablecimiento": true },
+    { "zona": "Vitarte", "entidad": "hlev" },
+    { "zona": "Surquillo", "entidad": "inen" },
+    { "zona": "Miraflores", "entidad": "hejcu" },
+    { "zona": "Santa Anita", "entidad": "hhv" },
+    { "zona": "El Agustino", "entidad": "hnhu" },
+    { "zona": "Collique", "entidad": "hnseb" },
+    { "zona": "Magdalena", "entidad": "hvlh" },
+    { "zona": "Pueblo Libre", "entidad": "hsr" },
+    { "zona": "San Juan de Miraflores", "entidad": "hma" },
+    { "zona": "Puente Piedra", "entidad": "hcllh" },
+    { "zona": "Chorrillos", "entidad": "inr" },
+    { "zona": "Jesús María", "entidad": "ins" },
+    { "zona": "San Borja", "entidad": "insnsb" },
+    { "zona": "Villa El Salvador", "entidad": "heves" },
+    { "zona": "San Juan de Lurigancho", "entidad": "hsjl" },
+    { "zona": "SJL", "entidad": "hsjl" }
+  ],
+  "omitidas": {
+    "Ate": "Palabra común ('ate' del verbo atar) y distrito con varios establecimientos (Huaycán y Vitarte): no identifica.",
+    "Breña": "El Instituto del Niño lo lleva en el nombre y el Loayza también queda por ahí (el conjunto de desarrollo lo usa para el Loayza): no identifica una sola entidad.",
+    "Lima": "Demasiado general.",
+    "Cercado de Lima": "Dos de Mayo, INMP, Loayza y otros: varias entidades.",
+    "Lurigancho": "Es el distrito de Lurigancho-Chosica y también el de San Juan de Lurigancho: se usa solo 'San Juan de Lurigancho' y 'SJL'.",
+    "San Isidro": "Sede de varias oficinas centrales sin un establecimiento propio en el catálogo.",
+    "San Martín de Porres": "El Cayetano Heredia y el Instituto de Salud Mental quedan en el distrito.",
+    "Comas": "Palabra común (plural de 'coma'); se usa 'Collique'.",
+    "Lima Este": "DIRIS Lima Este y el Hospital de Lima Este Vitarte."
+  }
+}

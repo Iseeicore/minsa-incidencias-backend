@@ -87,7 +87,7 @@ describe("POST /ia-poc/analizar", () => {
       degradado: true,
       requiereOtrans: true,
       pesoIa: null,
-      variante: "V2",
+      variante: "V2C",
     });
     expect(res.body.confianza).toBeLessThan(100);
   });

@@ -18,8 +18,11 @@ export const TIEMPO_MAXIMO_MODELO_MS = 120_000;
 /** Reintentos con el mismo prompt si el JSON no valida o hay un error de red (no se reintenta un tiempo agotado). */
 export const REINTENTOS_MODELO = 1;
 
-/** Variante que usa el análisis si no se pide otra. Se fija con las mediciones de desarrollo (ia-poc/README.md). */
-export const VARIANTE_POR_DEFECTO: VarianteIa = VarianteIa.V2;
+/**
+ * Variante que usa el análisis si no se pide otra: V2C (salida compacta, ~3 s por mensaje), "Viable con reservas" frente a V2 en la
+ * sección 22 del plan de PoC. V2 queda como referencia y V2R (casos revisados) como opción hasta tener correcciones reales.
+ */
+export const VARIANTE_POR_DEFECTO: VarianteIa = VarianteIa.V2C;
 
 /** Formato de salida que pide cada variante. Solo V2C es compacta. */
 export const FORMATO_SALIDA_POR_VARIANTE: Readonly<

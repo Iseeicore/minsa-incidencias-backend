@@ -283,6 +283,25 @@ Módulo aparte del filtro: **reglas primero, modelo después**. No toca el regis
 - **Límites:** ~10 a 15 s por mensaje con el modelo caliente (~15 tokens por segundo; la primera llamada en frío tarda ~2 minutos: `node ia-poc/scripts/precalentar.mjs`); una sola GPU, un mensaje a la vez; el modelo se equivoca (ver resultados en `ia-poc/README.md` y la nota del vault); sin RAG; los conjuntos de evaluación son sintéticos con ~60 % de corrupción.
 - **Endpoint de prueba:** `POST /ia-poc/analizar`, solo `ADMINISTRADOR`, **apagado por defecto**: con `IA_POC_HABILITADA=true` existe; sin ella responde `404`. Cuerpo `{ texto (máx. 5000), variante?: "V1"|"V2"|"V3"|"V2C"|"V2R", establecimiento? }` (con `establecimiento`, el filtro lo toma como conocido); responde `200` con el paquete. `401` sin sesión, `403` para otros roles, `400` si el cuerpo no valida. No guarda nada ni registra el texto.
 
+### Crear usuarios sintéticos para probar cada rol
+
+Para recorrer cada flujo en el navegador hace falta una persona por rol. `crear-usuario-prueba` crea una persona sintética con cualquiera de los cuatro roles vigentes (`ADMINISTRADOR`, `GESTOR`, `OTRANS`, `ESTABLECIMIENTO`). **Solo corre contra una base desechable**: se niega si el nombre de la base de `DATABASE_URL` no termina en `_desechable`, `_dev` o `_local`, antes de abrir ninguna conexión, y el mensaje nunca incluye la URL.
+
+```bash
+docker compose run --rm \
+  -e USUARIO_NOMBRE="Gestora de Prueba" \
+  -e USUARIO_CORREO="gestor@prueba.local" \
+  -e USUARIO_PASSWORD="una-clave-de-12-o-mas-caracteres" \
+  -e USUARIO_ROL="GESTOR" \
+  minsa-incidencias-backend node dist/scripts/crear-usuario-prueba.js
+```
+
+- Firma con el actor `sistema:script-prueba` y guarda solo la huella Argon2id.
+- `USUARIO_AREA` (opcional) es el código del área en `catalogo.area`. Sin área, un Responsable de establecimiento no ve casos. Si el código no existe, el script falla y no crea a la persona.
+- Rechaza un rol que no sea de los vigentes (`DIRIS` y `REVISOR` no lo son) y una clave de menos de 12 caracteres.
+- **Es idempotente:** si el correo ya existe no duplica, no cambia la clave ni agrega roles, y lo dice.
+- Solo imprime el correo y el rol; nunca la clave ni la URL. Usa claves sintéticas y no las guardes en el repositorio.
+
 ## Conexión con el frontend (CORS)
 
 El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así que el navegador exige CORS. Se configura con una lista de orígenes exactos en `CORS_ORIGINS`:
@@ -362,7 +381,7 @@ src/
   services/            auth.service (login, sesión, cierre), administrador.service, incidencia.service (casos y acciones), area.service y usuario.service (usuarios por establecimiento)
                        y filtro-corrupcion/ (filtro por reglas, función pura) y analisis-ia/ (reglas + modelo local, PoC)
   routes/              salud, auth, incidencias, áreas, usuarios, filtro-corrupcion (evaluación de prueba) e ia-poc (análisis con IA, apagado por defecto)
-  scripts/             crear-admin (primer administrador)
+  scripts/             crear-admin (primer administrador), clasificador (cola de incidencias sin clasificar), crear-usuario-prueba (personas sintéticas por rol)
   types/               Ampliación de Request con la sesión actual
   utils/               token-bucket, session-cookie, password-hasher (Argon2id), vistas-de-roles, acciones-permitidas,
                        gestion-de-usuarios, clave-inicial, cursor-usuarios, plazo-incidencia, historial-incidencia, reclamante

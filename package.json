@@ -13,7 +13,8 @@
     "docker:logs": "docker compose logs -f",
     "docker:down": "docker compose down",
     "crear-admin": "node --env-file=.env dist/scripts/crear-admin.js",
-    "clasificador": "node --env-file=.env dist/scripts/clasificador.js"
+    "clasificador": "node --env-file=.env dist/scripts/clasificador.js",
+    "crear-usuario-prueba": "node --env-file=.env dist/scripts/crear-usuario-prueba.js"
   },
   "type": "module",
   "dependencies": {

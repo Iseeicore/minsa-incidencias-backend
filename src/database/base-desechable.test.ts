@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertBaseDesechable } from "@/test-utils/rollback-database.js";
+import { assertBaseDesechable } from "@/database/base-desechable.js";
 
 describe("assertBaseDesechable", () => {
   it.each(["gestion_desechable", "chatbot_dev", "gestion_local"])("acepta la base %s", (nombre) => {

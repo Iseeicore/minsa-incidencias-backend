@@ -1,0 +1,243 @@
+import { TOPE_CONFIANZA_CON_DUDA as CONFIANZA_MAXIMA_CON_DUDA } from "@/constants/clasificador.js";
+import {
+  FORMATO_SALIDA_POR_VARIANTE,
+  MARGEN_EMPATE_QUEJA_RECLAMO,
+  PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO,
+  VARIANTE_POR_DEFECTO,
+} from "@/constants/analisis-ia.js";
+import {
+  FormatoSalidaIa,
+  MotivoFalloIa,
+  OrigenFundamento,
+  VarianteIa,
+} from "@/enums/analisis-ia.enum.js";
+import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
+import type { CasoSimilar } from "@/services/analisis-ia/casos/casos.types.js";
+import type {
+  ContextoAnalisis,
+  Fundamento,
+  MetricasModelo,
+  OpcionesAnalisis,
+  PaqueteAnalisis,
+} from "@/services/analisis-ia/analisis-ia.types.js";
+import { crearClienteOllama } from "@/services/analisis-ia/cliente-ollama.js";
+import {
+  esSalidaCompleta,
+  type SalidaIa,
+} from "@/services/analisis-ia/esquema-salida.js";
+import {
+  construirExplicacionDeterminista,
+  fundamentosDeReglas,
+  informacionFaltanteDeReglas,
+} from "@/services/analisis-ia/plantillas-paquete.js";
+import { construirTrazabilidadNormas } from "@/services/analisis-ia/normas/citar-normas.js";
+import { construirPeticion } from "@/services/analisis-ia/prompts.js";
+import {
+  combinarReglasConIa,
+  normalizarPesoIa,
+} from "@/services/filtro-corrupcion/combinar-reglas-con-ia.js";
+import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
+import type { ResultadoCorrupcion } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
+
+const { DENUNCIA_CORRUPCION, QUEJA, RECLAMO, OTRO } = CategoriaIncidencia;
+
+
+/** Peso efectivo del modelo: su peso, o el piso si marcó `posible_corrupcion` y se configuró uno. Función pura. */
+export function pesoEfectivoDelModelo(
+  salida: SalidaIa,
+  piso: number | null,
+): number {
+  const peso = normalizarPesoIa(salida.peso_corrupcion) ?? 0;
+  const pisoUsable = normalizarPesoIa(piso);
+  return salida.posible_corrupcion && pisoUsable !== null
+    ? Math.max(peso, pisoUsable)
+    : peso;
+}
+
+/** Queja y reclamo empatados: el modelo da a la otra categoría una probabilidad que difiere de la suya menos que el margen. */
+export function hayEmpateQuejaReclamo(salida: SalidaIa): boolean {
+  if (!esSalidaCompleta(salida)) return false;
+  if (salida.categoria !== QUEJA && salida.categoria !== RECLAMO) return false;
+  const otra = salida.categoria === QUEJA ? RECLAMO : QUEJA;
+  const probabilidadOtra = salida.alternativas.find(
+    (a) => a.categoria === otra,
+  )?.probabilidad;
+  if (probabilidadOtra === undefined) return false;
+  const probabilidadPrincipal =
+    salida.alternativas.find((a) => a.categoria === salida.categoria)
+      ?.probabilidad ?? 1 - probabilidadOtra;
+  return (
+    Math.abs(probabilidadPrincipal - probabilidadOtra) <
+    MARGEN_EMPATE_QUEJA_RECLAMO
+  );
+}
+
+const fundamentosDelModelo = (salida: SalidaIa | null): Fundamento[] =>
+  (salida && esSalidaCompleta(salida) ? salida.senales : []).map((s) => ({
+    origen: OrigenFundamento.MODELO,
+    frase: s.frase,
+    tipo: s.tipo,
+  }));
+
+interface Categoria {
+  propuesta: CategoriaIncidencia;
+  empate: boolean;
+  /** El modelo sospecha corrupción (categoría o marca) pero la suma no la propuso: ante la duda, OTRANS. */
+  dudaDeCorrupcion: boolean;
+}
+
+/** Categoría final según la combinación, el modelo y las señales sensibles de las reglas. Función pura. */
+function decidirCategoria(
+  reglas: ResultadoCorrupcion,
+  salida: SalidaIa | null,
+  corrupcion: boolean,
+): Categoria {
+  if (corrupcion)
+    return {
+      propuesta: DENUNCIA_CORRUPCION,
+      empate: false,
+      dudaDeCorrupcion: false,
+    };
+  if (reglas.senalSensible && reglas.categoriaSugerida)
+    return {
+      propuesta: reglas.categoriaSugerida,
+      empate: false,
+      dudaDeCorrupcion: false,
+    };
+  if (!salida)
+    return { propuesta: OTRO, empate: false, dudaDeCorrupcion: false };
+  if (salida.categoria === DENUNCIA_CORRUPCION)
+    return { propuesta: RECLAMO, empate: false, dudaDeCorrupcion: true };
+  const empate = hayEmpateQuejaReclamo(salida);
+  return {
+    propuesta: empate ? RECLAMO : salida.categoria,
+    empate,
+    dudaDeCorrupcion: salida.posible_corrupcion,
+  };
+}
+
+/**
+ * Análisis completo de un mensaje: reglas, luego el modelo (si el texto aplica) y la combinación. Es una propuesta que una persona
+ * confirma: no guarda nada, no registra el texto y nunca lanza por culpa del modelo (si falla, `degradado` y valen solo las reglas).
+ * El modelo no decide: su peso se suma al de las reglas y nunca baja un caso que las reglas marcaron.
+ */
+export async function analizarMensaje(
+  texto: string,
+  contexto: ContextoAnalisis = {},
+  opciones: OpcionesAnalisis = {},
+): Promise<PaqueteAnalisis> {
+  const variante = opciones.variante ?? VARIANTE_POR_DEFECTO;
+  const cliente = opciones.cliente ?? crearClienteOllama();
+  // `null` explícito significa "sin piso"; solo `undefined` toma el valor por defecto.
+  const piso =
+    opciones.pisoPesoPosibleCorrupcion === undefined
+      ? PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO
+      : opciones.pisoPesoPosibleCorrupcion;
+  const reglas = evaluarTextoCorrupcion(texto, {
+    entidades: contexto.entidades,
+    establecimientoConocido: contexto.establecimientoConocido,
+    tieneArchivos: contexto.tieneArchivos,
+  });
+
+  let casos: CasoSimilar[] = [];
+  let casiDuplicadosDescartados = 0;
+  if (reglas.aplica && variante === VarianteIa.V2R && opciones.recuperarCasos) {
+    try {
+      const recuperacion = await opciones.recuperarCasos(texto);
+      casos = recuperacion.casos;
+      casiDuplicadosDescartados = recuperacion.casiDuplicadosDescartados;
+    } catch {
+      casos = [];
+    }
+  }
+
+  let salida: SalidaIa | null = null;
+  let metricas: MetricasModelo | null = null;
+  let motivo: MotivoFalloIa | null = null;
+  if (reglas.aplica) {
+    const consulta = await cliente.consultar(
+      construirPeticion(variante, texto, reglas, {
+        ...contexto,
+        casosSimilares: casos,
+      }),
+    );
+    metricas = consulta.metricas;
+    if (consulta.ok) salida = consulta.salida;
+    else motivo = consulta.motivo;
+  }
+
+  const combinacion = combinarReglasConIa(
+    reglas,
+    salida ? pesoEfectivoDelModelo(salida, piso) : null,
+  );
+  const categoria = decidirCategoria(
+    reglas,
+    salida,
+    combinacion.propuestaCorrupcion,
+  );
+  const degradado = reglas.aplica && salida === null;
+  const revisionOtrans =
+    combinacion.revisionOtrans || categoria.dudaDeCorrupcion;
+  const confianza =
+    categoria.empate || categoria.dudaDeCorrupcion
+      ? Math.min(combinacion.confianza, CONFIANZA_MAXIMA_CON_DUDA)
+      : combinacion.confianza;
+
+  // V2C: el modelo no entrega explicación ni faltantes; salen de las reglas con plantillas deterministas (también si el modelo falló).
+  const compacta =
+    reglas.aplica &&
+    FORMATO_SALIDA_POR_VARIANTE[variante] === FormatoSalidaIa.COMPACTA;
+  const completa = salida && esSalidaCompleta(salida) ? salida : null;
+  const explicacion = compacta
+    ? construirExplicacionDeterminista({
+        reglas,
+        salida,
+        combinacion,
+        revisionOtrans,
+      })
+    : (completa?.explicacion ?? null);
+
+  return {
+    propuesta: categoria.propuesta,
+    confianza,
+    pesoIa: combinacion.pesoIa,
+    explicacion,
+    fundamentos: [
+      ...fundamentosDeReglas(reglas),
+      ...fundamentosDelModelo(salida),
+    ],
+    informacionFaltante: completa
+      ? [...completa.informacion_faltante]
+      : informacionFaltanteDeReglas(reglas),
+    fichaDerivacion: reglas.referenciaDerivacion,
+    degradado,
+    motivoDegradado: degradado ? motivo : null,
+    requiereOtrans: combinacion.requiereOtrans,
+    revisionOtrans,
+    requiereRevisionHumana:
+      combinacion.requiereRevisionHumana ||
+      categoria.empate ||
+      categoria.dudaDeCorrupcion ||
+      revisionOtrans,
+    escalarAOtrans: reglas.escalarAOtrans,
+    senalSensible: reglas.senalSensible,
+    empateQuejaReclamo: categoria.empate,
+    sinDesempateQuejaReclamo: compacta && salida !== null,
+    variante: reglas.aplica ? variante : null,
+    casosSimilares: casos.map(({ id, categoria, similitud }) => ({
+      id,
+      categoria,
+      similitud,
+    })),
+    casiDuplicadosDescartados,
+    trazabilidadNormas: construirTrazabilidadNormas({
+      reglas,
+      propuesta: categoria.propuesta,
+      propuestaCorrupcion: combinacion.propuestaCorrupcion,
+    }),
+    reglas,
+    combinacion,
+    salidaModelo: salida,
+    metricas,
+  };
+}

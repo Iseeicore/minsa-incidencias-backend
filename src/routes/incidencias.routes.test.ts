@@ -2,12 +2,14 @@ import express, { type NextFunction, type Request, type Response } from "express
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VistaCodigo } from "@/enums/vista-codigo.enum.js";
+import { codificarCursor } from "@/utils/cursor-listado.js";
 import { errorHandler, notFoundHandler } from "@/middleware/error-handler.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import type { IncidenciaServicio } from "@/services/incidencia.types.js";
 import type { SesionActual } from "@/services/auth.types.js";
 
 const CODIGO = "MINSA-2026-000001";
+const codificarTexto = (texto: string): string => Buffer.from(texto, "utf8").toString("base64url");
 
 const sesionConCasos: SesionActual = {
   sesionId: "s1",
@@ -15,12 +17,14 @@ const sesionConCasos: SesionActual = {
   correo: "ana@minsa.gob.pe",
   nombreCompleto: "Ana Prueba",
   roles: ["GESTOR"],
+  area: null,
   vistas: [VistaCodigo.CASOS],
 };
 
 function servicioFalso() {
   return {
-    listar: vi.fn(async () => ({ casos: [], pagina: 1, tamano: 20, total: 0 })),
+    listar: vi.fn(async () => ({ items: [], siguiente: null, hayMas: false })),
+    conteos: vi.fn(async () => ({})),
     detalle: vi.fn(async () => ({ codigo: CODIGO })),
     porVencer: vi.fn(async () => ({ total: 0, porVencer: 0, vencidos: 0, casos: [] })),
     ejecutar: vi.fn(async () => ({ mensaje: "listo", caso: null })),
@@ -52,6 +56,7 @@ describe("rutas de incidencias", () => {
       const app = montar(servicio, null);
       expect((await request(app).get("/incidencias")).status).toBe(401);
       expect((await request(app).get("/incidencias/por-vencer")).status).toBe(401);
+      expect((await request(app).get("/incidencias/conteos")).status).toBe(401);
       expect((await request(app).get(`/incidencias/${CODIGO}`)).status).toBe(401);
       expect((await request(app).post(`/incidencias/${CODIGO}/confirmar`)).status).toBe(401);
       expect(servicio.listar).not.toHaveBeenCalled();
@@ -60,6 +65,8 @@ describe("rutas de incidencias", () => {
     it("sin la vista de casos responde 403, pero la campana de avisos solo pide sesión", async () => {
       const app = montar(servicio, { ...sesionConCasos, vistas: [] });
       expect((await request(app).get("/incidencias")).status).toBe(403);
+      expect((await request(app).get("/incidencias/conteos")).status).toBe(403);
+      expect(servicio.conteos).not.toHaveBeenCalled();
       expect((await request(app).get(`/incidencias/${CODIGO}`)).status).toBe(403);
       expect((await request(app).post(`/incidencias/${CODIGO}/tomar`)).status).toBe(403);
       expect((await request(app).get("/incidencias/por-vencer")).status).toBe(200);
@@ -67,30 +74,39 @@ describe("rutas de incidencias", () => {
   });
 
   describe("GET /incidencias", () => {
-    it("usa 20 por página, lo más antiguo primero y sin filtros cuando no se piden", async () => {
+    it("usa 20 por página, sin cursor ni filtros cuando no se piden", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias");
       expect(res.status).toBe(200);
-      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, {
-        pagina: 1,
-        tamano: 20,
-        orden: "fecha",
-        direccion: "asc",
-      });
+      expect(res.body).toEqual({ items: [], siguiente: null, hayMas: false });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
     });
 
-    it("pasa los filtros, el orden y la paginación ya validados", async () => {
+    it("pasa los filtros, el límite y el cursor ya validados y decodificados", async () => {
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
       await request(montar(servicio, sesionConCasos))
         .get("/incidencias")
-        .query({ pagina: "2", tamano: "5", estado: "derivado", categoria: "queja", texto: "  hola  ", orden: "codigo", direccion: "desc" });
+        .query({ limite: "5", cursor: codificarCursor(posicion), estado: "derivado", categoria: "queja", texto: "  hola  " });
       expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, {
-        pagina: 2,
-        tamano: 5,
+        limite: 5,
+        despuesDe: posicion,
         estado: "derivado",
         categoria: "queja",
         texto: "hola",
-        orden: "codigo",
-        direccion: "desc",
       });
+    });
+
+    it("ya no acepta pagina, tamano ni orden: se ignoran y el listado sigue del más nuevo al más antiguo", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ pagina: "3", tamano: "5", orden: "codigo" });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
+    });
+
+    it("acepta filtrar la bandeja de archivados por estado y por motivo del archivo", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ estado: "archivado", motivoArchivo: "NO_CORRESPONDE" });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20, estado: "archivado", motivoArchivo: "NO_CORRESPONDE" });
+      for (const motivo of ["DATOS_INSUFICIENTES", "VENCIDA_SIN_ATENDER", "RESUELTA_VIGENCIA"]) {
+        const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ motivoArchivo: motivo });
+        expect(res.status).toBe(200);
+      }
     });
 
     it("acepta filtrar los casos sin categoría", async () => {
@@ -99,17 +115,20 @@ describe("rutas de incidencias", () => {
     });
 
     it.each([
-      ["pagina", "0"],
-      ["pagina", "-1"],
-      ["pagina", "abc"],
-      ["tamano", "0"],
-      ["tamano", "101"],
-      ["tamano", "20.5"],
+      ["limite", "0"],
+      ["limite", "-1"],
+      ["limite", "abc"],
+      ["limite", "101"],
+      ["limite", "20.5"],
+      ["cursor", "no es un cursor"],
+      ["cursor", "MjAyNi0xMC0wNXxubw"],
+      ["cursor", codificarTexto("2026-10-05T12:00:00.000Z|1; DROP TABLE chatbot.incidencia_paciente")],
+      ["cursor", codificarTexto("no-es-fecha|0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b")],
+      ["cursor", "a".repeat(201)],
       ["estado", "anulado"],
+      ["motivoArchivo", "otro"],
+      ["motivoArchivo", "no_corresponde"],
       ["categoria", "corrupcion"],
-      ["orden", "descripcion"],
-      ["orden", "codigo; DROP TABLE chatbot.incidencia_paciente"],
-      ["direccion", "arriba"],
     ])("rechaza %s=%s con 400 y no llega al servicio", async (campo, valor) => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ [campo]: valor });
       expect(res.status).toBe(400);
@@ -117,9 +136,152 @@ describe("rutas de incidencias", () => {
       expect(servicio.listar).not.toHaveBeenCalled();
     });
 
+    it("pasa el establecimiento con el código canónico: sin ceros a la izquierda ni espacios", async () => {
+      const app = montar(servicio, sesionConCasos);
+      for (const entrada of ["6206", "0006206", "  00006206 ", "12345678"]) {
+        servicio.listar.mockClear();
+        const res = await request(app).get("/incidencias").query({ establecimiento: entrada });
+        expect(res.status).toBe(200);
+        expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20, establecimiento: entrada.trim().replace(/^0+/, "") });
+      }
+    });
+
+    it("un establecimiento vacío equivale a no filtrar y viaja junto al cursor", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: "" });
+      expect(servicio.listar).toHaveBeenCalledWith(sesionConCasos, { limite: 20 });
+
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: "0123", cursor: codificarCursor(posicion) });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, despuesDe: posicion, establecimiento: "123" });
+    });
+
+    it.each(["abc", "0", "000", "123456789", "000123456789", "12 34", "-5", "1e3", "12.5", "1'; DROP TABLE x"])(
+      "rechaza establecimiento=%s con 400 y no llega al servicio",
+      async (valor) => {
+        const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ establecimiento: valor });
+        expect(res.status).toBe(400);
+        expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        expect(servicio.listar).not.toHaveBeenCalled();
+      },
+    );
+
+    it("pasa desde y hasta como días y viaja junto al cursor y los demás filtros", async () => {
+      const app = montar(servicio, sesionConCasos);
+      await request(app).get("/incidencias").query({ desde: "2026-10-01", hasta: "2026-10-08" });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, desde: "2026-10-01", hasta: "2026-10-08" });
+
+      await request(app).get("/incidencias").query({ desde: " 2026-10-01 " });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, desde: "2026-10-01" });
+
+      await request(app).get("/incidencias").query({ hasta: "2026-10-08", desde: "" });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, { limite: 20, hasta: "2026-10-08" });
+
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      await request(app).get("/incidencias").query({ desde: "2026-10-05", hasta: "2026-10-05", estado: "derivado", cursor: codificarCursor(posicion) });
+      expect(servicio.listar).toHaveBeenLastCalledWith(sesionConCasos, {
+        limite: 20,
+        despuesDe: posicion,
+        estado: "derivado",
+        desde: "2026-10-05",
+        hasta: "2026-10-05",
+      });
+    });
+
+    it("acepta un rango de un solo día y de exactamente 366 días", async () => {
+      const app = montar(servicio, sesionConCasos);
+      expect((await request(app).get("/incidencias").query({ desde: "2026-10-08", hasta: "2026-10-08" })).status).toBe(200);
+      expect((await request(app).get("/incidencias").query({ desde: "2024-01-01", hasta: "2024-12-31" })).status).toBe(200);
+    });
+
+    it.each([
+      [{ desde: "2026-02-31" }],
+      [{ hasta: "2026-02-31" }],
+      [{ desde: "2025-02-29" }],
+      [{ desde: "2026-13-01" }],
+      [{ desde: "08/10/2026" }],
+      [{ desde: "2026-10-8" }],
+      [{ desde: "2026-10-08T00:00:00Z" }],
+      [{ hasta: "ayer" }],
+      [{ desde: "2026-10-09", hasta: "2026-10-08" }],
+      [{ desde: "2025-01-01", hasta: "2026-01-02" }],
+      [{ desde: "2024-01-01", hasta: "2025-01-01" }],
+      [{ desde: "2026-02-31", hasta: "2026-01-01" }],
+    ])("rechaza el rango %j con 400 VALIDATION_FAILED y no llega al servicio", async (consulta) => {
+      const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query(consulta);
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.listar).not.toHaveBeenCalled();
+    });
+
+    it("explica por qué se rechaza un rango invertido o demasiado largo", async () => {
+      const app = montar(servicio, sesionConCasos);
+      const invertido = await request(app).get("/incidencias").query({ desde: "2026-10-09", hasta: "2026-10-08" });
+      expect(invertido.body.details).toEqual([{ path: "desde", message: "La fecha «desde» no puede ser posterior a «hasta»." }]);
+      const largo = await request(app).get("/incidencias").query({ desde: "2024-01-01", hasta: "2025-01-01" });
+      expect(largo.body.details).toEqual([{ path: "hasta", message: "El rango no puede abarcar más de 366 días." }]);
+    });
+
     it("rechaza un texto de búsqueda demasiado largo", async () => {
       const res = await request(montar(servicio, sesionConCasos)).get("/incidencias").query({ texto: "a".repeat(101) });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("GET /incidencias/conteos", () => {
+    it("va antes que la ruta por código y pasa los mismos filtros que el listado, sin límite ni cursor", async () => {
+      const posicion = { fechaCreacion: new Date("2026-10-05T12:00:00.123Z"), id: "0199a2b4-7c3d-7e5f-8a9b-0c1d2e3f4a5b" };
+      const res = await request(montar(servicio, sesionConCasos))
+        .get("/incidencias/conteos")
+        .query({
+          limite: "5",
+          cursor: codificarCursor(posicion),
+          estado: "en-gestion",
+          motivoArchivo: "NO_CORRESPONDE",
+          categoria: "sin-categoria",
+          texto: "  hola  ",
+          establecimiento: "0006206",
+          desde: "2026-10-01",
+          hasta: "2026-10-08",
+        });
+      expect(res.status).toBe(200);
+      expect(servicio.detalle).not.toHaveBeenCalled();
+      expect(servicio.conteos).toHaveBeenCalledWith(sesionConCasos, {
+        estado: "en-gestion",
+        motivoArchivo: "NO_CORRESPONDE",
+        categoria: "sin-categoria",
+        texto: "hola",
+        establecimiento: "6206",
+        desde: "2026-10-01",
+        hasta: "2026-10-08",
+      });
+    });
+
+    it("sin filtros llega al servicio con una consulta vacía", async () => {
+      await request(montar(servicio, sesionConCasos)).get("/incidencias/conteos");
+      expect(servicio.conteos).toHaveBeenCalledWith(sesionConCasos, {});
+    });
+
+    it.each([
+      [{ estado: "anulado" }],
+      [{ motivoArchivo: "otro" }],
+      [{ categoria: "corrupcion" }],
+      [{ establecimiento: "abc" }],
+      [{ texto: "a".repeat(101) }],
+      [{ desde: "2026-02-31" }],
+      [{ desde: "2026-10-09", hasta: "2026-10-08" }],
+      [{ desde: "2024-01-01", hasta: "2025-01-01" }],
+    ])("rechaza %j con 400 VALIDATION_FAILED y no llega al servicio", async (consulta) => {
+      const res = await request(montar(servicio, sesionConCasos)).get("/incidencias/conteos").query(consulta);
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.conteos).not.toHaveBeenCalled();
+    });
+
+    it("acepta un rango de exactamente 366 días y explica un rango invertido", async () => {
+      const app = montar(servicio, sesionConCasos);
+      expect((await request(app).get("/incidencias/conteos").query({ desde: "2024-01-01", hasta: "2024-12-31" })).status).toBe(200);
+      const invertido = await request(app).get("/incidencias/conteos").query({ desde: "2026-10-09", hasta: "2026-10-08" });
+      expect(invertido.body.details).toEqual([{ path: "desde", message: "La fecha «desde» no puede ser posterior a «hasta»." }]);
     });
   });
 
@@ -168,21 +330,118 @@ describe("rutas de incidencias", () => {
       expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "corregir", { categoria: "otro" });
     });
 
-    it("resolver exige un texto de resolución, lo recorta y pone un tope", async () => {
-      const app = montar(servicio, sesionConCasos);
-      expect((await request(app).post(`/incidencias/${CODIGO}/resolver`).send({})).status).toBe(400);
-      expect((await request(app).post(`/incidencias/${CODIGO}/resolver`).send({ resolucion: "   " })).status).toBe(400);
-      expect((await request(app).post(`/incidencias/${CODIGO}/resolver`).send({ resolucion: "x".repeat(4001) })).status).toBe(400);
-      expect(servicio.ejecutar).not.toHaveBeenCalled();
+    describe("resolver", () => {
+      const completa = { medidasTomadas: "  Se entregó la copia del expediente.  ", fundamento: "Lo pidió el paciente.", resultado: "ATENDIDO" };
 
-      const ok = await request(app).post(`/incidencias/${CODIGO}/resolver`).send({ resolucion: "  Se entregó la copia.  " });
-      expect(ok.status).toBe(200);
-      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "resolver", { resolucion: "Se entregó la copia." });
+      it("exige las medidas, el fundamento y el resultado; los recorta y pone un tope", async () => {
+        const app = montar(servicio, sesionConCasos);
+        const resolver = (cuerpo: object) => request(app).post(`/incidencias/${CODIGO}/resolver`).send(cuerpo);
+        expect((await resolver({})).status).toBe(400);
+        expect((await resolver({ resolucion: "Se entregó la copia." })).status).toBe(400);
+        expect((await resolver({ ...completa, medidasTomadas: undefined })).status).toBe(400);
+        expect((await resolver({ ...completa, fundamento: undefined })).status).toBe(400);
+        expect((await resolver({ ...completa, resultado: undefined })).status).toBe(400);
+        expect((await resolver({ ...completa, medidasTomadas: "   corta   " })).status).toBe(400);
+        expect((await resolver({ ...completa, fundamento: "123456789" })).status).toBe(400);
+        expect((await resolver({ ...completa, medidasTomadas: "x".repeat(4001) })).status).toBe(400);
+        expect((await resolver({ ...completa, fundamento: "x".repeat(4001) })).status).toBe(400);
+        expect((await resolver({ ...completa, resultado: "ARCHIVADO" })).status).toBe(400);
+        expect((await resolver({ ...completa, resultado: "atendido" })).status).toBe(400);
+        expect(servicio.ejecutar).not.toHaveBeenCalled();
+
+        const ok = await resolver(completa);
+        expect(ok.status).toBe(200);
+        expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "resolver", {
+          medidasTomadas: "Se entregó la copia del expediente.",
+          fundamento: "Lo pidió el paciente.",
+          resultado: "ATENDIDO",
+        });
+      });
+
+      it("acepta el resultado CERRADO y descarta los campos de más", async () => {
+        await request(montar(servicio, sesionConCasos))
+          .post(`/incidencias/${CODIGO}/resolver`)
+          .send({ ...completa, resultado: "CERRADO", resolucion: "viejo", estado: "resuelto" });
+        expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "resolver", {
+          medidasTomadas: "Se entregó la copia del expediente.",
+          fundamento: "Lo pidió el paciente.",
+          resultado: "CERRADO",
+        });
+      });
+    });
+
+    describe("archivar", () => {
+      const archivar = (app: ReturnType<typeof montar>, cuerpo: object) => request(app).post(`/incidencias/${CODIGO}/archivar`).send(cuerpo);
+
+      it.each([
+        ["sin cuerpo", {}],
+        ["sin detalle", { motivo: "NO_CORRESPONDE" }],
+        ["sin motivo", { detalle: "No es de este establecimiento." }],
+        ["con detalle de espacios", { motivo: "NO_CORRESPONDE", detalle: "            " }],
+        ["con detalle de menos de 10 caracteres", { motivo: "NO_CORRESPONDE", detalle: " corto " }],
+        ["con detalle demasiado largo", { motivo: "DATOS_INSUFICIENTES", detalle: "x".repeat(2001) }],
+        ["con un motivo que el sistema pone solo (vencida)", { motivo: "VENCIDA_SIN_ATENDER", detalle: "Vencida hace tiempo ya." }],
+        ["con un motivo que el sistema pone solo (vigencia)", { motivo: "RESUELTA_VIGENCIA", detalle: "Resuelta hace tiempo ya." }],
+        ["con un motivo en minúsculas", { motivo: "no_corresponde", detalle: "No es de este establecimiento." }],
+        ["con un detalle que no es texto", { motivo: "NO_CORRESPONDE", detalle: 12345678901 }],
+      ])("rechaza %s con 400 y no llega al servicio", async (_nombre, cuerpo) => {
+        const res = await archivar(montar(servicio, sesionConCasos), cuerpo);
+        expect(res.status).toBe(400);
+        expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        expect(servicio.ejecutar).not.toHaveBeenCalled();
+      });
+
+      it.each(["DATOS_INSUFICIENTES", "NO_CORRESPONDE"])("acepta el motivo %s, recorta el detalle y descarta lo demás", async (motivo) => {
+        const res = await archivar(montar(servicio, sesionConCasos), { motivo, detalle: "  Faltan los datos de contacto.  ", estado: "archivado" });
+        expect(res.status).toBe(200);
+        expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "archivar", {
+          motivoArchivo: motivo,
+          detalle: "Faltan los datos de contacto.",
+        });
+      });
+    });
+
+    describe("reabrir", () => {
+      const reabrir = (app: ReturnType<typeof montar>, cuerpo: object) => request(app).post(`/incidencias/${CODIGO}/reabrir`).send(cuerpo);
+
+      it.each([
+        ["sin cuerpo", {}],
+        ["con motivo vacío", { motivo: "   " }],
+        ["con motivo de menos de 10 caracteres", { motivo: "corto" }],
+        ["con motivo demasiado largo", { motivo: "x".repeat(2001) }],
+        ["con motivo que no es texto", { motivo: 5 }],
+        ["con el campo equivocado", { detalle: "Llegaron los datos pedidos." }],
+      ])("rechaza %s con 400 y no llega al servicio", async (_nombre, cuerpo) => {
+        const res = await reabrir(montar(servicio, sesionConCasos), cuerpo);
+        expect(res.status).toBe(400);
+        expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+        expect(servicio.ejecutar).not.toHaveBeenCalled();
+      });
+
+      it("pasa el motivo recortado", async () => {
+        const res = await reabrir(montar(servicio, sesionConCasos), { motivo: "  Llegaron los datos pedidos.  " });
+        expect(res.status).toBe(200);
+        expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "reabrir", { motivoReapertura: "Llegaron los datos pedidos." });
+      });
     });
 
     it("ignora campos de más en el cuerpo de las acciones sin datos", async () => {
-      await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/derivar`).send({ estado: "resuelto", actor: "otro" });
-      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "derivar", {});
+      await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/tomar`).send({ estado: "resuelto", actor: "otro" });
+      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "tomar", {});
+    });
+
+    it("derivar acepta el código del área de destino, lo recorta y descarta lo demás", async () => {
+      const app = montar(servicio, sesionConCasos);
+      const ok = await request(app).post(`/incidencias/${CODIGO}/derivar`).send({ areaDestino: "  EESS-6206 ", areaDestinoId: 7 });
+      expect(ok.status).toBe(200);
+      expect(servicio.ejecutar).toHaveBeenCalledWith(sesionConCasos, CODIGO, "derivar", { areaDestino: "EESS-6206" });
+    });
+
+    it.each([[""], ["   "], [123], ["x".repeat(51)]])("derivar rechaza un área de destino inválida (%j)", async (areaDestino) => {
+      const res = await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/derivar`).send({ areaDestino });
+      expect(res.status).toBe(400);
+      expect(res.body.errorCode).toBe("VALIDATION_FAILED");
+      expect(servicio.ejecutar).not.toHaveBeenCalled();
     });
 
     it("un código con forma inválida responde 404 sin llegar al servicio", async () => {
@@ -192,7 +451,7 @@ describe("rutas de incidencias", () => {
     });
 
     it("una acción que no existe responde 404", async () => {
-      const res = await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/archivar`);
+      const res = await request(montar(servicio, sesionConCasos)).post(`/incidencias/${CODIGO}/anular`);
       expect(res.status).toBe(404);
       expect(servicio.ejecutar).not.toHaveBeenCalled();
     });

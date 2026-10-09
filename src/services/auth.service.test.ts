@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ErrorCode } from "@/enums/error-code.enum.js";
+import { TipoArea } from "@/enums/tipo-area.enum.js";
 import { AppError } from "@/errors/app-error.js";
 import type { SesionConUsuario, SesionRepository } from "@/repositories/sesion.repository.js";
 import type { UsuarioInterno, UsuarioRepository } from "@/repositories/usuario.repository.js";
@@ -82,6 +83,7 @@ describe("AuthService.resolverSesion", () => {
     correo: "ana@minsa.gob.pe",
     nombreCompleto: "Ana Prueba",
     roles: ["GESTOR"],
+    area: null,
     debeTocar: false,
   };
 
@@ -92,20 +94,26 @@ describe("AuthService.resolverSesion", () => {
   it("devuelve las vistas de los roles y no toca la actividad si es reciente", async () => {
     const { service, sesiones } = build(ANA, vigente);
     const sesion = await service.resolverSesion("s-1");
-    expect(sesion?.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS", "DERIVACIONES"]);
+    expect(sesion?.vistas).toEqual(["INICIO", "CASOS", "BANDEJAS"]);
     expect(sesiones.buscarVigente).toHaveBeenCalledWith("s-1", 30, 60);
     expect(sesiones.tocarActividad).not.toHaveBeenCalled();
   });
 
   it("la sesión de la petición lleva los roles para el servidor, que nunca los envía al navegador", async () => {
     const sesion = await build(ANA, vigente).service.resolverSesion("s-1");
-    expect(Object.keys(sesion ?? {}).sort()).toEqual(["correo", "nombreCompleto", "roles", "sesionId", "usuarioId", "vistas"]);
+    expect(Object.keys(sesion ?? {}).sort()).toEqual(["area", "correo", "nombreCompleto", "roles", "sesionId", "usuarioId", "vistas"]);
     expect(sesion?.roles).toEqual(["GESTOR"]);
   });
 
-  it("ignora los roles que no conoce, incluido el revisor retirado", async () => {
-    const { service } = build(ANA, { ...vigente, roles: ["REVISOR", "ROL_INVENTADO"] });
+  it("ignora los roles que no conoce, incluido DIRIS, que está desactivado", async () => {
+    const { service } = build(ANA, { ...vigente, roles: ["DIRIS", "ROL_INVENTADO"] });
     expect((await service.resolverSesion("s-1"))?.vistas).toEqual([]);
+  });
+
+  it("la sesión lleva el área de la persona tal como la entrega el repositorio", async () => {
+    const area = { id: 7, codigo: "EESS-6206", nombre: "Hospital Dos de Mayo", tipo: TipoArea.ESTABLECIMIENTO };
+    const sesion = await build(ANA, { ...vigente, roles: ["ESTABLECIMIENTO"], area }).service.resolverSesion("s-1");
+    expect(sesion?.area).toEqual(area);
   });
 
   it("una persona sin ningún rol activo tiene sesión válida y ninguna vista", async () => {
@@ -125,7 +133,7 @@ describe("AuthService.resolverSesion", () => {
 describe("AuthService.cerrarSesion", () => {
   it("revoca la sesión con el actor de la persona", async () => {
     const { service, sesiones } = build();
-    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", roles: [], vistas: [] });
+    await service.cerrarSesion({ sesionId: "s-1", usuarioId: "u-1", correo: "ana@minsa.gob.pe", nombreCompleto: "Ana", roles: [], area: null, vistas: [] });
     expect(sesiones.revocar).toHaveBeenCalledWith("usuario:ana@minsa.gob.pe", "s-1");
   });
 });

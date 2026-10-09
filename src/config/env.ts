@@ -52,6 +52,11 @@ const schema = z.object({
   PLAZO_ATENCION_DIAS: positiveInt.default(3),
   VIGENCIA_RESOLUCION_DIAS: positiveInt.default(3),
   PLAZO_AVISO_HORAS: positiveInt.default(24),
+  /** Enciende `POST /ia-poc/analizar` (PoC de IA local, solo ADMINISTRADOR). Apagada, la ruta no existe (404). */
+  IA_POC_HABILITADA: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type Env = z.infer<typeof schema>;

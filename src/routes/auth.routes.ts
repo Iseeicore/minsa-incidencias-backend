@@ -35,6 +35,8 @@ export function createAuthRouter(auth: AuthService, env: Env, loginLimiter: Requ
       nombreCompleto: sesion.nombreCompleto,
       correo: sesion.correo,
       vistas: sesion.vistas,
+      roles: sesion.roles,
+      area: sesion.area ? { codigo: sesion.area.codigo, nombre: sesion.area.nombre, tipo: sesion.area.tipo } : null,
     });
   });
 

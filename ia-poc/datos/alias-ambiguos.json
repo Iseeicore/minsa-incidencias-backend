@@ -1,0 +1,44 @@
+{
+  "_comentario": "Generado por ia-poc/scripts/generar-catalogo.mjs. Alias derivados que se descartaron porque el filtro no sabría cuál entidad elegir; no se elige ninguna.",
+  "descartadosPorElGenerador": {},
+  "ambiguosPorDiseno": {
+    "diris": {
+      "entidades": [
+        "diris-le",
+        "diris-ln",
+        "diris-lc",
+        "diris-ls"
+      ],
+      "motivo": "Hay cuatro DIRIS; sin la zona no se sabe cuál."
+    },
+    "lima este": {
+      "entidades": [
+        "diris-le",
+        "hlev"
+      ],
+      "motivo": "Es la DIRIS Lima Este y también el Hospital de Lima Este Vitarte."
+    },
+    "instituto del nino": {
+      "entidades": [
+        "insn",
+        "insnsb"
+      ],
+      "motivo": "Sin 'Breña' o 'San Borja' no se sabe cuál de los dos institutos del niño."
+    },
+    "instituto nacional de salud del nino": {
+      "entidades": [
+        "insn",
+        "insnsb"
+      ],
+      "motivo": "Empieza el nombre de los dos institutos del niño; el detector tampoco elige si el texto no termina de decir cuál."
+    },
+    "hospital de emergencias": {
+      "entidades": [
+        "hejcu",
+        "hep",
+        "heves"
+      ],
+      "motivo": "Comienzo común de tres hospitales de emergencias."
+    }
+  }
+}

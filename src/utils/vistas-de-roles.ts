@@ -5,7 +5,7 @@ const ORDEN_DEL_MENU: readonly VistaCodigo[] = Object.values(VistaCodigo);
 
 /**
  * Une las vistas de todos los roles dados, sin repetir y en el orden del menú. Ignora los roles que la
- * tabla no conoce (el revisor retirado, uno inventado o nombres heredados del objeto).
+ * tabla no conoce (el rol DIRIS desactivado, uno inventado o nombres heredados del objeto).
  */
 export function vistasDeRoles(
   roles: readonly string[],

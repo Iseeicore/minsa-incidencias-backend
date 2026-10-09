@@ -1,4 +1,6 @@
 import type { Database } from "@/database/database.js";
+import type { TipoArea } from "@/enums/tipo-area.enum.js";
+import type { AreaDeSesion } from "@/services/auth.types.js";
 
 export interface SesionConUsuario {
   sesionId: string;
@@ -6,7 +8,15 @@ export interface SesionConUsuario {
   correo: string;
   nombreCompleto: string;
   roles: string[];
+  area: AreaDeSesion | null;
   debeTocar: boolean;
+}
+
+interface FilaDeSesion extends Omit<SesionConUsuario, "area"> {
+  areaId: number | null;
+  areaCodigo: string | null;
+  areaNombre: string | null;
+  areaTipo: TipoArea | null;
 }
 
 export class SesionRepository {
@@ -26,15 +36,15 @@ export class SesionRepository {
 
   /**
    * Devuelve la sesión solo si sigue abierta (no revocada, dentro de su vigencia absoluta y de la
-   * inactividad permitida) y su usuario está activo, junto con los roles activos del usuario. Todo en
-   * una consulta y con el reloj de la base. Un rol desactivado no cuenta.
+   * inactividad permitida) y su usuario está activo, junto con los roles activos del usuario y su área. Todo
+   * en una consulta y con el reloj de la base. Un rol desactivado no cuenta.
    */
   async buscarVigente(
     sesionId: string,
     minutosInactividad: number,
     segundosParaTocar: number,
   ): Promise<SesionConUsuario | null> {
-    const filas = await this.database.query<SesionConUsuario>(
+    const filas = await this.database.query<FilaDeSesion>(
       `SELECT s.id AS "sesionId",
               u.id AS "usuarioId",
               u.correo,
@@ -46,9 +56,15 @@ export class SesionRepository {
                  WHERE ur.usuario_interno_id = u.id
                  ORDER BY r.codigo
               ) AS roles,
+              a.id AS "areaId",
+              a.codigo AS "areaCodigo",
+              a.nombre AS "areaNombre",
+              ta.codigo AS "areaTipo",
               (now() - s.ultima_actividad_en) > make_interval(secs => $3) AS "debeTocar"
          FROM gestion.sesion_usuario s
          JOIN gestion.usuario_interno u ON u.id = s.usuario_interno_id
+         LEFT JOIN catalogo.area a ON a.id = u.area_id
+         LEFT JOIN catalogo.tipo_area ta ON ta.id = a.tipo_area_id
         WHERE s.id = $1
           AND s.revocada_en IS NULL
           AND s.vence_en > now()
@@ -56,7 +72,14 @@ export class SesionRepository {
           AND u.activo`,
       [sesionId, minutosInactividad, segundosParaTocar],
     );
-    return filas[0] ?? null;
+    const fila = filas[0];
+    if (!fila) return null;
+    const { areaId, areaCodigo, areaNombre, areaTipo, ...sesion } = fila;
+    const area =
+      areaId !== null && areaCodigo !== null && areaNombre !== null && areaTipo !== null
+        ? { id: areaId, codigo: areaCodigo, nombre: areaNombre, tipo: areaTipo }
+        : null;
+    return { ...sesion, area };
   }
 
   async tocarActividad(actor: string, sesionId: string): Promise<void> {

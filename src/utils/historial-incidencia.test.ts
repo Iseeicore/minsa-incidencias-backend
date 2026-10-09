@@ -21,6 +21,7 @@ const base: FilaHistorial = {
   confirmada: false,
   estadoNuevo: null,
   resolvio: false,
+  reabrio: false,
 };
 const fila = (cambios: Partial<FilaHistorial>): FilaHistorial => ({ ...base, ...cambios });
 
@@ -80,6 +81,11 @@ describe("construirHistorial", () => {
   it("registrar la resolución gana sobre el cambio de estado que la acompaña", () => {
     const [item] = construir([fila({ resolvio: true, estadoNuevo: E.RESUELTO })]);
     expect(item).toMatchObject({ titulo: "Caso resuelto", detalle: "Por Ana Prueba." });
+  });
+
+  it("reabrir un caso tiene su propio título, aunque el estado que acompaña sea en gestión", () => {
+    const [item] = construir([fila({ reabrio: true, estadoNuevo: E.EN_GESTION })]);
+    expect(item).toMatchObject({ titulo: "Caso reabierto", detalle: "Por Ana Prueba." });
   });
 
   it("un actor que no es persona ni sistema no se revela", () => {

@@ -1,0 +1,412 @@
+{
+  "archivo": "ia-poc/evaluacion/prueba-t1.jsonl",
+  "versionReglas": "reglas-corrupcion-v1.1",
+  "general": {
+    "total": 200,
+    "positivos": 58,
+    "vp": 10,
+    "fn": 48,
+    "fp": 6,
+    "vn": 136,
+    "recall": 0.1724137931034483,
+    "precision": 0.625
+  },
+  "porDificultad": {
+    "dificil": {
+      "total": 39,
+      "positivos": 14,
+      "vp": 2,
+      "fn": 12,
+      "fp": 5,
+      "vn": 20,
+      "recall": 0.14285714285714285,
+      "precision": 0.2857142857142857
+    },
+    "facil": {
+      "total": 105,
+      "positivos": 26,
+      "vp": 4,
+      "fn": 22,
+      "fp": 0,
+      "vn": 79,
+      "recall": 0.15384615384615385,
+      "precision": 1
+    },
+    "media": {
+      "total": 56,
+      "positivos": 18,
+      "vp": 4,
+      "fn": 14,
+      "fp": 1,
+      "vn": 37,
+      "recall": 0.2222222222222222,
+      "precision": 0.8
+    }
+  },
+  "porEstilo": {
+    "audio transcrito": {
+      "total": 17,
+      "positivos": 6,
+      "vp": 0,
+      "fn": 6,
+      "fp": 0,
+      "vn": 11,
+      "recall": 0,
+      "precision": null
+    },
+    "engañoso": {
+      "total": 18,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 2,
+      "vn": 16,
+      "recall": null,
+      "precision": 0
+    },
+    "formal": {
+      "total": 55,
+      "positivos": 13,
+      "vp": 5,
+      "fn": 8,
+      "fp": 1,
+      "vn": 41,
+      "recall": 0.38461538461538464,
+      "precision": 0.8333333333333334
+    },
+    "jerga": {
+      "total": 58,
+      "positivos": 25,
+      "vp": 1,
+      "fn": 24,
+      "fp": 1,
+      "vn": 32,
+      "recall": 0.04,
+      "precision": 0.5
+    },
+    "mayúsculas": {
+      "total": 14,
+      "positivos": 3,
+      "vp": 2,
+      "fn": 1,
+      "fp": 1,
+      "vn": 10,
+      "recall": 0.6666666666666666,
+      "precision": 0.6666666666666666
+    },
+    "mensaje corto": {
+      "total": 10,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 10,
+      "recall": null,
+      "precision": null
+    },
+    "otro": {
+      "total": 13,
+      "positivos": 8,
+      "vp": 0,
+      "fn": 8,
+      "fp": 1,
+      "vn": 4,
+      "recall": 0,
+      "precision": 0
+    },
+    "whatsapp sin tildes": {
+      "total": 15,
+      "positivos": 3,
+      "vp": 2,
+      "fn": 1,
+      "fp": 0,
+      "vn": 12,
+      "recall": 0.6666666666666666,
+      "precision": 1
+    }
+  },
+  "porTitular": null,
+  "zonaGris": [
+    "T1-037",
+    "T1-062",
+    "T1-069",
+    "T1-082",
+    "T1-106",
+    "T1-188",
+    "T1-193"
+  ],
+  "falsosNegativos": [
+    {
+      "id": "T1-002",
+      "texto": "ehh o sea querio decir que por ahi en el hipolito unanue andan cobrando raro no se bien quien pero algo chueco hay ps",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-007",
+      "texto": "el jefe de farmacia julio ancajima lora vende bajo cuerda los remedios que deberian ser gratis aca en el puesto 7 de octubre se pasa de vivo",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-008",
+      "texto": "buenos dias escribo porque me entere que el administrador luis fernando tello cruz estaria cobrando cupos para el ingreso de proveedores en el centro de salud nicolas de pierola",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-031",
+      "texto": "denuncia contra el personal de bayovar porque cobran s/ 10 para pasar antes al consultorio",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-032",
+      "texto": "el dos de mayo esta corrompido hasta el keke no hay camas ni medicinas y los jefes se tapan entre ellos",
+      "puntaje": -1
+    },
+    {
+      "id": "T1-037",
+      "texto": "denuncio un tremendo negociado con las recetas medicas en el centro de salud nicolas de pierola",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-054",
+      "texto": "El director me dijo que si queria que mi expediente avance tenia que darle un regalo aparte. No quiso decir cuanto, solo que ya sabia como era la cosa.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-057",
+      "texto": "La semana pasada el jefe de Logistica hizo que compraran materiales a una empresa de su sobrino, aunque habia otra oferta mas barata. Tengo entendido que el mismo dio el visto bueno.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-061",
+      "texto": "El administrador me insinuó que podia ayudarme con mi tramite si yo tambien tenia un detalle con el. No me pidio nada directamente, pero se entendio clarito.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-063",
+      "texto": "El jefe de Farmacia me dijo que tenia que pagar S/ 50 para separar el medicamento, pero que no sacara boleta porque era una colaboracion. Si no pagaba, supuestamente no habia stock para mi receta.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-066",
+      "texto": "causa en el dos de mayo estan diciendo que si quieres que te adelanten la cita tienes que llevarle un presente al encargado, no se si sera verdad pero varios comentan eso",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-068",
+      "texto": "El director del hospital esta favoreciendo a una empresa para que gane las compras, eso dicen en el pasillo, pero no tengo documentos ni se bien quien me lo conto.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-073",
+      "texto": "Señores, deseo reportar una posible irregularidad en el proceso de compras. Un proveedor que seria familiar de un funcionario estaria recibiendo pedidos de manera recurrente. Solicito que se verifique la informacion.",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-079",
+      "texto": "Me parece que el encargado esta moviendo los turnos para que entren primero sus conocidos. No he visto que les cobre, pero siempre son los mismos los que pasan sin esperar.",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-084",
+      "texto": "EL DIRECTOR ESTA HACIENDO QUE ATIENDAN PRIMERO A SUS CONOCIDOS Y LOS DEMAS QUE NOS FRIEGUEN, ESTO NO PUEDE SER ASI PUES",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-086",
+      "texto": "Un trabajador me dijo que si queria que mi familiar entre mas rapido a consulta tenia que apoyar con algo para el almuerzo. No dio monto ni explico mas, pero me parecio raro.",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-091",
+      "texto": "El jefe de Logistica me comentó que habia una forma de asegurar que mi empresa gane una compra, siempre que despues se reconociera el apoyo. No quiso dejar nada por escrito.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-095",
+      "texto": "el pata de la ventanilla me dijo que si queria que mi tramite salga hoy tenia que colaborar con 30 soles por fuera, sin recibo ni nada, sino que espere nomas hasta la otra semana",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-098",
+      "texto": "me han dicho que si quiero que me den cita con el especialista mas rapido tengo que conocer a alguien adentro, no se si es floro pero asi me dijeron en la cola",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-101",
+      "texto": "Habla causa, la jefa de admision Rosa Elena Quispe Marin me dijo al oido que si le soltaba 40 lucas pa su almuerzo me sacaba la cita de mi chibolo al toque, puro faenon en el Dos de Mayo",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-102",
+      "texto": "mano una consulta el chofer pedro alvarado cobra 50 mangos por jalarte en la ambulancia del nicolas de pierola hasta lima, eso ta bien o el pata se esta embolsillando la plata?",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-107",
+      "texto": "ehhh mire señito... o sea yo vi clarito como el jefe de logistica carlos mendiola rey le decia al proveedor que si le dejaba su diezmo le daba la buena pro aca en vitarte, tremenda cutra ps",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-108",
+      "texto": "Bateria seria bueno que le caigan al Hipolito Unanue porq hay un pata en admision que pide cariñito pa hacerte pasar sin cola, no se su gracia pero es flaquito y usa lentes",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-112",
+      "texto": "broder en el puesto 7 de octubre el jefe de farmacia julio ancajima lora saca bolsas negras llenas de medicina de noche pa venderlas a la botica de la esquina, tremendo criollazo",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-117",
+      "texto": "oe chochera dicen las malas lenguas q en nicolas de pierola si no le bajas algo a la de limpieza no te pasa la voz cuando se desocupa el consultorio, ta maleado el asunto",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-120",
+      "texto": "el director del hospital dr ernesto valdivia carcamo metio a trabajar a tres sobrinos carnales en mantenimiento sin concurso ni nada, puro tarjetazo y vara en el dos de mayo",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-122",
+      "texto": "ehhh mire joven... el administrador luis fernando tello cruz le pidio a mi compadre 200 soles para renovarle el contrato del kiosko aca en nicolas de pierola, le dijo que si no aflojaba lo botaba",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-126",
+      "texto": "en 7 de octubre el vigilante me dijo al oido que si le pasaba 10 luquitas me metia directo a odontologia sin hacer la cola de las cuatro de la mañana, que pendenciero",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-128",
+      "texto": "algo trucho se cocina en compras del san bartolome porque siempre ganan los mismos chalecos de siempre y los demas postores quedan fuera de juego",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-131",
+      "texto": "la jefa de farmacia julio ancajima lora... bueno el jefe perdon... me cobro s/ 25 por una ampolla que en el tarifario dice 5 soles y no me dio ningun papelito, se lo guardo al bolsillo el vivo",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-135",
+      "texto": "causita en el hipolito unanue el jefe de logistica carlos mendiola rey esta direccionando las compras de gasas y alcohol con sobreprecio para llevarse su tajada, revisen sus cuentas",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-138",
+      "texto": "en vitarte hay una nota bien turbia con las camas uci, dicen que si no hablas con el mero mero no te asignan nada por mas grave q este el paciente",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-142",
+      "texto": "mano el doctor de turno en chacrasana me pidio 50 mangos bajo la mesa para sellarme el certificado de descanso medico sin revisarme nada, pura pendejada",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-145",
+      "texto": "Administrador Luis Fernando Tello Cruz cobra cupos a las señoras que venden desayunos en la puerta de nicolas de pierola diciendo que tiene orden de la municipalidad, tremendo ratero",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-148",
+      "texto": "chochera el vigilante del dos de mayo deja entrar a sus compadritos por la puerta trasera sin cola mientras los demas nos comemos tremendo solazo afuera",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-150",
+      "texto": "El Ministro de Salud deberia enterarse como en el hipolito unanue los medicos marcan tarjeta y se quitan a sus consultorios privados a chambear, cobran sueldo completo del estado sin trabajar",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-151",
+      "texto": "la semana pasada en el dos de mayo el jefe de logistica carlos mendiola rey hizo comprar los guantes y las gasas a la empresa de su cunado, salia mas caro que la otra cotizacion y el mismo le dio el visto bueno de frente. en el pasillo todos lo comentan pero nadie dice nada.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-152",
+      "texto": "el jefe del sis tiene que enterarse pe, en admision me dijeron que si queria que mi hermana suba hoy a hospitalizacion tenia que yapear 80 soles a un numero, sin boleta ni nada, sino recien el lunes. yo estoy misio, de donde saco esa plata causa",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-153",
+      "texto": "en el san bartolome el jefe de farmacia julio ancajima lora me dijo que la amoxicilina del sis se habia acabado pero que el tenia en su casillero a 25 soles sin recibo, si no le compraba a el no habia para mi wawa. se pasa de vivo el hombre.",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-154",
+      "texto": "el administrador luis fernando tello cruz me paro en el pasillo de vitarte y me dijo clarito que el certificado de salud salia hoy si le dejaba cien soles por fuera, sino recien la otra semana. asi nomas me lo dijo, sin vueltas.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-155",
+      "texto": "el chofer de la ambulancia pedro alvarado me dijo que pa llevar a mi tia al hospital grande tenia que poner cuarenta soles pa el combustible, en la mano, si no no salia la unidad. fue el martes en la noche, mi tia estaba malita.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-157",
+      "texto": "el medico de turno del puesto 7 de octubre vende los descansos medicos a 50 soles, me lo ofrecio el mismo sin pasar por caja, dijo que asi salia con firma y sello al toque y que nadie se iba a enterar. yo no le acepte pe.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-158",
+      "texto": "ehh o sea yo fui o sea a chosica y en la cola decian decian que pa que te adelanten el control tienes que caerle bien a la de la ventanilla con un detallito, no se bien que le llevan ni quien lo pidio de frente, el comentario nomas esta ahi ps, capaz es floro",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-159",
+      "texto": "me late que en el san antonio de pedregal el jefe acomoda los turnos pa sus paisanos, plata no he visto, pero siempre entran los mismos sin cola, puro vara dicen, y uno que viene de huaycan se queda esperando como sonso",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-160",
+      "texto": "en el pasillo del dos de mayo hay un runrun de que el director ernesto valdivia carcamo estaria dejando unas compras a la empresa de un conocido, yo no vi papeles y ni me acuerdo quien me lo conto, ojala alguien revise porque yo no quiero hablar de mas",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-161",
+      "texto": "un pata, no se si es de admision o de limpieza, me dijo bajito que si queria que mi familiar pase mas rapido a rayos podia apoyar con el almuerzo. no me dijo cuanto ni como. me quede palteado y me fui nomas pe.",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-162",
+      "texto": "Disculpe, con respeto le escribo. La directora de la DIRIS, Patricia Soria Benavides, debería mirar lo de Vitarte porque en la cola de laboratorio comentan que el director mete a sus familiares en las plazas sin concurso. Yo no tengo prueba, capaz es puro floro, pero el comentario se repite.",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-163",
+      "texto": "ehh este en el puesto el encargado como que me insinuo, o sea me insinuo, que el papel de la referencia salia mas rapido si yo tambien ponia de mi parte. no dijo plata, no dijo cuanto, pero se sintio raro pe, yo me quede callado y ya no pregunte mas",
+      "puntaje": 0
+    }
+  ],
+  "falsosPositivos": [
+    {
+      "id": "T1-100",
+      "texto": "oe causa me dicen que hay corrupcion porque el doctor cobra por un certificado pero me dio recibo y en caja me confirmaron que ese tramite cuesta eso, capaz la gente esta confundiendo las cosas",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-116",
+      "texto": "HAY UNA MAFIA Y CORRUPCION EN EL SAN BARTOLOME PORQUE NUNCA HAY CITAS PARA NEUROLOGIA INFANTIL SEGURO SE LAS GUARDAN TODAS PARA SUS PATAS",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-124",
+      "texto": "Denuncio corrupcion en triaje de pedregal porque la enfermera hizo pasar a su vecina antes que a los 20 que estabamos esperando bajo el sol, se zurro en la cola la sinverguenza",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-134",
+      "texto": "quiero denunciar tremenda coima que me cobraron en caja de chosica 15 lucas por una sutura pero aca tengo la boleta de venta 1044 solo que no me parece que el estado cobre eso al pobre",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-197",
+      "texto": "oe causa el doctor me cobro 30 soles por un certificado y me dio recibo, en caja me dijeron que esa es la tasa del tarifario. la gente grita corrupcion por todo, yo creo que estan confundiendo las cosas, solo queria confirmar si esta bien.",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-200",
+      "texto": "mira te voy a contar todo porque ya me harte llegue tipo nueve mi cita de control prenatal era a las nueve y media y la obstetra mariela salinas salio recien como a las once yo le dije senorita deje a mis otros hijos con la vecina y el mototaxista me esta esperando cobrando y me contesto que ese no era su problema que si queria atencion de clinica me fuera a una y cuando le pedi que me explique se rio con la otra chica o sea pa mi eso es corrupcion de trato no se como se llama bien pero no me pidio dinero ni vara ni yape solo me humillo delante de las otras gestantes y me dejo con la palabra en la boca quiero que le llamen la atencion nomas",
+      "puntaje": 2
+    }
+  ]
+}

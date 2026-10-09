@@ -2,20 +2,23 @@ import type { Database, DbExecutor } from "@/database/database.js";
 import {
   ACTOR_PREFIJO_SISTEMA,
   ACTOR_PREFIJO_USUARIO,
-  CATEGORIAS_CON_AREA,
   ESTADOS_ABIERTOS,
-  ORDEN_SQL,
-  ROL_AREA_PATRON_SQL,
 } from "@/constants/incidencias.js";
 import type { ReglaDeAccion } from "@/constants/permisos-por-rol.js";
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import { EstadoIncidencia } from "@/enums/estado-incidencia.enum.js";
-import { DireccionOrden, OrdenIncidencia } from "@/enums/orden-incidencia.enum.js";
+import type { MotivoArchivo } from "@/enums/motivo-archivo.enum.js";
+import type { ResultadoResolucion } from "@/enums/resultado-resolucion.enum.js";
+import { TipoArea } from "@/enums/tipo-area.enum.js";
+import type { PosicionDeListado } from "@/utils/cursor-listado.js";
 import type { FilaHistorial } from "@/utils/historial-incidencia.js";
+import { escaparComodines } from "@/utils/texto-busqueda.js";
 
 export interface VisibilidadCasos {
   roles: readonly string[];
   verSinCategoria: boolean;
+  /** Área de la persona: los roles ligados a un área solo ven los casos destinados a ella. `null` si no tiene. */
+  areaId: number | null;
 }
 
 export interface FiltrosDeListado {
@@ -23,8 +26,25 @@ export interface FiltrosDeListado {
   categoria?: CategoriaIncidencia | null;
   sinCategoria?: boolean;
   texto?: string;
-  orden: OrdenIncidencia;
-  direccion: DireccionOrden;
+  /** Código RENIPRESS canónico del establecimiento de origen. */
+  establecimiento?: string;
+  /** Solo los archivados por este motivo. */
+  motivoArchivo?: MotivoArchivo;
+  /** Primer día (`YYYY-MM-DD`) de llegada, inclusive, como día de Lima. */
+  desde?: string;
+  /** Último día (`YYYY-MM-DD`) de llegada, inclusive, como día de Lima. */
+  hasta?: string;
+}
+
+export interface DatosDeResolucion {
+  medidasTomadas: string;
+  fundamento: string;
+  resultado: ResultadoResolucion;
+}
+
+export interface DatosDeArchivo {
+  motivo: MotivoArchivo;
+  detalle: string;
 }
 
 export interface FilaCaso {
@@ -39,9 +59,23 @@ export interface FilaCaso {
   ahora: Date;
   revisada: boolean;
   corregida: boolean;
-  area: string | null;
+  areaCodigo: string | null;
+  areaNombre: string | null;
+  areaDestinoId: number | null;
+  areaOrigenId: number | null;
+  establecimientoCodigo: string | null;
+  establecimientoNombre: string | null;
+  establecimientoNivel: string | null;
+  establecimientoCategoria: string | null;
   responsable: string | null;
-  resolucion: string | null;
+  medidasTomadas: string | null;
+  fundamento: string | null;
+  resultadoResolucion: ResultadoResolucion | null;
+  motivoArchivo: MotivoArchivo | null;
+  archivoDetalle: string | null;
+  archivadoEn: Date | null;
+  reabiertoEn: Date | null;
+  reabiertoMotivo: string | null;
   descripcion: string;
   esAnonimo: boolean;
   dni: string | null;
@@ -80,9 +114,16 @@ class Parametros {
   }
 }
 
+/** Los roles de estos tipos de área nunca ven un caso de categoría sensible, aunque la tabla de categorías lo permitiera. */
+const TIPOS_DE_AREA_SIN_SENSIBLES: readonly TipoArea[] = [TipoArea.ESTABLECIMIENTO, TipoArea.DIRIS];
+
+/** Los días del filtro `desde`/`hasta` son días de Lima; constante del código, nunca un valor del usuario. */
+const ZONA_DE_LIMA = "America/Lima";
+
 const ESTADOS_CONOCIDOS: readonly EstadoIncidencia[] = Object.values(EstadoIncidencia);
 
-const escaparComodines = (texto: string): string => texto.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+/** Desde cuándo corre el plazo de atención: la última reapertura o, si nunca se reabrió, la llegada (igual que en la base). */
+const INICIO_DEL_PLAZO = "COALESCE(i.reabierto_en, i.fecha_creacion)";
 
 const DESDE_BASICO = `
   FROM chatbot.incidencia_paciente i
@@ -91,16 +132,26 @@ const DESDE_BASICO = `
 
 /**
  * Solo ve un caso quien tiene un rol activo que lo permita: la categoría del caso debe estar entre las del rol
- * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos.
+ * (`gestion.rol_categoria`) o, si aún no tiene categoría, el rol debe poder verlos. Un rol ligado a un área (gestor,
+ * OTRANS, establecimiento) además exige que el caso esté destinado al área de la persona, también cuando está
+ * archivado (el archivo conserva su área de destino); el rol sin área (administrador) no filtra por área.
+ * Los roles de establecimiento o DIRIS nunca ven una categoría sensible: se vuelve a comprobar aquí con
+ * `es_sensible`, aparte de lo que diga `rol_categoria`.
  */
 function visibilidad(p: Parametros, visible: VisibilidadCasos): string {
   const roles = p.agregar([...visible.roles]);
   const sinCategoria = p.agregar(visible.verSinCategoria);
+  const area = p.agregar(visible.areaId);
+  const tiposSinSensibles = p.agregar([...TIPOS_DE_AREA_SIN_SENSIBLES]);
   return `(
     (i.categoria_id IS NOT NULL AND EXISTS (
        SELECT 1 FROM gestion.rol_categoria rc
          JOIN gestion.rol r ON r.id = rc.rol_id AND r.activo
-        WHERE r.codigo = ANY(${roles}::text[]) AND rc.categoria_incidencia_id = i.categoria_id))
+         JOIN catalogo.categoria_incidencia k ON k.id = rc.categoria_incidencia_id
+         LEFT JOIN catalogo.tipo_area ta ON ta.id = r.tipo_area_id
+        WHERE r.codigo = ANY(${roles}::text[]) AND rc.categoria_incidencia_id = i.categoria_id
+          AND (r.tipo_area_id IS NULL OR i.area_destino_id = ${area}::int)
+          AND NOT (k.es_sensible AND COALESCE(ta.codigo = ANY(${tiposSinSensibles}::text[]), false))))
     OR (i.categoria_id IS NULL AND ${sinCategoria}::boolean)
   )`;
 }
@@ -109,11 +160,23 @@ function condicionesBase(p: Parametros, visible: VisibilidadCasos): string[] {
   return ["i.activo", `e.codigo = ANY(${p.agregar(ESTADOS_CONOCIDOS)}::text[])`, visibilidad(p, visible)];
 }
 
-function condicionesDeFiltros(p: Parametros, filtros: Pick<FiltrosDeListado, "estado" | "categoria" | "sinCategoria" | "texto">): string[] {
+function condicionesDeFiltros(p: Parametros, filtros: FiltrosDeListado): string[] {
   const condiciones: string[] = [];
+  // Por el id del establecimiento: así usa el índice (establecimiento_id, fecha_creacion). Un código que no existe no devuelve nada.
+  if (filtros.establecimiento) {
+    condiciones.push(
+      `i.establecimiento_id = (SELECT f.id FROM catalogo.establecimiento_salud f WHERE f.codigo_renipress = ${p.agregar(filtros.establecimiento)})`,
+    );
+  }
   if (filtros.estado) condiciones.push(`e.codigo = ${p.agregar(filtros.estado)}`);
+  if (filtros.motivoArchivo) {
+    condiciones.push(`i.motivo_archivo_id = (SELECT m.id FROM catalogo.motivo_archivo m WHERE m.codigo = ${p.agregar(filtros.motivoArchivo)})`);
+  }
   if (filtros.categoria) condiciones.push(`c.codigo = ${p.agregar(filtros.categoria)}`);
   if (filtros.sinCategoria) condiciones.push("i.categoria_id IS NULL");
+  // Días de Lima (UTC-5, sin horario de verano) sobre la fecha de llegada, ambos inclusivos; el instante queda sin envolver en una función para usar el índice.
+  if (filtros.desde) condiciones.push(`i.fecha_creacion >= (${p.agregar(filtros.desde)}::date)::timestamp AT TIME ZONE '${ZONA_DE_LIMA}'`);
+  if (filtros.hasta) condiciones.push(`i.fecha_creacion < ((${p.agregar(filtros.hasta)}::date) + 1)::timestamp AT TIME ZONE '${ZONA_DE_LIMA}'`);
   if (filtros.texto) {
     const patron = p.agregar(`%${escaparComodines(filtros.texto)}%`);
     condiciones.push(`(i.codigo ILIKE ${patron} ESCAPE '\\' OR i.descripcion ILIKE ${patron} ESCAPE '\\')`);
@@ -121,10 +184,17 @@ function condicionesDeFiltros(p: Parametros, filtros: Pick<FiltrosDeListado, "es
   return condiciones;
 }
 
+/** Los filtros de las pestañas de la bandeja: todos menos el estado y el motivo del archivo, que elige cada pestaña. */
+export function sinEstadoNiMotivo(filtros: FiltrosDeListado): FiltrosDeListado {
+  const resto = { ...filtros };
+  delete resto.estado;
+  delete resto.motivoArchivo;
+  return resto;
+}
+
 /** Columnas y uniones de un caso. El responsable es quien derivó, o si no quien corrigió, o si no quien confirmó. */
 function consultaDeCaso(p: Parametros): string {
   const derivado = p.agregar(EstadoIncidencia.DERIVADO);
-  const patronDeArea = p.agregar(ROL_AREA_PATRON_SQL);
   const prefijoUsuario = p.agregar(ACTOR_PREFIJO_USUARIO);
   const prefijoSistema = p.agregar(ACTOR_PREFIJO_SISTEMA);
   return `
@@ -139,15 +209,25 @@ function consultaDeCaso(p: Parametros): string {
            now() AS ahora,
            (i.categoria_corregida_en IS NOT NULL OR i.categoria_confirmada_en IS NOT NULL) AS revisada,
            (i.categoria_corregida_en IS NOT NULL) AS corregida,
-           (SELECT r.nombre
-              FROM gestion.rol_categoria rc
-              JOIN gestion.rol r ON r.id = rc.rol_id AND r.activo
-             WHERE rc.categoria_incidencia_id = i.categoria_id AND r.codigo LIKE ${patronDeArea}
-             ORDER BY r.id LIMIT 1) AS area,
+           ad.codigo AS "areaCodigo",
+           ad.nombre AS "areaNombre",
+           i.area_destino_id AS "areaDestinoId",
+           es.area_id AS "areaOrigenId",
+           es.codigo_renipress AS "establecimientoCodigo",
+           es.nombre AS "establecimientoNombre",
+           na.codigo AS "establecimientoNivel",
+           es.categoria AS "establecimientoCategoria",
            CASE WHEN ui.id IS NOT NULL THEN ui.nombre_completo
                 WHEN starts_with(resp.actor, ${prefijoSistema}) THEN 'Sistema'
            END AS responsable,
-           i.resolucion,
+           i.medidas_tomadas AS "medidasTomadas",
+           i.fundamento,
+           rr.codigo AS "resultadoResolucion",
+           ma.codigo AS "motivoArchivo",
+           i.archivo_detalle AS "archivoDetalle",
+           i.archivado_en AS "archivadoEn",
+           i.reabierto_en AS "reabiertoEn",
+           i.reabierto_motivo AS "reabiertoMotivo",
            i.descripcion,
            i.es_anonimo AS "esAnonimo",
            i.dni_reclamante AS dni,
@@ -159,6 +239,11 @@ function consultaDeCaso(p: Parametros): string {
       JOIN catalogo.canal_origen co ON co.id = i.canal_origen_id
       LEFT JOIN catalogo.categoria_incidencia c ON c.id = i.categoria_id
       LEFT JOIN catalogo.categoria_incidencia cia ON cia.id = i.categoria_ia_id
+      LEFT JOIN catalogo.area ad ON ad.id = i.area_destino_id
+      LEFT JOIN catalogo.establecimiento_salud es ON es.id = i.establecimiento_id
+      LEFT JOIN catalogo.nivel_atencion na ON na.id = es.nivel_atencion_id
+      LEFT JOIN catalogo.resultado_resolucion rr ON rr.id = i.resultado_resolucion_id
+      LEFT JOIN catalogo.motivo_archivo ma ON ma.id = i.motivo_archivo_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(
                  (SELECT a.actor
@@ -176,34 +261,82 @@ function consultaDeCaso(p: Parametros): string {
 export class IncidenciaRepository {
   constructor(private readonly database: Database) {}
 
+  /**
+   * Paginación por cursor: del más reciente al más antiguo (fecha de creación y id), desde justo después de la
+   * posición dada. Quien llama pide un caso más que el límite para saber si quedan más; no hay conteo total.
+   */
   async listar(
     visible: VisibilidadCasos,
     filtros: FiltrosDeListado,
-    pagina: number,
-    tamano: number,
+    limite: number,
+    despuesDe: PosicionDeListado | null,
     ejecutor: DbExecutor = this.database,
-  ): Promise<{ filas: FilaCaso[]; total: number }> {
-    const conteo = new Parametros();
-    const condicionesDelConteo = [...condicionesBase(conteo, visible), ...condicionesDeFiltros(conteo, filtros)];
-    const [resumen] = await ejecutor.query<{ total: number }>(
-      `SELECT count(*)::int AS total ${DESDE_BASICO} WHERE ${condicionesDelConteo.join(" AND ")}`,
-      conteo.lista,
-    );
-
+  ): Promise<FilaCaso[]> {
     const p = new Parametros();
     const base = consultaDeCaso(p);
     const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, filtros)];
-    const sentido = filtros.direccion === DireccionOrden.DESCENDENTE ? "DESC" : "ASC";
-    const limite = p.agregar(tamano);
-    const desplazamiento = p.agregar((pagina - 1) * tamano);
-    const filas = await ejecutor.query<FilaCaso>(
+    if (despuesDe) {
+      condiciones.push(`(i.fecha_creacion, i.id) < (${p.agregar(despuesDe.fechaCreacion)}::timestamptz, ${p.agregar(despuesDe.id)}::uuid)`);
+    }
+    return ejecutor.query<FilaCaso>(
       `${base}
        WHERE ${condiciones.join(" AND ")}
-       ORDER BY ${ORDEN_SQL[filtros.orden]} ${sentido} NULLS LAST, i.fecha_creacion ASC, i.codigo ASC
-       LIMIT ${limite} OFFSET ${desplazamiento}`,
+       ORDER BY i.fecha_creacion DESC, i.id DESC
+       LIMIT ${p.agregar(limite)}`,
       p.lista,
     );
-    return { filas, total: resumen?.total ?? 0 };
+  }
+
+  /**
+   * Cuántos casos del listado hay con estos filtros, contando como mucho `tope + 1`: la consulta se detiene en esa fila
+   * y nunca recorre la tabla entera. Mismas condiciones que `listar` (visibilidad incluida), así que nunca cuenta lo que
+   * el listado no mostraría. Quien llama compara con `tope` para saber si hay más.
+   */
+  async contarAcotado(
+    visible: VisibilidadCasos,
+    filtros: FiltrosDeListado,
+    tope: number,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<number> {
+    const p = new Parametros();
+    const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, filtros)];
+    const [fila] = await ejecutor.query<{ cantidad: number }>(
+      `SELECT count(*)::int AS cantidad
+         FROM (SELECT 1 ${DESDE_BASICO}
+                WHERE ${condiciones.join(" AND ")}
+                LIMIT ${p.agregar(tope + 1)}) s`,
+      p.lista,
+    );
+    return fila?.cantidad ?? 0;
+  }
+
+  /**
+   * Lo mismo que `contarAcotado` para cada estado, en una sola consulta: un `LATERAL` por estado del catálogo, cada uno
+   * acotado a `tope + 1` filas. El estado y el motivo del archivo de `filtros` se ignoran (el estado lo fija cada fila).
+   * Solo devuelve los estados que existen en el catálogo; quien llama completa con 0 los que falten.
+   */
+  async contarPorEstado(
+    visible: VisibilidadCasos,
+    filtros: FiltrosDeListado,
+    tope: number,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<Map<EstadoIncidencia, number>> {
+    const p = new Parametros();
+    const condiciones = [...condicionesBase(p, visible), ...condicionesDeFiltros(p, sinEstadoNiMotivo(filtros))];
+    const filas = await ejecutor.query<{ estado: EstadoIncidencia; cantidad: number }>(
+      `SELECT e.codigo AS estado, n.cantidad
+         FROM catalogo.estado_incidencia e
+        CROSS JOIN LATERAL (
+          SELECT count(*)::int AS cantidad
+            FROM (SELECT 1
+                    FROM chatbot.incidencia_paciente i
+                    LEFT JOIN catalogo.categoria_incidencia c ON c.id = i.categoria_id
+                   WHERE i.estado_incidencia_id = e.id AND ${condiciones.join(" AND ")}
+                   LIMIT ${p.agregar(tope + 1)}) s
+        ) n`,
+      p.lista,
+    );
+    return new Map(filas.map((fila) => [fila.estado, fila.cantidad]));
   }
 
   async buscarPorCodigo(
@@ -257,7 +390,8 @@ export class IncidenciaRepository {
               (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'categoria_confirmada_en') AS confirmada,
               (SELECT s.codigo FROM catalogo.estado_incidencia s
                 WHERE s.id = (a.cambios #>> '{estado_incidencia_id,despues}')::smallint) AS "estadoNuevo",
-              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'resolucion') AS resolvio
+              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'medidas_tomadas') AS resolvio,
+              (a.operacion = 'ACTUALIZACION' AND a.cambios ? 'reabierto_motivo') AS reabrio
          FROM chatbot.incidencia_paciente_auditoria a
          LEFT JOIN gestion.usuario_interno ui ON a.actor = $2 || ui.correo
         WHERE a.incidencia_paciente_id = $1
@@ -282,7 +416,7 @@ export class IncidenciaRepository {
     const dias = p.agregar(atencionDias);
     const [fila] = await ejecutor.query<ConteoPorVencer>(
       `SELECT count(*)::int AS total,
-              (count(*) FILTER (WHERE i.fecha_creacion + make_interval(days => ${dias}::int) <= now()))::int AS vencidos
+              (count(*) FILTER (WHERE ${INICIO_DEL_PLAZO} + make_interval(days => ${dias}::int) <= now()))::int AS vencidos
          ${DESDE_BASICO}
         WHERE ${condiciones.join(" AND ")}`,
       p.lista,
@@ -308,7 +442,7 @@ export class IncidenciaRepository {
     return ejecutor.query<FilaCaso>(
       `${base}
        WHERE ${condiciones.join(" AND ")}
-       ORDER BY i.fecha_creacion ASC, i.codigo ASC
+       ORDER BY ${INICIO_DEL_PLAZO} ASC, i.codigo ASC
        LIMIT ${p.agregar(limite)}`,
       p.lista,
     );
@@ -327,6 +461,40 @@ export class IncidenciaRepository {
     );
   }
 
+  /**
+   * El área a la que se puede derivar: activa y del tipo que recibe el caso (un establecimiento; OTRANS si es una
+   * denuncia por corrupción). Por su código (la que eligió la persona) o por su id (la de origen o la actual).
+   * `null` si no existe o no cumple.
+   */
+  async areaReceptora(
+    criterio: { codigo: string } | { id: number },
+    tipoDeArea: TipoArea = TipoArea.ESTABLECIMIENTO,
+    ejecutor: DbExecutor = this.database,
+  ): Promise<number | null> {
+    const p = new Parametros();
+    const igual = "codigo" in criterio ? `a.codigo = ${p.agregar(criterio.codigo)}` : `a.id = ${p.agregar(criterio.id)}`;
+    const tipo = p.agregar(tipoDeArea);
+    const filas = await ejecutor.query<{ id: number }>(
+      `SELECT a.id
+         FROM catalogo.area a
+         JOIN catalogo.tipo_area ta ON ta.id = a.tipo_area_id AND ta.activo
+        WHERE ${igual} AND a.activo AND ta.codigo = ${tipo}`,
+      p.lista,
+    );
+    return filas[0]?.id ?? null;
+  }
+
+  /** Cambia el estado y fija el área de destino en una sola sentencia: la base exige las dos cosas a la vez. */
+  async derivar(tx: DbExecutor, incidenciaId: string, areaId: number): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $3),
+              area_destino_id = $2
+        WHERE id = $1`,
+      [incidenciaId, areaId, EstadoIncidencia.DERIVADO],
+    );
+  }
+
   async cambiarEstado(tx: DbExecutor, incidenciaId: string, estado: EstadoIncidencia): Promise<void> {
     await tx.query(
       `UPDATE chatbot.incidencia_paciente
@@ -336,14 +504,45 @@ export class IncidenciaRepository {
     );
   }
 
-  async resolver(tx: DbExecutor, incidenciaId: string, resolucion: string): Promise<void> {
-    await tx.query("UPDATE chatbot.incidencia_paciente SET resolucion = $2 WHERE id = $1", [incidenciaId, resolucion]);
+  /** Registra la resolución en una sola sentencia: la base exige los tres campos juntos y pasa el caso a RESUELTO. */
+  async resolver(tx: DbExecutor, incidenciaId: string, datos: DatosDeResolucion): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET medidas_tomadas = $2,
+              fundamento = $3,
+              resultado_resolucion_id = (SELECT r.id FROM catalogo.resultado_resolucion r WHERE r.codigo = $4)
+        WHERE id = $1`,
+      [incidenciaId, datos.medidasTomadas, datos.fundamento, datos.resultado],
+    );
+  }
+
+  /** Archivo manual: el estado, el motivo y su justificación van juntos; quién y cuándo lo llena la base con el actor declarado. */
+  async archivar(tx: DbExecutor, incidenciaId: string, datos: DatosDeArchivo): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $2),
+              motivo_archivo_id = (SELECT m.id FROM catalogo.motivo_archivo m WHERE m.codigo = $3),
+              archivo_detalle = $4
+        WHERE id = $1`,
+      [incidenciaId, EstadoIncidencia.ARCHIVADO, datos.motivo, datos.detalle],
+    );
+  }
+
+  /** Reabre un archivado: vuelve a EN_GESTION con el motivo; la base limpia el archivo y registra quién y cuándo reabrió. */
+  async reabrir(tx: DbExecutor, incidenciaId: string, motivo: string): Promise<void> {
+    await tx.query(
+      `UPDATE chatbot.incidencia_paciente
+          SET estado_incidencia_id = (SELECT s.id FROM catalogo.estado_incidencia s WHERE s.codigo = $2),
+              reabierto_motivo = $3
+        WHERE id = $1`,
+      [incidenciaId, EstadoIncidencia.EN_GESTION, motivo],
+    );
   }
 }
 
 /**
  * Deja solo los casos que a la persona le toca atender: los que cumplen alguna regla de acción de sus roles
- * (estado, categoría, si ya se revisó y si tiene área). Con `null` no filtra: cuenta todos los abiertos que ve.
+ * (estado, categoría y si ya se revisó). Con `null` no filtra: cuenta todos los abiertos que ve.
  */
 function condicionDePendientes(p: Parametros, reglas: ReglasPendientes): string[] {
   if (reglas === null) return [];
@@ -354,7 +553,6 @@ function condicionDePendientes(p: Parametros, reglas: ReglasPendientes): string[
     if (regla.revisada !== undefined) {
       partes.push(`(i.categoria_corregida_en IS NOT NULL OR i.categoria_confirmada_en IS NOT NULL) = ${p.agregar(regla.revisada)}::boolean`);
     }
-    if (regla.requiereArea) partes.push(`c.codigo = ANY(${p.agregar([...CATEGORIAS_CON_AREA])}::text[])`);
     return `(${partes.join(" AND ")})`;
   });
   return [`(${alternativas.join(" OR ")})`];
@@ -366,6 +564,6 @@ function condicionesPorVencer(p: Parametros, atencionDias: number, avisoHoras: n
   const horas = p.agregar(avisoHoras);
   return [
     `e.codigo = ANY(${abiertos}::text[])`,
-    `i.fecha_creacion + make_interval(days => ${dias}::int) <= now() + make_interval(hours => ${horas}::int)`,
+    `${INICIO_DEL_PLAZO} + make_interval(days => ${dias}::int) <= now() + make_interval(hours => ${horas}::int)`,
   ];
 }

@@ -72,6 +72,12 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, PLAZO_AVISO_HORAS: valor })).toThrow();
   });
 
+  it("IA_POC_HABILITADA está apagada por defecto, se enciende con true y rechaza otros valores", () => {
+    expect(loadEnv(base).IA_POC_HABILITADA).toBe(false);
+    expect(loadEnv({ ...base, IA_POC_HABILITADA: "true" }).IA_POC_HABILITADA).toBe(true);
+    expect(() => loadEnv({ ...base, IA_POC_HABILITADA: "si" })).toThrow();
+  });
+
   it("rechaza una capacidad que no es un entero positivo", () => {
     expect(() => loadEnv({ ...base, RATE_LIMIT_ANON_CAPACITY: "0" })).toThrow();
     expect(() => loadEnv({ ...base, RATE_LIMIT_AUTH_CAPACITY: "abc" })).toThrow();

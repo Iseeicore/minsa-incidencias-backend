@@ -10,6 +10,7 @@ const datosSchema = z.object({
   ADMIN_NOMBRE: z.string().trim().min(1),
   ADMIN_CORREO: z.email(),
   ADMIN_PASSWORD: z.string().min(MIN_ADMIN_PASSWORD_LENGTH),
+  ADMIN_AREA: z.string().trim().min(1).optional(),
 });
 
 const env = loadEnv();
@@ -21,6 +22,7 @@ try {
     nombreCompleto: datos.ADMIN_NOMBRE,
     correo: datos.ADMIN_CORREO,
     password: datos.ADMIN_PASSWORD,
+    ...(datos.ADMIN_AREA ? { areaCodigo: datos.ADMIN_AREA } : {}),
   });
   console.log(`Administrador creado: ${datos.ADMIN_CORREO.toLowerCase()}`);
 } catch (error) {

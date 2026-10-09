@@ -1,0 +1,57 @@
+{
+  "_comentario": "Escrito a mano; lo mezcla ia-poc/scripts/generar-catalogo.mjs. Las siglas y los nombres oficiales ya salen de la nota del catálogo; los alias derivados (sin 'Hospital'/'Nacional'/'de', con artículo, con faltas de ortografía frecuentes) los genera el script. Aquí van solo los nombres cortos de uso común que no se derivan y las listas que gobiernan la derivación. No añadir siglas que no sean evidentes. Clave = codigo de la entidad.",
+  "excluirSiglas": {
+    "_comentario": "Siglas de la nota que NO se usan como alias porque chocan con palabras comunes. Clave = sigla tal como está en la nota.",
+    "H.H": "Dos letras sueltas con punto: coincidiría con cualquier 'h h'. Se usa 'Hospital Huaycán'.",
+    "DIRIS LE": "'le' es un pronombre común ('la DIRIS le cobró'). Se usa 'DIRIS Lima Este'."
+  },
+  "derivacion": {
+    "_comentario": "Reglas del generador de alias derivados (sin tildes, en minúsculas). Una palabra común o corta nunca elige entidad por sí sola.",
+    "palabrasComunes": [
+      "hospital", "nacional", "docente", "instituto", "ministerio", "seguro", "integral", "fondo", "intangible", "solidario",
+      "salud", "mental", "sistema", "direccion", "general", "redes", "integradas", "superintendencia", "centro", "programa",
+      "inversiones", "abastecimiento", "recursos", "estrategicos", "lima", "este", "norte", "sur", "san", "santa", "juan",
+      "jose", "victor", "carlos", "luis", "maria", "madre", "nino", "ninos", "villa", "salvador", "emergencias", "emergencia",
+      "pediatricas", "pediatrico", "materno", "perinatal", "rehabilitacion", "oftalmologia", "enfermedades", "ciencias",
+      "neurologicas", "dos", "mayo", "rosa", "borja", "brena", "lurigancho", "bartolome"
+    ],
+    "_comentario_soloConArticulo": "Formas que solo valen con artículo ('el dos de mayo', 'del heredia'): son fechas, apellidos o nombres comunes.",
+    "soloConArticulo": ["dos de mayo", "santa rosa", "heredia", "herrera", "tello", "bartolome"],
+    "_comentario_omitirDerivacion": "Entidades cuyo nombre oficial no se acorta de forma segura (institutos del niño, salud mental, INS): solo llevan sigla, alias a mano y variantes de sigla.",
+    "omitirDerivacion": ["ins", "insm", "insn", "insnsb"]
+  },
+  "ambiguosConocidos": {
+    "_comentario": "Formas de nombrar que NO se usan porque podrían ser de varias entidades; el filtro no elige ninguna. El generador falla si alguna llega a ser alias de una entidad.",
+    "diris": { "entidades": ["diris-le", "diris-ln", "diris-lc", "diris-ls"], "motivo": "Hay cuatro DIRIS; sin la zona no se sabe cuál." },
+    "lima este": { "entidades": ["diris-le", "hlev"], "motivo": "Es la DIRIS Lima Este y también el Hospital de Lima Este Vitarte." },
+    "instituto del nino": { "entidades": ["insn", "insnsb"], "motivo": "Sin 'Breña' o 'San Borja' no se sabe cuál de los dos institutos del niño." },
+    "instituto nacional de salud del nino": { "entidades": ["insn", "insnsb"], "motivo": "Empieza el nombre de los dos institutos del niño; el detector tampoco elige si el texto no termina de decir cuál." },
+    "hospital de emergencias": { "entidades": ["hejcu", "hep", "heves"], "motivo": "Comienzo común de tres hospitales de emergencias." }
+  },
+  "alias": {
+    "sis": ["Sistema Integral de Salud", "Sistema Integrado de Salud"],
+    "insm": ["Instituto Nacional de Salud Mental", "Honorio Delgado", "Noguchi"],
+    "insnsb": ["Instituto del Niño San Borja"],
+    "insn": ["Instituto del Niño Breña"],
+    "inen": ["las Neoplásicas"],
+    "incn": ["Instituto Nacional de Ciencias Neurológicas"],
+    "hnhu": ["Hospital Hipólito Unanue"],
+    "hnal": ["Hospital Loayza", "Hospital Loaiza", "Hospital Nacional Arzobispo Loayza", "el Loayza", "el Loaiza"],
+    "hvlh": ["Hospital Larco Herrera"],
+    "hnseb": ["Hospital Sergio Bernales", "el Sergio Bernales"],
+    "hndm": ["Hospital Dos de Mayo", "Hospital Nacional Dos de Mayo", "el Dos de Mayo"],
+    "hh": ["Hospital Huaycán"],
+    "hnch": ["Hospital Nacional Cayetano Heredia", "el Cayetano"],
+    "hejcu": ["Hospital Casimiro Ulloa", "Hospital de Emergencias Casimiro Ulloa", "el Ulloa"],
+    "hsjl": ["Hospital de San Juan de Lurigancho", "Hospital SJL"],
+    "heves": ["Hospital de Villa El Salvador"],
+    "hcllh": ["Hospital Lanfranco La Hoz", "Lanfranco La Hoz", "Lanfranco"],
+    "hjatch": ["Hospital de Chosica", "Hospital José Agurto Tello"],
+    "honadomani-sb": ["HONADOMANI", "Hospital San Bartolomé", "el Honadomani"],
+    "hlev": ["Hospital Vitarte", "Hospital de Lima Este"],
+    "diris-le": ["DIRIS Lima Este", "DIRIS de Lima Este", "Dirección de Redes Integradas de Salud Lima Este"],
+    "diris-ln": ["DIRIS Lima Norte", "DIRIS de Lima Norte", "Dirección de Redes Integradas de Salud Lima Norte"],
+    "diris-lc": ["DIRIS Lima Centro", "DIRIS de Lima Centro", "Dirección de Redes Integradas de Salud Lima Centro"],
+    "diris-ls": ["DIRIS Lima Sur", "DIRIS de Lima Sur", "Dirección de Redes Integradas de Salud Lima Sur"]
+  }
+}

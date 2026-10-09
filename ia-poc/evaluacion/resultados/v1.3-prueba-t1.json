@@ -1,0 +1,334 @@
+{
+  "archivo": "ia-poc/evaluacion/prueba-t1.jsonl",
+  "versionReglas": "reglas-corrupcion-v1.3",
+  "general": {
+    "total": 200,
+    "positivos": 58,
+    "vp": 26,
+    "fn": 32,
+    "fp": 10,
+    "vn": 132,
+    "recall": 0.4482758620689655,
+    "precision": 0.7222222222222222
+  },
+  "porDificultad": {
+    "dificil": {
+      "total": 39,
+      "positivos": 14,
+      "vp": 3,
+      "fn": 11,
+      "fp": 7,
+      "vn": 18,
+      "recall": 0.21428571428571427,
+      "precision": 0.3
+    },
+    "facil": {
+      "total": 105,
+      "positivos": 26,
+      "vp": 18,
+      "fn": 8,
+      "fp": 1,
+      "vn": 78,
+      "recall": 0.6923076923076923,
+      "precision": 0.9473684210526315
+    },
+    "media": {
+      "total": 56,
+      "positivos": 18,
+      "vp": 5,
+      "fn": 13,
+      "fp": 2,
+      "vn": 36,
+      "recall": 0.2777777777777778,
+      "precision": 0.7142857142857143
+    }
+  },
+  "porEstilo": {
+    "audio transcrito": {
+      "total": 17,
+      "positivos": 6,
+      "vp": 3,
+      "fn": 3,
+      "fp": 0,
+      "vn": 11,
+      "recall": 0.5,
+      "precision": 1
+    },
+    "engañoso": {
+      "total": 18,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 4,
+      "vn": 14,
+      "recall": null,
+      "precision": 0
+    },
+    "formal": {
+      "total": 55,
+      "positivos": 13,
+      "vp": 10,
+      "fn": 3,
+      "fp": 3,
+      "vn": 39,
+      "recall": 0.7692307692307693,
+      "precision": 0.7692307692307693
+    },
+    "jerga": {
+      "total": 58,
+      "positivos": 25,
+      "vp": 8,
+      "fn": 17,
+      "fp": 2,
+      "vn": 31,
+      "recall": 0.32,
+      "precision": 0.8
+    },
+    "mayúsculas": {
+      "total": 14,
+      "positivos": 3,
+      "vp": 2,
+      "fn": 1,
+      "fp": 1,
+      "vn": 10,
+      "recall": 0.6666666666666666,
+      "precision": 0.6666666666666666
+    },
+    "mensaje corto": {
+      "total": 10,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 10,
+      "recall": null,
+      "precision": null
+    },
+    "otro": {
+      "total": 13,
+      "positivos": 8,
+      "vp": 1,
+      "fn": 7,
+      "fp": 0,
+      "vn": 5,
+      "recall": 0.125,
+      "precision": 1
+    },
+    "whatsapp sin tildes": {
+      "total": 15,
+      "positivos": 3,
+      "vp": 2,
+      "fn": 1,
+      "fp": 0,
+      "vn": 12,
+      "recall": 0.6666666666666666,
+      "precision": 1
+    }
+  },
+  "porTitular": null,
+  "zonaGris": [
+    "T1-037",
+    "T1-058",
+    "T1-062",
+    "T1-069",
+    "T1-101",
+    "T1-150",
+    "T1-188",
+    "T1-195"
+  ],
+  "activacionesZonaGris": [
+    "T1-101",
+    "T1-150"
+  ],
+  "propuestasPorReglas": 34,
+  "porIdentidad": {
+    "total": 2,
+    "corrupcionReal": 2,
+    "falsosPositivos": [],
+    "ids": [
+      "T1-101",
+      "T1-150"
+    ]
+  },
+  "entidadesDetectadas": {
+    "conSigla": 0,
+    "correcta": 0,
+    "otra": 0,
+    "ninguna": 0,
+    "porNombreDelTitular": 0,
+    "soloUbicacion": 21,
+    "porSigla": {}
+  },
+  "falsosNegativos": [
+    {
+      "id": "T1-002",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-008",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-032",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-037",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-054",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-061",
+      "puntaje": -1
+    },
+    {
+      "id": "T1-063",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-066",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-068",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-073",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-079",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-084",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-086",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-091",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-098",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-102",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-108",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-112",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-117",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-126",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-128",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-135",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-138",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-145",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-148",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-153",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-155",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-158",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-159",
+      "puntaje": 1
+    },
+    {
+      "id": "T1-160",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-161",
+      "puntaje": 0
+    },
+    {
+      "id": "T1-163",
+      "puntaje": 0
+    }
+  ],
+  "falsosPositivos": [
+    {
+      "id": "T1-011",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-100",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-111",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-116",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-124",
+      "puntaje": 2
+    },
+    {
+      "id": "T1-134",
+      "puntaje": 4
+    },
+    {
+      "id": "T1-140",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-192",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-197",
+      "puntaje": 3
+    },
+    {
+      "id": "T1-199",
+      "puntaje": 2
+    }
+  ]
+}

@@ -1,0 +1,335 @@
+{
+  "variante": "V2R",
+  "conjunto": "prueba-v2",
+  "modelo": "qwen3.5-9b-local",
+  "mensajes": 119,
+  "cortadoPorTiempo": false,
+  "consultasNuevasEstaCorrida": 119,
+  "jsonValido": {
+    "consultadas": 119,
+    "conSalidaValida": 119,
+    "tasa": 1,
+    "validosAlPrimerIntento": 119,
+    "fallos": []
+  },
+  "latenciaMs": {
+    "media": 3208,
+    "mediana": 3161,
+    "p90": 3749,
+    "total": 381717,
+    "tokensSalidaMedia": 38.2
+  },
+  "corrupcion": {
+    "soloReglas": {
+      "total": 119,
+      "positivos": 72,
+      "vp": 46,
+      "fn": 26,
+      "fp": 4,
+      "vn": 43,
+      "recall": 0.639,
+      "precision": 0.92
+    },
+    "reglasMasIa": {
+      "total": 119,
+      "positivos": 72,
+      "vp": 72,
+      "fn": 0,
+      "fp": 4,
+      "vn": 43,
+      "recall": 1,
+      "precision": 0.947
+    },
+    "negativos": 47,
+    "tasaFalsosPositivosSobreNegativos": {
+      "soloReglas": 0.085,
+      "reglasMasIa": 0.085
+    },
+    "porTipoDeCaso": {
+      "corrup_dudosa": {
+        "total": 12,
+        "corrupcionEsperada": 12,
+        "recallSoloReglas": 0.25,
+        "recallReglasMasIa": 1,
+        "negativos": 0,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "corrup_no_titular": {
+        "total": 24,
+        "corrupcionEsperada": 24,
+        "recallSoloReglas": 0.792,
+        "recallReglasMasIa": 1,
+        "negativos": 0,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "corrup_titular": {
+        "total": 34,
+        "corrupcionEsperada": 34,
+        "recallSoloReglas": 0.647,
+        "recallReglasMasIa": 1,
+        "negativos": 0,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "corrup_titular_sin_cargo": {
+        "total": 2,
+        "corrupcionEsperada": 2,
+        "recallSoloReglas": 1,
+        "recallReglasMasIa": 1,
+        "negativos": 0,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "enganosa": {
+        "total": 12,
+        "corrupcionEsperada": 0,
+        "recallSoloReglas": null,
+        "recallReglasMasIa": null,
+        "negativos": 12,
+        "fpSoloReglas": 1,
+        "fpReglasMasIa": 1
+      },
+      "otro": {
+        "total": 11,
+        "corrupcionEsperada": 0,
+        "recallSoloReglas": null,
+        "recallReglasMasIa": null,
+        "negativos": 11,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "queja": {
+        "total": 12,
+        "corrupcionEsperada": 0,
+        "recallSoloReglas": null,
+        "recallReglasMasIa": null,
+        "negativos": 12,
+        "fpSoloReglas": 0,
+        "fpReglasMasIa": 0
+      },
+      "reclamo": {
+        "total": 12,
+        "corrupcionEsperada": 0,
+        "recallSoloReglas": null,
+        "recallReglasMasIa": null,
+        "negativos": 12,
+        "fpSoloReglas": 3,
+        "fpReglasMasIa": 3
+      }
+    },
+    "perdidasPorLasReglas": 26,
+    "recuperadasPorElModelo": {
+      "total": 26,
+      "ids": [
+        "D2-0022",
+        "D2-0048",
+        "D2-0127",
+        "D2-0151",
+        "D2-0157",
+        "D2-0175",
+        "D2-0186",
+        "D2-0243",
+        "D2-0311",
+        "D2-0342",
+        "D2-0392",
+        "D2-0455",
+        "D2-0467",
+        "D2-0483",
+        "D2-0584",
+        "D2-0680",
+        "D2-0708",
+        "D2-0734",
+        "D2-0735",
+        "D2-0764",
+        "D2-0839",
+        "D2-0862",
+        "D2-0864",
+        "D2-0893",
+        "D2-0935",
+        "D2-0936"
+      ]
+    },
+    "falsosPositivosNuevos": {
+      "total": 0,
+      "ids": []
+    },
+    "corrupcionQueSigueAlEstablecimiento": {
+      "total": 0,
+      "conRevisionOtrans": 0,
+      "ids": []
+    }
+  },
+  "categoriasDelModelo": {
+    "exactitud": 0.95,
+    "aciertos": 113,
+    "de": 119,
+    "matrizEsperadaPorModelo": {
+      "DENUNCIA_CORRUPCION": {
+        "DENUNCIA_CORRUPCION": 72,
+        "QUEJA": 0,
+        "RECLAMO": 0,
+        "OTRO": 0
+      },
+      "QUEJA": {
+        "DENUNCIA_CORRUPCION": 0,
+        "QUEJA": 13,
+        "RECLAMO": 2,
+        "OTRO": 0
+      },
+      "RECLAMO": {
+        "DENUNCIA_CORRUPCION": 1,
+        "QUEJA": 2,
+        "RECLAMO": 18,
+        "OTRO": 0
+      },
+      "OTRO": {
+        "DENUNCIA_CORRUPCION": 0,
+        "QUEJA": 0,
+        "RECLAMO": 1,
+        "OTRO": 10
+      }
+    }
+  },
+  "quejaFrenteAReclamo": {
+    "esperadosQuejaOReclamo": 36,
+    "modeloDioQuejaOReclamo": 35,
+    "acuerdoDelModelo": 0.886,
+    "propuestaFinalQuejaOReclamo": 32,
+    "acuerdoDeLaPropuestaFinal": 0.875,
+    "empatesPropuestosComoReclamo": 0
+  },
+  "distribucionPesoPorCategoriaEsperada": {
+    "DENUNCIA_CORRUPCION": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      51,
+      20,
+      1,
+      0,
+      0
+    ],
+    "QUEJA": [
+      15,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "RECLAMO": [
+      20,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0
+    ],
+    "OTRO": [
+      11,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "idsConDesacuerdo": {
+    "categoriaDelModelo": [
+      "D2-0142",
+      "D2-0209",
+      "D2-0294",
+      "D2-0486",
+      "D2-0754",
+      "D2-0785"
+    ],
+    "propuestaFinal": [
+      "D2-0142",
+      "D2-0209",
+      "D2-0294",
+      "D2-0440",
+      "D2-0486",
+      "D2-0612",
+      "D2-0754",
+      "D2-0785",
+      "D2-0880"
+    ]
+  },
+  "sensibilidadAlPisoDePosibleCorrupcion": [
+    {
+      "piso": null,
+      "total": 119,
+      "positivos": 72,
+      "vp": 58,
+      "fn": 14,
+      "fp": 4,
+      "vn": 43,
+      "recall": 0.806,
+      "precision": 0.935
+    },
+    {
+      "piso": 4,
+      "total": 119,
+      "positivos": 72,
+      "vp": 58,
+      "fn": 14,
+      "fp": 4,
+      "vn": 43,
+      "recall": 0.806,
+      "precision": 0.935
+    },
+    {
+      "piso": 5,
+      "total": 119,
+      "positivos": 72,
+      "vp": 70,
+      "fn": 2,
+      "fp": 4,
+      "vn": 43,
+      "recall": 0.972,
+      "precision": 0.946
+    },
+    {
+      "piso": 6,
+      "total": 119,
+      "positivos": 72,
+      "vp": 72,
+      "fn": 0,
+      "fp": 4,
+      "vn": 43,
+      "recall": 1,
+      "precision": 0.947
+    },
+    {
+      "piso": 8,
+      "total": 119,
+      "positivos": 72,
+      "vp": 72,
+      "fn": 0,
+      "fp": 4,
+      "vn": 43,
+      "recall": 1,
+      "precision": 0.947
+    }
+  ]
+}

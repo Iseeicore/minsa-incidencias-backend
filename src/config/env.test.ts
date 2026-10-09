@@ -78,6 +78,15 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, IA_POC_HABILITADA: "si" })).toThrow();
   });
 
+  it("OLLAMA_URL vale localhost:11434 por defecto, se puede cambiar y rechaza lo que no es un origen", () => {
+    expect(loadEnv(base).OLLAMA_URL).toBe("http://localhost:11434");
+    expect(loadEnv({ ...base, OLLAMA_URL: "http://host.docker.internal:11434" }).OLLAMA_URL).toBe(
+      "http://host.docker.internal:11434",
+    );
+    expect(() => loadEnv({ ...base, OLLAMA_URL: "host.docker.internal:11434" })).toThrow();
+    expect(() => loadEnv({ ...base, OLLAMA_URL: "http://ollama:11434/" })).toThrow();
+  });
+
   it("rechaza una capacidad que no es un entero positivo", () => {
     expect(() => loadEnv({ ...base, RATE_LIMIT_ANON_CAPACITY: "0" })).toThrow();
     expect(() => loadEnv({ ...base, RATE_LIMIT_AUTH_CAPACITY: "abc" })).toThrow();

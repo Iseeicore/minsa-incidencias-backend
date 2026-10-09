@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OLLAMA_URL_POR_DEFECTO } from "@/constants/analisis-ia.js";
 import { MIN_SECRET_LENGTH } from "@/constants/limits.js";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
@@ -52,6 +53,8 @@ const schema = z.object({
   PLAZO_ATENCION_DIAS: positiveInt.default(3),
   VIGENCIA_RESOLUCION_DIAS: positiveInt.default(3),
   PLAZO_AVISO_HORAS: positiveInt.default(24),
+  /** Dónde está Ollama para el trabajador clasificador. Desde un contenedor el host no es `localhost`: `http://host.docker.internal:11434`. */
+  OLLAMA_URL: originSchema.default(OLLAMA_URL_POR_DEFECTO),
   /** Enciende `POST /ia-poc/analizar` (PoC de IA local, solo ADMINISTRADOR). Apagada, la ruta no existe (404). */
   IA_POC_HABILITADA: z
     .enum(["true", "false"])

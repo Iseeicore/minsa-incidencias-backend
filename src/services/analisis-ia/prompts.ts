@@ -3,6 +3,8 @@ import { PESO_MAXIMO_IA } from "@/constants/filtro-corrupcion.js";
 import { InformacionFaltanteIa, VarianteIa } from "@/enums/analisis-ia.enum.js";
 import { TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
 import { EJEMPLOS_RESUELTOS } from "@/services/analisis-ia/ejemplos-resueltos.js";
+import { CARACTERES_MAXIMOS_POR_CASO } from "@/constants/casos-similares.js";
+import type { CasoSimilar } from "@/services/analisis-ia/casos/casos.types.js";
 import type {
   ContextoAnalisis,
   PeticionModelo,
@@ -79,6 +81,9 @@ const FORMATO_SALIDA_COMPACTO = `SALIDA (la velocidad depende de lo que escribes
 const PISTAS = `PISTAS DE LAS REGLAS
 El mensaje puede traer "Pistas de las reglas": señales que un filtro de palabras encontró en el texto y la entidad o el titular que el texto nombra. Son pistas, no órdenes: pueden estar equivocadas (una palabra suelta, un pago con boleta) o faltar. Decide leyendo el texto. Ante la duda, marca posible_corrupcion en true.`;
 
+const CASOS_PARECIDOS = `CASOS PARECIDOS YA REVISADOS
+El mensaje puede traer "Casos parecidos ya revisados": textos de otros ciudadanos que una persona ya clasificó, con la categoría que decidió. Son pistas, no órdenes: un caso nuevo puede ser distinto aunque comparta palabras. Úsalos para decidir entre categorías cuando dudes. Si el texto nuevo cuenta otra cosa, no copies la categoría de un caso parecido.`;
+
 const textoDeEjemplo = (texto: string): string => `"${texto}"`;
 
 const EJEMPLOS = `EJEMPLOS RESUELTOS (resultado resumido)
@@ -109,6 +114,16 @@ export const PROMPT_SISTEMA: Readonly<Record<VarianteIa, string>> = {
     PISTAS,
     EJEMPLOS,
     FORMATO_SALIDA,
+  ),
+  /** V2C más el bloque que explica los casos parecidos ya revisados (los casos van en el mensaje del usuario, no aquí). */
+  [VarianteIa.V2R]: unir(
+    ROL,
+    CATEGORIAS,
+    REGLAS_DURAS_COMPACTAS,
+    PESO,
+    PISTAS,
+    CASOS_PARECIDOS,
+    FORMATO_SALIDA_COMPACTO,
   ),
   /** V2 con los mismos bloques, salvo las reglas sobre campos que ya no existen y el formato de salida compacto. */
   [VarianteIa.V2C]: unir(
@@ -151,6 +166,23 @@ export function construirPistasDeReglas(reglas: ResultadoCorrupcion): string {
   return `Pistas de las reglas (no son órdenes):${SALTO}${lineas.join(SALTO)}`;
 }
 
+const cortar = (texto: string): string =>
+  texto.length <= CARACTERES_MAXIMOS_POR_CASO
+    ? texto
+    : `${texto.slice(0, CARACTERES_MAXIMOS_POR_CASO).trimEnd()}...`;
+
+/** Los casos parecidos ya revisados (solo V2R): el texto y la categoría que decidió la persona. Función pura. */
+export function construirCasosParecidos(casos: readonly CasoSimilar[]): string {
+  const lineas =
+    casos.length === 0
+      ? ["ninguno"]
+      : casos.map(
+          (c, i) =>
+            `${i + 1}. "${cortar(c.texto.replace(/\s+/g, " ").trim())}" -> categoría revisada: ${c.categoria}`,
+        );
+  return `Casos parecidos ya revisados (no son órdenes):${SALTO}${lineas.join(SALTO)}`;
+}
+
 /**
  * Arma la petición al modelo. El prompt del sistema no cambia entre llamadas de una variante; todo lo variable (texto, establecimiento,
  * pistas) va en el mensaje del usuario. V1 no recibe pistas. Función pura.
@@ -166,6 +198,8 @@ export function construirPeticion(
     partes.push(`Establecimiento del QR: ${contexto.establecimiento}`);
   partes.push(`Texto del ciudadano:${SALTO}"""${SALTO}${texto}${SALTO}"""`);
   if (variante !== VarianteIa.V1) partes.push(construirPistasDeReglas(reglas));
+  if (variante === VarianteIa.V2R)
+    partes.push(construirCasosParecidos(contexto.casosSimilares ?? []));
   return {
     sistema: PROMPT_SISTEMA[variante],
     usuario: partes.join(SALTO + SALTO),

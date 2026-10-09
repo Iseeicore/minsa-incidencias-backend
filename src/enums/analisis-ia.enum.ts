@@ -8,6 +8,8 @@ export const VarianteIa = {
   V3: "V3",
   /** V2 con salida compacta: el modelo solo escribe categoría, peso y marca; lo demás lo arman las reglas con plantillas. */
   V2C: "V2C",
+  /** V2C más ejemplos: los casos parecidos que una persona ya revisó, recuperados con `pg_trgm` (RAG de casos corregidos, fase 2). */
+  V2R: "V2R",
 } as const;
 export type VarianteIa = (typeof VarianteIa)[keyof typeof VarianteIa];
 

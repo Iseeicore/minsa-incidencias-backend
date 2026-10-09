@@ -118,6 +118,45 @@ describe("POST /ia-poc/analizar", () => {
     expect(res.body.explicacion).toContain("Las reglas suman");
   });
 
+  it("acepta la variante V2R y, si hay recuperador de casos, se lo pasa al análisis", async () => {
+    const recuperarCasos = async () => ({
+      casos: [],
+      casiDuplicadosDescartados: 0,
+    });
+    const analizador = vi.fn<Analizador>(analizadorSinRed);
+    const app = express();
+    app.use(express.json());
+    app.use((req: Request, _res: Response, next: NextFunction) => {
+      req.sesion = sesionCon(["ADMINISTRADOR"]);
+      Object.assign(req, { log: { error: () => undefined } });
+      next();
+    });
+    app.use(createIaPocRouter(analizador, recuperarCasos));
+    app.use(notFoundHandler);
+    app.use(errorHandler);
+    const res = await request(app)
+      .post(RUTA)
+      .send({ texto: TEXTO, variante: "V2R" });
+    expect(res.status).toBe(200);
+    expect(analizador).toHaveBeenCalledWith(
+      TEXTO,
+      {},
+      { variante: "V2R", recuperarCasos },
+    );
+  });
+
+  it("V2R sin recuperador corre sin ejemplos y responde el paquete", async () => {
+    const res = await request(montar(sesionCon(["ADMINISTRADOR"])))
+      .post(RUTA)
+      .send({ texto: TEXTO, variante: "V2R" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      variante: "V2R",
+      casosSimilares: [],
+      casiDuplicadosDescartados: 0,
+    });
+  });
+
   it("rechaza con 400 un cuerpo sin texto, una variante inventada o un texto demasiado largo", async () => {
     const app = montar(sesionCon(["ADMINISTRADOR"]));
     expect((await request(app).post(RUTA).send({})).status).toBe(400);

@@ -8,8 +8,10 @@ import {
   FormatoSalidaIa,
   MotivoFalloIa,
   OrigenFundamento,
+  VarianteIa,
 } from "@/enums/analisis-ia.enum.js";
 import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
+import type { CasoSimilar } from "@/services/analisis-ia/casos/casos.types.js";
 import type {
   ContextoAnalisis,
   Fundamento,
@@ -138,12 +140,27 @@ export async function analizarMensaje(
     tieneArchivos: contexto.tieneArchivos,
   });
 
+  let casos: CasoSimilar[] = [];
+  let casiDuplicadosDescartados = 0;
+  if (reglas.aplica && variante === VarianteIa.V2R && opciones.recuperarCasos) {
+    try {
+      const recuperacion = await opciones.recuperarCasos(texto);
+      casos = recuperacion.casos;
+      casiDuplicadosDescartados = recuperacion.casiDuplicadosDescartados;
+    } catch {
+      casos = [];
+    }
+  }
+
   let salida: SalidaIa | null = null;
   let metricas: MetricasModelo | null = null;
   let motivo: MotivoFalloIa | null = null;
   if (reglas.aplica) {
     const consulta = await cliente.consultar(
-      construirPeticion(variante, texto, reglas, contexto),
+      construirPeticion(variante, texto, reglas, {
+        ...contexto,
+        casosSimilares: casos,
+      }),
     );
     metricas = consulta.metricas;
     if (consulta.ok) salida = consulta.salida;
@@ -208,6 +225,12 @@ export async function analizarMensaje(
     empateQuejaReclamo: categoria.empate,
     sinDesempateQuejaReclamo: compacta && salida !== null,
     variante: reglas.aplica ? variante : null,
+    casosSimilares: casos.map(({ id, categoria, similitud }) => ({
+      id,
+      categoria,
+      similitud,
+    })),
+    casiDuplicadosDescartados,
     trazabilidadNormas: construirTrazabilidadNormas({
       reglas,
       propuesta: categoria.propuesta,

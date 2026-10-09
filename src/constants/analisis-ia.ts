@@ -29,6 +29,7 @@ export const FORMATO_SALIDA_POR_VARIANTE: Readonly<
   [VarianteIa.V2]: FormatoSalidaIa.COMPLETA,
   [VarianteIa.V3]: FormatoSalidaIa.COMPLETA,
   [VarianteIa.V2C]: FormatoSalidaIa.COMPACTA,
+  [VarianteIa.V2R]: FormatoSalidaIa.COMPACTA,
 };
 
 /**

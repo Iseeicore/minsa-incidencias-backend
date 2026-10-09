@@ -187,7 +187,7 @@ export interface Subcondicion {
 }
 
 export interface ResultadoCriterio {
-  id: IdCriterio;
+  id: string;
   cumple: boolean;
   /** La mayor falta, en puntos porcentuales, entre las subcondiciones que fallan; `null` si falta un dato. */
   faltaPuntos: number | null;
@@ -199,7 +199,7 @@ const redondearPuntos = (valor: number): number =>
   Math.round(valor * 1000) / 1000;
 
 /** `valor ≥ umbral` (la falta se mide en puntos). */
-function minimo(
+export function minimo(
   nombre: string,
   valor: number | null,
   umbral: number,
@@ -220,7 +220,7 @@ function minimo(
 }
 
 /** `valor ≤ umbral`. */
-function maximo(
+export function maximo(
   nombre: string,
   valor: number | null,
   umbral: number,
@@ -240,11 +240,13 @@ function maximo(
   };
 }
 
-const diferencia = (a: number | null, b: number | null): number | null =>
-  a === null || b === null ? null : a - b;
+export const diferencia = (
+  a: number | null,
+  b: number | null,
+): number | null => (a === null || b === null ? null : a - b);
 
-const criterio = (
-  id: IdCriterio,
+export const criterio = (
+  id: string,
   subcondiciones: Subcondicion[],
 ): ResultadoCriterio => {
   const faltas = subcondiciones.filter((s) => !s.cumple);
@@ -338,8 +340,9 @@ export function evaluarCriterios(m: MedidasParaCriterios): ResultadoCriterio[] {
  */
 export function combinarCriterios(
   porConjunto: readonly (readonly ResultadoCriterio[])[],
+  ids: readonly string[] = Object.values(IdCriterio),
 ): ResultadoCriterio[] {
-  return Object.values(IdCriterio).map((id) => {
+  return ids.map((id) => {
     const todos = porConjunto
       .map((criterios) => criterios.find((c) => c.id === id))
       .filter((c): c is ResultadoCriterio => c !== undefined);
@@ -367,11 +370,11 @@ export interface ResultadoVeredicto {
 
 const fallan = (
   criterios: readonly ResultadoCriterio[],
-  ids: readonly IdCriterio[],
+  ids: readonly string[],
 ): ResultadoCriterio[] =>
   criterios.filter((c) => ids.includes(c.id) && !c.cumple);
 
-const CRITERIOS_DE_VELOCIDAD: readonly IdCriterio[] = [
+const CRITERIOS_DE_VELOCIDAD: readonly string[] = [
   IdCriterio.S1,
   IdCriterio.S2,
 ];

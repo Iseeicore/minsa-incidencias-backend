@@ -9,6 +9,7 @@ import { VarianteIa } from "@/enums/analisis-ia.enum.js";
 import { RolCodigo } from "@/enums/rol-codigo.enum.js";
 import { requireRol } from "@/middleware/session.js";
 import { analizarMensaje } from "@/services/analisis-ia/analizar-mensaje.js";
+import type { RecuperadorCasos } from "@/services/analisis-ia/casos/casos.types.js";
 import type {
   ContextoAnalisis,
   OpcionesAnalisis,
@@ -37,10 +38,12 @@ const analisisSchema = z.object({
 /**
  * Prueba de la PoC de IA, solo lectura y solo para ADMINISTRADOR: reglas + modelo local sobre un texto. No guarda nada, no toca el
  * registro de incidencias ni el bot, y no registra el texto. Se monta únicamente con `IA_POC_HABILITADA=true`; apagada, la ruta no
- * existe (404). El modelo corre en localhost: el texto no sale de la máquina.
+ * existe (404). El modelo corre en localhost: el texto no sale de la máquina. Con `recuperarCasos` (solo lectura de
+ * `ia.entrenamiento_categoria`) la variante V2R recibe casos parecidos ya revisados; sin él corre sin ejemplos.
  */
 export function createIaPocRouter(
   analizar: Analizador = analizarMensaje,
+  recuperarCasos?: RecuperadorCasos,
 ): Router {
   const router = Router();
 
@@ -59,7 +62,10 @@ export function createIaPocRouter(
               ? { establecimiento, establecimientoConocido: true }
               : {}),
           },
-          { ...(variante ? { variante } : {}) },
+          {
+            ...(variante ? { variante } : {}),
+            ...(recuperarCasos ? { recuperarCasos } : {}),
+          },
         ),
       );
     },

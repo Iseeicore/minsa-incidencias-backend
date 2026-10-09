@@ -7,6 +7,11 @@ import type {
   VarianteIa,
 } from "@/enums/analisis-ia.enum.js";
 import type { SenalSensible } from "@/enums/filtro-corrupcion.enum.js";
+import type {
+  CasoSimilar,
+  CasoSimilarResumen,
+  RecuperadorCasos,
+} from "@/services/analisis-ia/casos/casos.types.js";
 import type { SalidaIa } from "@/services/analisis-ia/esquema-salida.js";
 import type { TrazabilidadNormas } from "@/services/analisis-ia/normas/normas.types.js";
 import type {
@@ -52,6 +57,8 @@ export interface ClienteModelo {
 export interface ContextoAnalisis extends ContextoEvaluacion {
   /** Nombre del establecimiento del QR; solo se muestra al modelo como contexto. */
   establecimiento?: string;
+  /** Casos parecidos ya revisados que se le muestran al modelo (solo V2R). */
+  casosSimilares?: readonly CasoSimilar[];
 }
 
 export interface OpcionesAnalisis {
@@ -59,6 +66,8 @@ export interface OpcionesAnalisis {
   cliente?: ClienteModelo;
   /** Piso del peso efectivo cuando el modelo marca `posible_corrupcion` (ver `PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO`). */
   pisoPesoPosibleCorrupcion?: number | null;
+  /** Busca los casos revisados parecidos (solo V2R). Sin recuperador, V2R corre sin ejemplos. */
+  recuperarCasos?: RecuperadorCasos;
 }
 
 /** Una pista que respalda la propuesta: la frase normalizada de las reglas, o la que el modelo copió del texto. */
@@ -102,6 +111,10 @@ export interface PaqueteAnalisis {
   trazabilidadNormas: TrazabilidadNormas;
   reglas: ResultadoCorrupcion;
   combinacion: ResultadoCombinacion;
+  /** Casos parecidos ya revisados que se le mostraron al modelo (solo V2R; sin texto). */
+  casosSimilares: CasoSimilarResumen[];
+  /** Candidatos que se descartaron por ser casi duplicados del mensaje (solo V2R). */
+  casiDuplicadosDescartados: number;
   /** Lo que respondió el modelo, validado (completa o compacta); `null` si no se consultó o falló. */
   salidaModelo: SalidaIa | null;
   /**

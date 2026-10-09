@@ -21,6 +21,7 @@ import { createAreasRouter } from "@/routes/areas.routes.js";
 import { createAuthRouter } from "@/routes/auth.routes.js";
 import { createFiltroCorrupcionRouter } from "@/routes/filtro-corrupcion.routes.js";
 import { createIaPocRouter } from "@/routes/ia-poc.routes.js";
+import { crearRecuperadorPgTrgm } from "@/services/analisis-ia/casos/recuperar-casos.js";
 import { createIncidenciasRouter } from "@/routes/incidencias.routes.js";
 import { createSaludRouter } from "@/routes/salud.routes.js";
 import { createUsuariosRouter } from "@/routes/usuarios.routes.js";
@@ -76,7 +77,8 @@ export function createApp(
   app.use(createAreasRouter(areas));
   app.use(createUsuariosRouter(usuarios));
   app.use(createFiltroCorrupcionRouter());
-  if (env.IA_POC_HABILITADA) app.use(createIaPocRouter());
+  if (env.IA_POC_HABILITADA)
+    app.use(createIaPocRouter(undefined, crearRecuperadorPgTrgm(database)));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

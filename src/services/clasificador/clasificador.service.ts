@@ -81,6 +81,7 @@ export const CONSULTA_SIGUIENTE_PENDIENTE = `SELECT i.id, i.codigo, i.descripcio
    AND i.categoria_ia_id IS NULL
    AND i.activo
    AND NOT (i.id = ANY($1::uuid[]))
+   AND ($2::uuid[] IS NULL OR i.id = ANY($2::uuid[]))
  ORDER BY i.fecha_creacion, i.id
  LIMIT 1
  FOR UPDATE OF i SKIP LOCKED`;
@@ -106,6 +107,8 @@ export interface OpcionesClasificador {
   /** Nombre del modelo, para `version_clasificador`. */
   modelo: string;
   maximoIntentos?: number;
+  /** Limita la cola a estos casos (reprocesos y pruebas). Sin él, el trabajador toma cualquier caso pendiente. */
+  soloCasos?: readonly string[];
 }
 
 /**
@@ -138,7 +141,7 @@ export class ClasificadorIncidencias {
         async (tx) => {
           const [fila] = await tx.query<FilaPendiente>(
             CONSULTA_SIGUIENTE_PENDIENTE,
-            [this.abandonados],
+            [this.abandonados, this.opciones.soloCasos ?? null],
           );
           if (!fila)
             return { resultado: ResultadoClasificacion.COLA_VACIA } as const;

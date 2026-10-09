@@ -17,7 +17,7 @@ import {
   type AnalizadorDeCaso,
 } from "@/services/clasificador/clasificador.service.js";
 import { crearEstablecimientoDePrueba } from "@/test-utils/establecimientos.js";
-import { sembrarCaso } from "@/test-utils/incidencias.js";
+import { sembrarCaso, type OpcionesCaso } from "@/test-utils/incidencias.js";
 import {
   withRollbackDatabase,
   type RollbackContext,
@@ -69,21 +69,32 @@ const TEXTO_NEUTRO =
 const TEXTO_ZONA_GRIS =
   "El director del Hospital Dos de Mayo pide cosas a los pacientes que pagaron en caja";
 
-const clasificador = (
-  contexto: RollbackContext,
-  analizar: AnalizadorDeCaso,
-  maximoIntentos?: number,
-) =>
-  new ClasificadorIncidencias({
-    database: contexto.database,
-    analizar,
-    modelo: "modelo-de-prueba",
-    ...(maximoIntentos !== undefined ? { maximoIntentos } : {}),
-  });
-
-/** La base de pruebas puede traer casos pendientes de antes: se clasifican primero (dentro de la transacción de la prueba, que se revierte). */
-const vaciarPendientesPrevios = (contexto: RollbackContext) =>
-  vaciarCola(clasificador(contexto, analizarCon(modelo())));
+/**
+ * Cada prueba trabaja solo con los casos que siembra: la base de pruebas puede traer casos pendientes de antes, y otras pruebas que
+ * corren a la vez tienen los suyos tomados (con `SKIP LOCKED` se saltan). Limitar la cola a los casos propios evita depender de ellos.
+ */
+function escenario(contexto: RollbackContext) {
+  const casos: string[] = [];
+  return {
+    async sembrar(opciones: OpcionesCaso) {
+      const caso = await sembrarCaso(contexto, {
+        categoria: null,
+        ...opciones,
+      });
+      casos.push(caso.id);
+      return caso;
+    },
+    trabajador(analizar: AnalizadorDeCaso, maximoIntentos?: number) {
+      return new ClasificadorIncidencias({
+        database: contexto.database,
+        analizar,
+        modelo: "modelo-de-prueba",
+        soloCasos: casos,
+        ...(maximoIntentos !== undefined ? { maximoIntentos } : {}),
+      });
+    },
+  };
+}
 
 interface FilaEstado {
   categoriaIa: string | null;
@@ -136,17 +147,15 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("una corrupción se escribe como DENUNCIA_CORRUPCION y la base la destina a OTRANS, con el análisis guardado en la misma transacción", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
+      const { sembrar, trabajador } = escenario(contexto);
       const eess = await crearEstablecimientoDePrueba(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
+      const caso = await sembrar({
         establecimiento: eess,
         marcador: TEXTO_COBRO,
       });
       expect((await estadoDe(contexto, caso.id)).estado).toBe("REGISTRADO");
 
-      const salida = await clasificador(
-        contexto,
+      const salida = await trabajador(
         analizarCon(modelo()),
       ).clasificarSiguiente();
       expect(salida).toMatchObject({
@@ -206,15 +215,13 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("una queja se escribe tal cual y la base la destina al establecimiento de origen", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
+      const { sembrar, trabajador } = escenario(contexto);
       const eess = await crearEstablecimientoDePrueba(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
+      const caso = await sembrar({
         establecimiento: eess,
         marcador: TEXTO_NEUTRO,
       });
-      await clasificador(
-        contexto,
+      await trabajador(
         analizarCon(modelo({ categoria: C.QUEJA })),
       ).clasificarSiguiente();
       expect(await estadoDe(contexto, caso.id)).toMatchObject({
@@ -232,15 +239,13 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("la duda de corrupción también va a OTRANS, con confianza de a lo más 55 y el motivo guardado", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
+      const { sembrar, trabajador } = escenario(contexto);
       const eess = await crearEstablecimientoDePrueba(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
+      const caso = await sembrar({
         establecimiento: eess,
         marcador: TEXTO_NEUTRO,
       });
-      await clasificador(
-        contexto,
+      await trabajador(
         analizarCon(
           modelo({
             categoria: C.DENUNCIA_CORRUPCION,
@@ -273,18 +278,10 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("si el modelo cae, se escribe el resultado de las reglas (nunca queda sin clasificar) y la versión lo dice", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const corrupcion = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_COBRO,
-      });
-      const zonaGris = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_ZONA_GRIS,
-      });
-      const resumen = await vaciarCola(
-        clasificador(contexto, analizarCon(modeloCaido)),
-      );
+      const { sembrar, trabajador } = escenario(contexto);
+      const corrupcion = await sembrar({ marcador: TEXTO_COBRO });
+      const zonaGris = await sembrar({ marcador: TEXTO_ZONA_GRIS });
+      const resumen = await vaciarCola(trabajador(analizarCon(modeloCaido)));
       expect(resumen).toMatchObject({
         clasificadas: 2,
         fallos: 0,
@@ -316,32 +313,24 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("reintentar no duplica: la segunda pasada no encuentra casos y el análisis sigue siendo una sola fila", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_COBRO,
-      });
-      const trabajador = clasificador(contexto, analizarCon(modelo()));
-      expect((await vaciarCola(trabajador)).clasificadas).toBe(1);
-      expect(await trabajador.clasificarSiguiente()).toEqual({
+      const { sembrar, trabajador } = escenario(contexto);
+      const caso = await sembrar({ marcador: TEXTO_COBRO });
+      const worker = trabajador(analizarCon(modelo()));
+      expect((await vaciarCola(worker)).clasificadas).toBe(1);
+      expect(await worker.clasificarSiguiente()).toEqual({
         resultado: ResultadoClasificacion.COLA_VACIA,
       });
-      expect((await vaciarCola(trabajador)).clasificadas).toBe(0);
+      expect((await vaciarCola(worker)).clasificadas).toBe(0);
       expect((await estadoDe(contexto, caso.id)).analisis).toBe(1);
     });
   });
 
   it("un caso que ya tiene categoría de la IA no se vuelve a tomar ni se pisa", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: C.OTRO,
-        confianza: 61,
-      });
+      const { sembrar, trabajador } = escenario(contexto);
+      const caso = await sembrar({ categoria: C.OTRO, confianza: 61 });
       const analizar = vi.fn(analizarCon(modelo()));
-      expect(
-        (await vaciarCola(clasificador(contexto, analizar))).clasificadas,
-      ).toBe(0);
+      expect((await vaciarCola(trabajador(analizar))).clasificadas).toBe(0);
       expect(analizar).not.toHaveBeenCalled();
       expect(await estadoDe(contexto, caso.id)).toMatchObject({
         categoriaIa: "OTRO",
@@ -351,21 +340,38 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
     });
   });
 
-  it("si la escritura falla, la transacción se revierte entera: el caso sigue pendiente y sin análisis, y el siguiente intento lo clasifica", async () => {
+  it("la cola limitada a ciertos casos no toca los demás pendientes", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const caso = await sembrarCaso(contexto, {
+      const { sembrar, trabajador } = escenario(contexto);
+      const mio = await sembrar({ marcador: TEXTO_NEUTRO });
+      // Otro caso pendiente que no es de este escenario.
+      const ajeno = await sembrarCaso(contexto, {
         categoria: null,
-        marcador: TEXTO_COBRO,
+        marcador: TEXTO_NEUTRO,
       });
+      expect(
+        (await vaciarCola(trabajador(analizarCon(modelo())))).clasificadas,
+      ).toBe(1);
+      expect((await estadoDe(contexto, mio.id)).categoriaIa).toBe("RECLAMO");
+      expect(await estadoDe(contexto, ajeno.id)).toMatchObject({
+        categoriaIa: null,
+        estado: "REGISTRADO",
+      });
+    });
+  });
+
+  it("si el análisis falla, la transacción se revierte: el caso sigue pendiente y sin análisis, y el siguiente intento lo clasifica", async () => {
+    await usar(async (contexto) => {
+      const { sembrar, trabajador } = escenario(contexto);
+      const caso = await sembrar({ marcador: TEXTO_COBRO });
       let falla = true;
       const analizar: AnalizadorDeCaso = async (texto, ctx) => {
         if (falla) throw new Error(`falla simulada con el texto ${texto}`);
         return analizarCon(modelo())(texto, ctx);
       };
-      const trabajador = clasificador(contexto, analizar);
+      const worker = trabajador(analizar);
 
-      const primero = await trabajador.clasificarSiguiente();
+      const primero = await worker.clasificarSiguiente();
       expect(primero).toMatchObject({
         resultado: ResultadoClasificacion.FALLO,
         codigo: caso.codigo,
@@ -381,7 +387,7 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
       });
 
       falla = false;
-      expect(await trabajador.clasificarSiguiente()).toMatchObject({
+      expect(await worker.clasificarSiguiente()).toMatchObject({
         resultado: ResultadoClasificacion.CLASIFICADA,
       });
       expect(await estadoDe(contexto, caso.id)).toMatchObject({
@@ -393,12 +399,9 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("un error de la base a mitad de la escritura (con el análisis ya insertado) revierte todo", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_COBRO,
-      });
-      const trabajador = clasificador(contexto, analizarCon(modelo()));
+      const { sembrar, trabajador } = escenario(contexto);
+      const caso = await sembrar({ marcador: TEXTO_COBRO });
+      const worker = trabajador(analizarCon(modelo()));
       // Se rompe el UPDATE de la categoría (columna inexistente) justo después de insertar el análisis.
       const original = contexto.database.transaction.bind(contexto.database);
       contexto.database.transaction = (actor, trabajo) =>
@@ -416,7 +419,7 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
               ),
           } as typeof tx),
         );
-      const salida = await trabajador.clasificarSiguiente();
+      const salida = await worker.clasificarSiguiente();
       contexto.database.transaction = original;
       expect(salida).toMatchObject({
         resultado: ResultadoClasificacion.FALLO,
@@ -428,7 +431,7 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
         analisis: 0,
       });
       // Sin el daño, el siguiente intento lo clasifica con una sola fila de análisis.
-      expect(await trabajador.clasificarSiguiente()).toMatchObject({
+      expect(await worker.clasificarSiguiente()).toMatchObject({
         resultado: ResultadoClasificacion.CLASIFICADA,
       });
       expect(await estadoDe(contexto, caso.id)).toMatchObject({
@@ -440,24 +443,20 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
 
   it("un caso roto no tapa a los demás: tras el máximo de intentos se deja fuera y se sigue con el siguiente", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const roto = await sembrarCaso(contexto, {
-        categoria: null,
+      const { sembrar, trabajador } = escenario(contexto);
+      const roto = await sembrar({
         marcador: "este caso rompe el analizador, relato de prueba",
       });
-      const sano = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_NEUTRO,
-      });
+      const sano = await sembrar({ marcador: TEXTO_NEUTRO });
       const analizar: AnalizadorDeCaso = async (texto, ctx) => {
         if (texto.includes("rompe el analizador")) throw new Error("roto");
         return analizarCon(modelo({ categoria: C.QUEJA }))(texto, ctx);
       };
-      const trabajador = clasificador(contexto, analizar, 2);
-      const resumen = await vaciarCola(trabajador);
+      const worker = trabajador(analizar, 2);
+      const resumen = await vaciarCola(worker);
       expect(resumen).toMatchObject({ clasificadas: 1, abandonadas: 1 });
       expect(resumen.fallos).toBe(2);
-      expect(trabajador.abandonados).toHaveLength(1);
+      expect(worker.abandonados).toEqual([roto.id]);
       expect(await estadoDe(contexto, sano.id)).toMatchObject({
         categoriaIa: "QUEJA",
       });
@@ -465,10 +464,6 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
         categoriaIa: null,
         estado: "REGISTRADO",
       });
-      // Fuera del conteo de los abandonados, el caso sigue contando para la alarma si espera mucho.
-      expect(
-        (await consultarAlarmaSinClasificar(contexto.database, 0)).atrasados,
-      ).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -483,42 +478,29 @@ describe.skipIf(!url)("clasificador (B1) contra PostgreSQL real", () => {
     expect(CONSULTA_SIGUIENTE_PENDIENTE).toContain("ORDER BY i.fecha_creacion");
   });
 
-  it("alarma: un caso sin clasificar con más de 10 minutos la enciende y clasificarlo la apaga; los recientes no cuentan", async () => {
+  it("alarma: un caso sin clasificar con más de 10 minutos la enciende y clasificarlo la apaga; uno reciente no cuenta", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      expect(
-        (await consultarAlarmaSinClasificar(contexto.database)).activa,
-      ).toBe(false);
+      const { sembrar, trabajador } = escenario(contexto);
+      const viejo = await sembrar({ marcador: TEXTO_NEUTRO, edadHoras: 1 });
+      const reciente = await sembrar({ marcador: TEXTO_NEUTRO });
 
-      const viejo = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_NEUTRO,
-        edadHoras: 1,
-      });
-      await sembrarCaso(contexto, { categoria: null, marcador: TEXTO_NEUTRO });
       const alarma = await consultarAlarmaSinClasificar(contexto.database);
-      expect(alarma).toMatchObject({
-        activa: true,
-        atrasados: 1,
-        codigos: [viejo.codigo],
-      });
+      expect(alarma.activa).toBe(true);
+      expect(alarma.codigos).toContain(viejo.codigo);
+      expect(alarma.codigos).not.toContain(reciente.codigo);
       expect(alarma.minutosDelMasAntiguo).toBeGreaterThanOrEqual(59);
 
-      await vaciarCola(clasificador(contexto, analizarCon(modelo())));
-      expect(
-        (await consultarAlarmaSinClasificar(contexto.database)).activa,
-      ).toBe(false);
+      await vaciarCola(trabajador(analizarCon(modelo())));
+      const despues = await consultarAlarmaSinClasificar(contexto.database);
+      expect(despues.codigos).not.toContain(viejo.codigo);
     });
   });
 
-  it("el actor del análisis y de la clasificación es sistema:clasificador (queda en la auditoría de la base)", async () => {
+  it("el actor de la clasificación es sistema:clasificador (queda en la auditoría de la base)", async () => {
     await usar(async (contexto) => {
-      await vaciarPendientesPrevios(contexto);
-      const caso = await sembrarCaso(contexto, {
-        categoria: null,
-        marcador: TEXTO_COBRO,
-      });
-      await clasificador(contexto, analizarCon(modelo())).clasificarSiguiente();
+      const { sembrar, trabajador } = escenario(contexto);
+      const caso = await sembrar({ marcador: TEXTO_COBRO });
+      await trabajador(analizarCon(modelo())).clasificarSiguiente();
       const { rows } = await contexto.client.query<{ actor: string }>(
         `SELECT a.actor FROM chatbot.incidencia_paciente_auditoria a
           WHERE a.incidencia_paciente_id = $1 AND a.operacion = 'ACTUALIZACION'

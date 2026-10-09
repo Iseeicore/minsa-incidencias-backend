@@ -43,9 +43,10 @@ const TEXTO_NEUTRO =
   "Quiero saber a qué hora abre la farmacia del hospital por las tardes";
 
 /** Clasifica con las reglas y un modelo simulado (la categoría de la queja la pone el modelo). */
-function trabajador(contexto: RollbackContext) {
+function trabajador(contexto: RollbackContext, soloCasos: readonly string[]) {
   return new ClasificadorIncidencias({
     database: contexto.database,
+    soloCasos,
     modelo: "modelo-de-prueba",
     analizar: (texto, ctx) =>
       analizarMensaje(texto, ctx, {
@@ -101,15 +102,13 @@ describe.skipIf(!url)(
 
     it("OTRANS y el administrador ven el análisis de una corrupción; el establecimiento y el gestor reciben 403; sin sesión, 401", async () => {
       await usar(async (contexto) => {
-        // La base de pruebas puede traer casos pendientes de antes: se clasifican primero (se revierte con la transacción).
-        await vaciarCola(trabajador(contexto));
         const eess = await crearEstablecimientoDePrueba(contexto);
         const caso = await sembrarCaso(contexto, {
           categoria: null,
           establecimiento: eess,
           marcador: TEXTO_COBRO,
         });
-        await vaciarCola(trabajador(contexto));
+        await vaciarCola(trabajador(contexto, [caso.id]));
         const app = createApp(
           testEnv(),
           contexto.database,
@@ -165,14 +164,13 @@ describe.skipIf(!url)(
 
     it("OTRANS solo ve el análisis de lo destinado a su área: una queja de un establecimiento le responde 404; el administrador sí la ve", async () => {
       await usar(async (contexto) => {
-        await vaciarCola(trabajador(contexto));
         const eess = await crearEstablecimientoDePrueba(contexto);
         const queja = await sembrarCaso(contexto, {
           categoria: null,
           establecimiento: eess,
           marcador: TEXTO_NEUTRO,
         });
-        await vaciarCola(trabajador(contexto));
+        await vaciarCola(trabajador(contexto, [queja.id]));
         const app = createApp(
           testEnv(),
           contexto.database,
@@ -215,7 +213,6 @@ describe.skipIf(!url)(
 
     it("un caso sin análisis (todavía REGISTRADO) o con un código inexistente o mal formado responde 404", async () => {
       await usar(async (contexto) => {
-        await vaciarCola(trabajador(contexto));
         const sin = await sembrarCaso(contexto, {
           categoria: null,
           marcador: TEXTO_NEUTRO,

@@ -80,6 +80,10 @@ npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2 --b=V2C --conjunto=ia-poc/ev
 
 **Resultado (V2 frente a V2C, 2026-10-09).** Veredicto final: **Viable con reservas**. Desarrollo-v2 (303, iteración 1): recall reglas + modelo 97,3 % (IC 93,8 a 98,8), FP 7,5 %, JSON al primer intento 100 %, latencia media 3,14 s, p90 3,76 s, 4,7 veces más rápida que V2; solo falla Q4 por 0,12 puntos (acuerdo queja/reclamo 84,88 % frente a 85 %, un mensaje). Prueba-v2 (119 ids de V2, una sola corrida): cumple todo (recall 100 %, FP 8,5 % frente a 10,6 % de V2, latencia 3,07 s, p90 3,56 s). Detalle y límites en la sección 22 de la nota del vault.
 
+## Del análisis a la base: el clasificador
+
+`VARIANTE_POR_DEFECTO` es **V2C**. El trabajador `npm run clasificador` (ver el README del backend) usa `analizarMensaje` con V2C sobre las incidencias `REGISTRADO` sin categoría y escribe el resultado en `chatbot.incidencia_analisis` y en las columnas de la IA de `incidencia_paciente`. La corrupción y la duda de corrupción se escriben siempre como `DENUNCIA_CORRUPCION` (confianza de a lo más 55 en la duda) para que lleguen a OTRANS. Verificado con el modelo real dentro de una transacción que se revierte: 4 casos en unos 11 s.
+
 ## V2R: RAG de casos revisados con pg_trgm (fase 2)
 
 **Qué es.** V2C más «casos parecidos ya revisados» (texto y categoría final que decidió una persona) en el mensaje del usuario. El prefijo del prompt es constante (V2C más un bloque que explica cómo usarlos); los casos van en el mensaje. Los recupera `src/services/analisis-ia/casos/recuperar-casos.ts` con `pg_trgm` (`similarity()` sobre `unaccent`); **no hay pgvector, embeddings ni migración**. Se descarta todo caso con similitud de 0,50 o más (casi duplicado) y se cuentan.

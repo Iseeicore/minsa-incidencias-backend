@@ -1,3 +1,4 @@
+import { TOPE_CONFIANZA_CON_DUDA as CONFIANZA_MAXIMA_CON_DUDA } from "@/constants/clasificador.js";
 import {
   FORMATO_SALIDA_POR_VARIANTE,
   MARGEN_EMPATE_QUEJA_RECLAMO,
@@ -40,8 +41,6 @@ import type { ResultadoCorrupcion } from "@/services/filtro-corrupcion/filtro-co
 
 const { DENUNCIA_CORRUPCION, QUEJA, RECLAMO, OTRO } = CategoriaIncidencia;
 
-/** Con empate o duda la confianza no pasa de aquí: es una propuesta que decide una persona. */
-const CONFIANZA_MAXIMA_CON_DUDA = 55;
 
 /** Peso efectivo del modelo: su peso, o el piso si marcó `posible_corrupcion` y se configuró uno. Función pura. */
 export function pesoEfectivoDelModelo(

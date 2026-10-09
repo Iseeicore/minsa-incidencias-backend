@@ -11,7 +11,7 @@ Prueba de concepto para clasificar incidencias con **reglas primero** (filtro de
 ## Catálogo de entidades
 
 - `datos/alias-entidades.json`: alias y nombres cortos escritos a mano (los nombres oficiales y las siglas salen de la nota del vault).
-- `scripts/generar-catalogo.mjs` (se corre con `node ia-poc/scripts/generar-catalogo.mjs`) lee las secciones 1 y 2 de la nota «Catálogo de entidades y titulares - Denuncias de corrupción», mezcla los alias y genera `src/services/filtro-corrupcion/catalogo-entidades.data.ts`.
+- `scripts/generar-catalogo.mjs` (se corre con `node ia-poc/scripts/generar-catalogo.mjs`) lee las secciones 1 y 2 de la nota «Catálogo de entidades y titulares - Denuncias de corrupción», mezcla los alias y genera (con el campo `destinoSiTitular` de cada entidad, que sale de la columna «Destino si la denuncia es contra el titular» de la sección 1; esa columna es copia de la hoja `Hoja2` del Excel `LISTA ENTIDADES - denuncias contra titulares`, así que para cambiar un destino se corrige en la nota y se vuelve a correr el script; si el destino es de un tipo nuevo, el script se detiene y hay que agregarlo en `DESTINOS_TITULAR`) `src/services/filtro-corrupcion/catalogo-entidades.data.ts`.
 
 ## Hardware medido
 

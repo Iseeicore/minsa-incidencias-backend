@@ -78,7 +78,12 @@ describe("POST /filtro-corrupcion/evaluar", () => {
       entidad: { codigo: "sis", nombre: "Seguro Integral de Salud", tipo: "SIS" },
       titular: { cargo: "jefa del sis", esEquivalenteDelMaximo: true, nombreCoincide: true },
       requiereOtrans: true,
-      referenciaDerivacion: { codigoEntidad: "sis", contactosDisponibles: ["OCI", "PROCURADOR"] },
+      referenciaDerivacion: {
+        codigoEntidad: "sis",
+        contactosDisponibles: ["OCI", "PROCURADOR"],
+        destinoSiTitular: { entidadDestinoCodigo: "minsa" },
+        aplicaAlTitular: true,
+      },
       versionReglas: "reglas-corrupcion-v1.1",
     });
     expect(Object.keys(res.body).sort()).toEqual(

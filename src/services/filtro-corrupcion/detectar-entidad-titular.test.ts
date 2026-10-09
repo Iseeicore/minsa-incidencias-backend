@@ -225,12 +225,23 @@ describe("destino sugerido", () => {
     const resultado = evaluarTextoCorrupcion("En el SIS me pidieron plata para atenderme y tengo fotos");
     expect(resultado.propuestaCorrupcion).toBe(true);
     expect(resultado.requiereOtrans).toBe(true);
-    expect(resultado.referenciaDerivacion).toEqual({ codigoEntidad: "sis", contactosDisponibles: ["OCI", "PROCURADOR"] });
+    expect(resultado.referenciaDerivacion).toEqual({
+      codigoEntidad: "sis",
+      contactosDisponibles: ["OCI", "PROCURADOR"],
+      destinoSiTitular: {
+        texto: DESTINO_ST_PAD,
+        entidadDestinoCodigo: "minsa",
+      },
+      aplicaAlTitular: false,
+    });
   });
 
   it("la referencia lista solo los contactos que el directorio trae (FISSAL: ninguno)", () => {
     const resultado = evaluarTextoCorrupcion("En el FISSAL me pidieron plata para atenderme y tengo fotos");
-    expect(resultado.referenciaDerivacion).toEqual({ codigoEntidad: "fissal", contactosDisponibles: [] });
+    expect(resultado.referenciaDerivacion).toMatchObject({
+      codigoEntidad: "fissal",
+      contactosDisponibles: [],
+    });
   });
 
   it("sin entidad en el catálogo: requiere OTRANS pero no hay referencia", () => {
@@ -253,6 +264,147 @@ describe("destino sugerido", () => {
       referenciaDerivacion: null,
       titular: null,
     });
+  });
+});
+
+const DESTINO_ST_PAD = "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)";
+const DIRIS_ESTE = "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)";
+const DIRIS_CENTRO = "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)";
+const DESTINO_SIS = "SIS (Sistema Integrado de Salud, según la nota (2*) de la lista)";
+
+describe("destino si la denuncia es contra el titular (catálogo)", () => {
+  it("las 37 entidades de la nota traen destino, y el código al que apuntan existe en el catálogo", () => {
+    const codigos = new Set(CATALOGO_ENTIDADES.map(({ codigo }) => codigo));
+    for (const { codigo, destinoSiTitular } of CATALOGO_ENTIDADES) {
+      expect(destinoSiTitular?.texto, codigo).toBeTruthy();
+      if (destinoSiTitular?.entidadDestinoCodigo) expect(codigos.has(destinoSiTitular.entidadDestinoCodigo), codigo).toBe(true);
+    }
+  });
+
+  it.each([
+    ["fissal", DESTINO_SIS, "sis"],
+    ["inen", DESTINO_ST_PAD, "minsa"],
+    ["hhv", DIRIS_ESTE, "diris-le"],
+    ["hh", DIRIS_ESTE, "diris-le"],
+    ["hjatch", DIRIS_ESTE, "diris-le"],
+    ["hlev", DIRIS_ESTE, "diris-le"],
+    ["hnal", DIRIS_CENTRO, "diris-lc"],
+    ["hejcu", DIRIS_CENTRO, "diris-lc"],
+    ["honadomani-sb", DIRIS_CENTRO, "diris-lc"],
+  ])("%s: el destino sale tal cual de la fuente", (codigo, texto, destino) => {
+    expect(porCodigo(codigo).destinoSiTitular).toEqual({
+      texto,
+      entidadDestinoCodigo: destino,
+    });
+  });
+
+  it("las entidades sin contactos igual traen destino (la ficha no queda vacía)", () => {
+    const sinContactos = CATALOGO_ENTIDADES.filter(({ huecos }) => huecos?.includes("SIN_CONTACTOS"));
+    expect(sinContactos.map(({ codigo }) => codigo).sort()).toEqual(["fissal", "hejcu", "hh", "hjatch", "honadomani-sb", "inen"]);
+    for (const { codigo, destinoSiTitular } of sinContactos) expect(destinoSiTitular, codigo).not.toBeNull();
+  });
+
+  it("el MINSA manda a sus órganos, que no son una entidad del catálogo: solo texto, sin código", () => {
+    expect(porCodigo("minsa").destinoSiTitular).toEqual({
+      texto: "Servidores y funcionarios de todos los órganos de la administración central (excepción del Ministro)",
+      entidadDestinoCodigo: null,
+    });
+  });
+});
+
+describe("referenciaDerivacion con destino si es el titular", () => {
+  const casos = [
+    ["SIS (FISSAL)", "El jefe institucional del FISSAL me pidió coima para atenderme", "fissal", DESTINO_SIS, "sis"],
+    ["ST PAD MINSA (INEN)", "El jefe institucional del INEN me pidió coima para atenderme", "inen", DESTINO_ST_PAD, "minsa"],
+    [
+      "DIRIS Lima Este (Hermilio Valdizán)",
+      "El director general del Hospital Hermilio Valdizan me pidió coima",
+      "hhv",
+      DIRIS_ESTE,
+      "diris-le",
+    ],
+    ["DIRIS Lima Centro (Loayza)", "El director general del Hospital Loayza me pidió coima", "hnal", DIRIS_CENTRO, "diris-lc"],
+  ] as const;
+
+  it.each(casos)("%s: entidad y titular detectados, aplica al titular", (_nombre, texto, codigo, destino, destinoCodigo) => {
+    const resultado = evaluarTextoCorrupcion(texto);
+    expect(resultado.propuestaCorrupcion).toBe(true);
+    expect(resultado.titular).not.toBeNull();
+    expect(resultado.referenciaDerivacion).toMatchObject({
+      codigoEntidad: codigo,
+      destinoSiTitular: {
+        texto: destino,
+        entidadDestinoCodigo: destinoCodigo,
+      },
+      aplicaAlTitular: true,
+    });
+  });
+
+  it("la entidad sin sus contactos (FISSAL) devuelve el destino aunque contactosDisponibles esté vacío", () => {
+    const { referenciaDerivacion } = evaluarTextoCorrupcion(casos[0][1]);
+    expect(referenciaDerivacion?.contactosDisponibles).toEqual([]);
+    expect(referenciaDerivacion?.destinoSiTitular?.texto).toBe(DESTINO_SIS);
+  });
+
+  it("solo se menciona la entidad (sin cargo máximo): el destino se informa pero aplicaAlTitular es false", () => {
+    const resultado = evaluarTextoCorrupcion("En el Hospital Loayza me pidieron coima para atenderme");
+    expect(resultado.titular).toBeNull();
+    expect(resultado.referenciaDerivacion).toMatchObject({
+      codigoEntidad: "hnal",
+      destinoSiTitular: {
+        texto: DIRIS_CENTRO,
+        entidadDestinoCodigo: "diris-lc",
+      },
+      aplicaAlTitular: false,
+    });
+  });
+
+  it("un cargo de línea (no máximo) tampoco cuenta como titular", () => {
+    const resultado = evaluarTextoCorrupcion("El jefe de logística del Hospital Loayza me pidió coima");
+    expect(resultado.titular).toBeNull();
+    expect(resultado.referenciaDerivacion?.aplicaAlTitular).toBe(false);
+  });
+
+  it("entidad sin destino en la fuente: destinoSiTitular es null y aplicaAlTitular false", () => {
+    const catalogo = [
+      {
+        codigo: "x",
+        nombre: "Hospital Ficticio",
+        alias: [],
+        titular: {
+          cargo: "Director General",
+          cargosEquivalentes: [],
+          nombre: null,
+        },
+      },
+    ];
+    const resultado = evaluarTextoCorrupcion("El director general del Hospital Ficticio me pidió coima", {
+      entidades: catalogo,
+    });
+    expect(resultado.titular).not.toBeNull();
+    expect(resultado.referenciaDerivacion).toEqual({
+      codigoEntidad: "x",
+      contactosDisponibles: [],
+      destinoSiTitular: null,
+      aplicaAlTitular: false,
+    });
+  });
+
+  it("el destino explícito null también da null", () => {
+    const catalogo = [{ codigo: "x", nombre: "Hospital Ficticio", destinoSiTitular: null }];
+    const resultado = evaluarTextoCorrupcion("En el Hospital Ficticio me pidieron coima para atenderme", {
+      entidades: catalogo,
+    });
+    expect(resultado.referenciaDerivacion).toMatchObject({
+      destinoSiTitular: null,
+      aplicaAlTitular: false,
+    });
+  });
+
+  it("texto sin entidad del catálogo: referenciaDerivacion es null", () => {
+    const resultado = evaluarTextoCorrupcion("El director general me pidió coima para atenderme en la emergencia");
+    expect(resultado.propuestaCorrupcion).toBe(true);
+    expect(resultado.referenciaDerivacion).toBeNull();
   });
 });
 

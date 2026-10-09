@@ -27,6 +27,14 @@ export interface TitularCatalogo {
   nombre: string | null;
 }
 
+/** A dónde va la denuncia contra el titular de la entidad (columna "Destino si la denuncia es contra el titular" de la lista oficial). */
+export interface DestinoSiTitular {
+  /** Texto tal cual de la fuente, p. ej. "SIS (Sistema Integrado de Salud, según la nota (2*) de la lista)". */
+  texto: string;
+  /** `codigo` de la entidad del catálogo a la que apunta (ST PAD MINSA apunta a `minsa`); `null` si el destino no es una entidad del catálogo. */
+  entidadDestinoCodigo: string | null;
+}
+
 /**
  * Una entidad del catálogo (plan de cierre, paso 2). El nombre y los alias se buscan como secuencias de palabras. Solo
  * `codigo`, `nombre` y `alias` son obligatorios para buscar: un catálogo recibido por la ruta puede no traer el resto.
@@ -37,6 +45,8 @@ export interface EntidadCatalogo {
   tipo?: TipoEntidad;
   alias?: readonly string[];
   titular?: TitularCatalogo | null;
+  /** `null` o ausente: la fuente no trae destino para esta entidad (no se inventa). */
+  destinoSiTitular?: DestinoSiTitular | null;
   contactos?: ContactosEntidad | null;
   huecos?: readonly HuecoCatalogo[];
 }
@@ -83,6 +93,13 @@ export interface TitularDetectado {
 export interface ReferenciaDerivacion {
   codigoEntidad: string;
   contactosDisponibles: TipoContacto[];
+  /** `null` si la fuente no trae destino para la entidad. */
+  destinoSiTitular: DestinoSiTitular | null;
+  /**
+   * `true` si el texto menciona a la entidad y al cargo máximo (titular detectado): el destino es el de la denuncia contra el
+   * titular. `false` si solo se mencionó la entidad: el destino se informa pero no aplica a un titular. `false` también sin destino.
+   */
+  aplicaAlTitular: boolean;
 }
 
 /** Resultado del filtro. Es una propuesta: la persona que revisa siempre confirma o corrige, y el destino no sale de aquí. */

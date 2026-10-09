@@ -1,6 +1,7 @@
 // Generado por ia-poc/scripts/generar-catalogo.mjs; no editar a mano.
-// Fuente: nota "Catálogo de entidades y titulares - Denuncias de corrupción" (directorios de gob.pe leídos el 2026-10-07) y
-// ia-poc/datos/alias-entidades.json. Los nombres de los titulares rotan: solo se comparan como señal informativa, nunca deciden.
+// Fuente: nota "Catálogo de entidades y titulares - Denuncias de corrupción" (destino de la denuncia contra el titular y
+// directorios de gob.pe leídos el 2026-10-07) y ia-poc/datos/alias-entidades.json.
+// Los nombres de los titulares rotan: solo se comparan como señal informativa, nunca deciden.
 import { HuecoCatalogo, TipoEntidad } from "@/enums/filtro-corrupcion.enum.js";
 import type { EntidadCatalogo } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 
@@ -11,6 +12,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.MINISTERIO,
     alias: ["MINSA"],
     titular: { cargo: "Ministro de Salud", cargosEquivalentes: [], nombre: null },
+    destinoSiTitular: {
+      texto: "Servidores y funcionarios de todos los órganos de la administración central (excepción del Ministro)",
+      entidadDestinoCodigo: null,
+    },
     contactos: {
       OCI: [{ nombre: "Dante Aaron Yorges Avalos", cargo: "Jefe del Órgano de Control Institucional", correo: null }],
       SECRETARIA_TECNICA_PAD: null,
@@ -35,6 +40,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Jefe del SIS", "Jefe Institucional"],
       nombre: "Zulma Anaya Chacón",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Flavio Javier Aquize Díaz", cargo: "Jefe del OCI", correo: "faquize@sis.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -53,6 +62,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Jefe Institucional"],
       nombre: "Marco Antonio Salazar Rojas",
     },
+    destinoSiTitular: { texto: "SIS (Sistema Integrado de Salud, según la nota (2*) de la lista)", entidadDestinoCodigo: "sis" },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
       HuecoCatalogo.SIN_OCI,
@@ -72,6 +82,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Jefe Institucional"],
       nombre: "Víctor Javier Suárez Moreno",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Karin Sánchez Dávila", cargo: "Jefa del OCI", correo: "ksanchez@ins.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -86,6 +100,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.ORGANISMO,
     alias: ["SUSALUD"],
     titular: { cargo: "Superintendente", cargosEquivalentes: ["Jefe Institucional"], nombre: "Martin Alonso Tantalean Del Aguila" },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Ximenna Marcela Chino Salas", cargo: "Jefa del OCI", correo: "xchino@susalud.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -103,6 +121,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargo: "Jefe Institucional",
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Presidente Ejecutivo"],
       nombre: "Wilder Genaro Calmet Berrocal",
+    },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
     },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
@@ -123,6 +145,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Felix Dasio Ayala Peralta",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Carlos Ruben Moreno Leyva", cargo: "Jefe del OCI", correo: "cmoreno@iemp.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -140,6 +166,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargo: "Director General",
       cargosEquivalentes: ["Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Alfredo Federico Saavedra Castillo",
+    },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
     },
     contactos: {
       OCI: [{ nombre: "Ronal Antonio Rivera Huaman", cargo: "Jefe del OCI", correo: "rrivera@insm.gob.pe" }],
@@ -159,6 +189,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Erika Giraldo Vizcarra",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Julio César Balbín Mendoza", cargo: "Jefe del OCI", correo: "oci@inr.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -177,6 +211,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Melva Teodosia Benavides López",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Julia Soledad Luján Calvo", cargo: "Jefa del OCI", correo: "jlujan@insnsb.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -194,6 +232,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargo: "Director del Instituto Nacional de Ciencias Neurológicas",
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Juan Manuel Sifuentes Monge",
+    },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
     },
     contactos: {
       OCI: [{ nombre: "Yury Hugo Dávila Briceño", cargo: "Jefe del OCI", correo: "OCI-INCN@incn.gob.pe" }],
@@ -219,6 +261,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Eladio Benjamín Pimentel Román",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Paola Rossana Gonzales Albornoz", cargo: "Jefa del OCI", correo: "pgonzalesa@insn.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -236,6 +282,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargo: "Director General",
       cargosEquivalentes: ["Director Ejecutivo", "Jefe Institucional", "Presidente Ejecutivo"],
       nombre: "Félix Antonio Torres Cotrina",
+    },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
     },
     contactos: {
       OCI: [{ nombre: "Ericka Andrea Gómez Hidalgo", cargo: "Jefa del OCI", correo: null }],
@@ -263,6 +313,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Moisés Enrique Tambini Acosta",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)", entidadDestinoCodigo: "diris-le" },
     contactos: {
       OCI: [{ nombre: "Daniel Adolfo Olivas Ocaña", cargo: "Jefe del OCI", correo: "control.institucional@hnhu.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -281,6 +332,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Gloria Cueva Vergara",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)", entidadDestinoCodigo: "diris-le" },
     contactos: {
       OCI: [{ nombre: "Max Arturo Gómez Casaico", cargo: "Jefe del OCI", correo: "mgomez@hhv.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -299,6 +351,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Eduardo Franklin Yong Motta",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: [{ nombre: "Manuel Godofredo Arancel Díaz", cargo: "Jefe del OCI", correo: "marancel@hospitalloayza.gob.pe" }],
       SECRETARIA_TECNICA_PAD: [
@@ -324,6 +377,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Judy Soraya López Arias",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: [{ nombre: "Mery Angie Odicio Rivera", cargo: "Jefa del OCI", correo: "modicio@hvlh.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -342,6 +396,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Oscar Uchuya Maurtua",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA NORTE (Dirección de Redes Integradas de Salud Lima Norte)", entidadDestinoCodigo: "diris-ln" },
     contactos: {
       OCI: [{ nombre: "Jade Ruth Chávez Rosales", cargo: "Jefa del OCI", correo: null }],
       SECRETARIA_TECNICA_PAD: null,
@@ -360,6 +415,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Víctor Rafael Gonzáles Pérez",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: [{ nombre: "Omar Enrique Nalvarte Estrada", cargo: "Jefe del OCI", correo: null }],
       SECRETARIA_TECNICA_PAD: null,
@@ -378,6 +434,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Luis Marcelo Guzmán Aquije",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: [{ nombre: "Julio César Balbín Mendoza", cargo: "Jefe del OCI", correo: "jbalbin@hsr.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -396,6 +453,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Maycol Luis Baldeón Cruzado",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)", entidadDestinoCodigo: "diris-le" },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
       HuecoCatalogo.SIN_OCI,
@@ -415,6 +473,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Manuel Alberto Díaz De Los Santos",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA NORTE (Dirección de Redes Integradas de Salud Lima Norte)", entidadDestinoCodigo: "diris-ln" },
     contactos: {
       OCI: [{ nombre: "Nela Aliaga Ponce", cargo: "Jefa del OCI", correo: null }],
       SECRETARIA_TECNICA_PAD: null,
@@ -433,6 +492,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Raúl Hinostroza Castillo",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
       HuecoCatalogo.SIN_OCI,
@@ -452,6 +512,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Edgar Benito Pacheco",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA SUR (Dirección de Redes Integradas de Salud Lima Sur)", entidadDestinoCodigo: "diris-ls" },
     contactos: {
       OCI: [{ nombre: "Mariela Nicolasa Medina Chaupi", cargo: "Jefa del OCI", correo: "mmedinac@contraloria.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -470,6 +531,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Jorge Jáuregui Miranda",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: null,
       SECRETARIA_TECNICA_PAD: [{ nombre: "Luz Ofelia Martínez Velezmoro", cargo: "Secretaria Técnica", correo: null }],
@@ -488,6 +550,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Ofelia Rosaura Aguirre Romero",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: {
       OCI: [{ nombre: "Carlos Uldarico Bonett Portugal", cargo: "Jefe del OCI", correo: "carlos.bonettp@hospitalsjl.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -511,6 +574,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director del Hospital"],
       nombre: "Hugo Efrend Rojas Olivera",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA SUR (Dirección de Redes Integradas de Salud Lima Sur)", entidadDestinoCodigo: "diris-ls" },
     contactos: {
       OCI: [{ nombre: "Liana Valeria Díaz Chaña", cargo: "Jefa del OCI", correo: null }],
       SECRETARIA_TECNICA_PAD: [
@@ -531,6 +595,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director del Hospital"],
       nombre: "Luis Enrique Ríos Olivos",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA NORTE (Dirección de Redes Integradas de Salud Lima Norte)", entidadDestinoCodigo: "diris-ln" },
     contactos: {
       OCI: [{ nombre: "Marco Antonio Guevara Soto", cargo: "Jefe del OCI", correo: "oci@hcllh.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -549,6 +614,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director del Hospital"],
       nombre: "Juan Pablo Sachun Alanya",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)", entidadDestinoCodigo: "diris-le" },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
       HuecoCatalogo.SIN_OCI,
@@ -568,6 +634,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director Ejecutivo", "Director del Hospital"],
       nombre: "Aldo César Benel Chamaya",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud Lima Centro)", entidadDestinoCodigo: "diris-lc" },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
       HuecoCatalogo.SIN_OCI,
@@ -587,6 +654,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo", "Director del Hospital"],
       nombre: "Hugo Wiliam Peña Lovaton",
     },
+    destinoSiTitular: { texto: "DIRIS LIMA ESTE (Dirección de Redes Integradas de Salud Lima Este)", entidadDestinoCodigo: "diris-le" },
     contactos: {
       OCI: [{ nombre: "Graciela Quito Rivera", cargo: "Jefa del OCI", correo: "gquito@hlev.gob.pe" }],
       SECRETARIA_TECNICA_PAD: [
@@ -611,6 +679,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargosEquivalentes: ["Director General", "Director Ejecutivo"],
       nombre: "Patricia Isabel Suárez Beyodas",
     },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Livia Militza Calizaya De La Sota", cargo: "Jefa del OCI", correo: "lcalizaya@contraloria.gob.pe" }],
       SECRETARIA_TECNICA_PAD: [
@@ -633,6 +705,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.PROGRAMA,
     alias: ["PRONIS"],
     titular: { cargo: "Coordinador General", cargosEquivalentes: ["Director Ejecutivo"], nombre: "David Guillermo Miranda Herrera" },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Jesús Enrique Echavarria Pomalaza", cargo: "Jefe del OCI", correo: null }],
       SECRETARIA_TECNICA_PAD: null,
@@ -647,6 +723,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.DIRIS,
     alias: ["DIRIS Lima Este", "Dirección de Redes Integradas de Salud Lima Este"],
     titular: { cargo: "DIRECTOR GENERAL", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Norberto Yamunaqué Asanza" },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Katia Fabiola Ortiz Yañez", cargo: "Jefa del OCI", correo: "kortiz@dirislimaeste.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -664,6 +744,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
       cargo: "DIRECTORA GENERAL",
       cargosEquivalentes: ["Director General", "Director de la DIRIS"],
       nombre: "Libny Betsabeth More Huamán",
+    },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
     },
     contactos: {
       OCI: [{ nombre: "Elizabeth Ruth Ríos Chuquinaupa", cargo: "Jefa del OCI", correo: "elizabeth.rios@dirisln.gob.pe" }],
@@ -685,6 +769,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.DIRIS,
     alias: ["DIRIS LC", "DIRIS Lima Centro", "Dirección de Redes Integradas de Salud Lima Centro"],
     titular: { cargo: "Director General", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Julio Miguel Flores Retuerto" },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Lisbeth Carolina Lopez Peña", cargo: "Jefa del OCI", correo: "oci@dirislimacentro.gob.pe" }],
       SECRETARIA_TECNICA_PAD: null,
@@ -699,6 +787,10 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     tipo: TipoEntidad.DIRIS,
     alias: ["DIRIS LS", "DIRIS Lima Sur", "Dirección de Redes Integradas de Salud Lima Sur"],
     titular: { cargo: "Director General", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Mario Eduardo Izquierdo Hernández" },
+    destinoSiTitular: {
+      texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
+      entidadDestinoCodigo: "minsa",
+    },
     contactos: {
       OCI: [{ nombre: "Merici De Los Ángeles Huertas Navarro", cargo: "Jefa del OCI", correo: "mhuertas@dirislimasur.gob.pe" }],
       SECRETARIA_TECNICA_PAD: [

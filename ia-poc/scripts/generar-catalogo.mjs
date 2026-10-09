@@ -1,5 +1,5 @@
-// Genera src/services/filtro-corrupcion/catalogo-entidades.data.ts desde las secciones 1 (Titulares) y 2 (Contactos de
-// derivación) de la nota del vault "Catálogo de entidades y titulares - Denuncias de corrupción", mezclando los alias
+// Genera src/services/filtro-corrupcion/catalogo-entidades.data.ts desde las secciones 1 (Titulares, con la columna "Destino si la
+// denuncia es contra el titular") y 2 (Contactos de derivación) de la nota del vault "Catálogo de entidades y titulares - Denuncias de corrupción", mezclando los alias
 // escritos a mano de ia-poc/datos/alias-entidades.json.
 //
 // Uso (desde la raíz del repo):  node ia-poc/scripts/generar-catalogo.mjs [ruta-a-la-nota.md]
@@ -50,6 +50,21 @@ const TIPOS_POR_NOMBRE = [
   [/^superintendencia\b/, "ORGANISMO"],
   [/^centro nacional\b/, "CENTRO"],
   [/^programa nacional\b/, "PROGRAMA"],
+];
+
+/**
+ * Destino de la denuncia contra el titular (nota, sección 1): prefijo del texto, normalizado, y entidad del catálogo a la
+ * que apunta. ST PAD MINSA es un órgano del MINSA, no una entidad del catálogo: apunta a `minsa`. El destino del MINSA
+ * ("Servidores y funcionarios de todos los órganos...") no es una entidad: solo texto. Un destino sin regla detiene el generador.
+ */
+const DESTINOS_TITULAR = [
+  [/^sis\b/, "sis"],
+  [/^st pad minsa\b/, "minsa"],
+  [/^diris lima este\b/, "diris-le"],
+  [/^diris lima norte\b/, "diris-ln"],
+  [/^diris lima centro\b/, "diris-lc"],
+  [/^diris lima sur\b/, "diris-ls"],
+  [/^servidores y funcionarios\b/, null],
 ];
 
 const CONTACTOS = [
@@ -121,6 +136,13 @@ function tipoDe(nombre) {
   return regla[1];
 }
 
+function destinoSiTitular(celda, contexto) {
+  if (celda === "" || celda === SIN_DATO) return null;
+  const regla = DESTINOS_TITULAR.find(([patron]) => patron.test(normalizar(celda)));
+  if (!regla) falla(`destino sin regla en ${contexto}: "${celda}". Agrégalo en DESTINOS_TITULAR`);
+  return { texto: celda, entidadDestinoCodigo: regla[1] };
+}
+
 function parsearContactos(celda, contexto) {
   if (celda === SIN_DATO) return null;
   return celda.split(/<br\s*\/?>/).map((entrada) => {
@@ -151,7 +173,7 @@ const contactosPorNumero = new Map(filas(seccion(nota, "2. Contactos de derivaci
 
 const aliasManualesUsados = [];
 const entidades = titulares.map((celdas) => {
-  const [numero, entidadCelda, sigla, , cargo, titularNombre = "", notaTitular = ""] = celdas;
+  const [numero, entidadCelda, sigla, destinoCelda = "", cargo, titularNombre = "", notaTitular = ""] = celdas;
   const filaContactos = contactosPorNumero.get(numero);
   if (!filaContactos) falla(`la entidad ${numero} no tiene fila en la sección 2`);
   if (filaContactos[1] !== sigla)
@@ -167,6 +189,7 @@ const entidades = titulares.map((celdas) => {
   aliasManualesUsados.push(...aliasManual.map((alias) => `${codigo}: ${alias}`));
   const alias = [...new Set([...(excluidas.has(sigla) ? [] : [siglaLimpia(sigla)]), ...aliasManual])];
 
+  const destino = destinoSiTitular(destinoCelda, numero);
   // MINSA no trae cargo en la tabla ("Ver la hoja...") y el Ministro está excluido de la regla de destino: se toma el cargo máximo de la clase.
   const cargoOficial = /^ver la hoja/i.test(cargo) ? CARGOS_MAXIMOS_POR_TIPO[tipo][0] : cargo;
   const cargosEquivalentes = CARGOS_MAXIMOS_POR_TIPO[tipo].filter((c) => normalizar(c) !== normalizar(cargoOficial));
@@ -176,6 +199,7 @@ const entidades = titulares.map((celdas) => {
     tipo,
     alias,
     titular: { cargo: cargoOficial, cargosEquivalentes, nombre: titularNombre === "" ? null : titularNombre },
+    destinoSiTitular: destino,
     contactos,
     huecos: huecosDe({ titularNombre, notaTitular, contactos, notaContactos: filaContactos[6] ?? "" }),
   };
@@ -191,21 +215,27 @@ for (const { codigo, nombre, alias } of entidades) {
   }
 }
 if (new Set(entidades.map(({ codigo }) => codigo)).size !== entidades.length) falla("hay códigos repetidos");
+const codigos = new Set(entidades.map(({ codigo }) => codigo));
+for (const { codigo, destinoSiTitular: d } of entidades)
+  if (d?.entidadDestinoCodigo && !codigos.has(d.entidadDestinoCodigo))
+    falla(`el destino de ${codigo} apunta a "${d.entidadDestinoCodigo}", que no está en el catálogo`);
 
 const literal = (valor) => JSON.stringify(valor);
-const entidadComoTs = ({ codigo, nombre, tipo, alias, titular, contactos, huecos }) => `{
+const entidadComoTs = ({ codigo, nombre, tipo, alias, titular, destinoSiTitular: destino, contactos, huecos }) => `{
   codigo: ${literal(codigo)},
   nombre: ${literal(nombre)},
   tipo: TipoEntidad.${tipo},
   alias: ${literal(alias)},
   titular: ${literal(titular)},
+  destinoSiTitular: ${literal(destino)},
   contactos: ${literal(contactos)},
   huecos: [${huecos.map((hueco) => `HuecoCatalogo.${hueco}`).join(", ")}],
 }`;
 
 const codigoTs = `// Generado por ia-poc/scripts/generar-catalogo.mjs; no editar a mano.
-// Fuente: nota "Catálogo de entidades y titulares - Denuncias de corrupción" (directorios de gob.pe leídos el ${fechaLectura}) y
-// ia-poc/datos/alias-entidades.json. Los nombres de los titulares rotan: solo se comparan como señal informativa, nunca deciden.
+// Fuente: nota "Catálogo de entidades y titulares - Denuncias de corrupción" (destino de la denuncia contra el titular y
+// directorios de gob.pe leídos el ${fechaLectura}) y ia-poc/datos/alias-entidades.json.
+// Los nombres de los titulares rotan: solo se comparan como señal informativa, nunca deciden.
 import { HuecoCatalogo, TipoEntidad } from "@/enums/filtro-corrupcion.enum.js";
 import type { EntidadCatalogo } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 
@@ -217,6 +247,8 @@ ${entidades.map(entidadComoTs).join(",\n")},
 const configuracion = (await resolveConfig(SALIDA.pathname)) ?? {};
 writeFileSync(SALIDA, await format(codigoTs, { ...configuracion, parser: "typescript", printWidth: 140 }));
 
+const sinDestino = entidades.filter(({ destinoSiTitular: d }) => d === null).map(({ codigo }) => codigo);
+console.log(`Con destino si la denuncia es contra el titular: ${entidades.length - sinDestino.length}; sin destino: ${sinDestino.join(", ") || "ninguna"}`);
 const conHuecos = entidades.filter(({ huecos }) => huecos.length > 0);
 console.log(`${entidades.length} entidades escritas en src/services/filtro-corrupcion/catalogo-entidades.data.ts`);
 console.log(`Alias manuales mezclados (${aliasManualesUsados.length}): ${aliasManualesUsados.join(" | ")}`);

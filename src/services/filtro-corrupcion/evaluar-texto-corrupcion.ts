@@ -235,11 +235,17 @@ function detectarTitular(
   };
 }
 
-/** Qué contactos de derivación tiene la entidad en el catálogo (la ficha completa es otra fase). */
-function referenciaDe(catalogo: EntidadCatalogo): ReferenciaDerivacion {
+/**
+ * Qué contactos de derivación tiene la entidad en el catálogo y a dónde va la denuncia contra su titular (la ficha completa es
+ * otra fase). El destino se informa siempre que la fuente lo traiga; `aplicaAlTitular` dice si el texto señala al titular.
+ */
+function referenciaDe(catalogo: EntidadCatalogo, titular: TitularDetectado | null): ReferenciaDerivacion {
+  const destino = catalogo.destinoSiTitular ?? null;
   return {
     codigoEntidad: catalogo.codigo,
     contactosDisponibles: Object.values(TipoContacto).filter((tipo) => catalogo.contactos?.[tipo] != null),
+    destinoSiTitular: destino,
+    aplicaAlTitular: destino !== null && titular !== null,
   };
 }
 
@@ -287,6 +293,7 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
   const palabras = quitarMontos(tokenizar(recortado));
   const actor = detectarActor(palabras);
   const entidad = detectarEntidad(palabras, contexto.entidades ?? CATALOGO_ENTIDADES);
+  const titular = detectarTitular(actor?.actor ?? null, entidad?.catalogo, palabras);
   const nombreMencionado = detectarNombreMencionado(recortado);
   const senales = [...detectarSenales(palabras), ...(actor ? [actor.senal] : []), ...(entidad ? [entidad.senal] : [])];
 
@@ -311,10 +318,10 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
     actor: actor?.actor ?? null,
     nombreMencionado,
     entidad: entidad?.entidad ?? null,
-    titular: detectarTitular(actor?.actor ?? null, entidad?.catalogo, palabras),
+    titular,
     faltantes,
     requiereOtrans: propuestaCorrupcion,
-    referenciaDerivacion: propuestaCorrupcion && entidad ? referenciaDe(entidad.catalogo) : null,
+    referenciaDerivacion: propuestaCorrupcion && entidad ? referenciaDe(entidad.catalogo, titular) : null,
     versionReglas: VERSION_REGLAS_CORRUPCION,
   };
 }

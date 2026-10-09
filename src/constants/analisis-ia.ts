@@ -1,0 +1,43 @@
+import { VarianteIa } from "@/enums/analisis-ia.enum.js";
+
+/**
+ * Parámetros fijos del modelo local. Copian `ia-poc/modelo/parametros.json` (que queda fuera de `src` y por eso no se importa);
+ * el script de evaluación lee ese archivo y los pasa como configuración, así que la fuente de verdad de las corridas es el JSON.
+ */
+export const OLLAMA_URL_POR_DEFECTO = "http://localhost:11434";
+export const MODELO_POR_DEFECTO = "qwen3.5-9b-local";
+export const OLLAMA_KEEP_ALIVE_POR_DEFECTO = "30m";
+export const OLLAMA_OPCIONES_POR_DEFECTO = {
+  temperature: 0,
+  seed: 7,
+  num_ctx: 4096,
+} as const;
+
+/** Tiempo máximo de una llamada. La primera llamada en frío tarda unos 2 minutos: precalentar con `ia-poc/scripts/precalentar.mjs`. */
+export const TIEMPO_MAXIMO_MODELO_MS = 120_000;
+/** Reintentos con el mismo prompt si el JSON no valida o hay un error de red (no se reintenta un tiempo agotado). */
+export const REINTENTOS_MODELO = 1;
+
+/** Variante que usa el análisis si no se pide otra. Se fija con las mediciones de desarrollo (ia-poc/README.md). */
+export const VARIANTE_POR_DEFECTO: VarianteIa = VarianteIa.V2;
+
+/** Límites de la salida del modelo: una salida corta es lo que más baja la latencia (unos 15 tokens por segundo). */
+export const EXPLICACION_MAXIMA_CARACTERES = 400;
+export const ALTERNATIVAS_MAXIMAS = 3;
+export const SENALES_MAXIMAS = 4;
+export const FRASE_MAXIMA_CARACTERES = 160;
+export const CARGO_MAXIMO_CARACTERES = 80;
+export const INFORMACION_FALTANTE_MAXIMA = 4;
+
+/** Si la probabilidad de queja y de reclamo difiere menos que esto, se considera empate y se propone Reclamo con revisión humana. */
+export const MARGEN_EMPATE_QUEJA_RECLAMO = 0.15;
+
+/**
+ * Si el modelo marca `posible_corrupcion` pero su peso es bajo, el peso efectivo sube a este piso. Es una palanca de sensibilidad
+ * para medir (no el comportamiento por defecto: `null`), porque el modelo no decide, solo pesa.
+ */
+export const PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO: number | null = null;
+
+/** El análisis solo corre en el endpoint de pruebas si `IA_POC_HABILITADA=true`. */
+export const RUTA_ANALISIS_IA = "/ia-poc/analizar";
+export const ESTABLECIMIENTO_MAXIMO_CARACTERES = 200;

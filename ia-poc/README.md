@@ -80,6 +80,15 @@ npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2 --b=V2C --conjunto=ia-poc/ev
 
 **Resultado (V2 frente a V2C, 2026-10-09).** Veredicto final: **Viable con reservas**. Desarrollo-v2 (303, iteración 1): recall reglas + modelo 97,3 % (IC 93,8 a 98,8), FP 7,5 %, JSON al primer intento 100 %, latencia media 3,14 s, p90 3,76 s, 4,7 veces más rápida que V2; solo falla Q4 por 0,12 puntos (acuerdo queja/reclamo 84,88 % frente a 85 %, un mensaje). Prueba-v2 (119 ids de V2, una sola corrida): cumple todo (recall 100 %, FP 8,5 % frente a 10,6 % de V2, latencia 3,07 s, p90 3,56 s). Detalle y límites en la sección 22 de la nota del vault.
 
+## Normas para la trazabilidad (RAG fase 1)
+
+`datos/fragmentos-normas.json` (versión `normas-v1`) tiene 29 fragmentos con texto literal: los 20 supuestos del Anexo C de la Directiva N° 002-2023-PCM-SIP y 9 de la ayuda memoria de OTRANS (definición de denuncia por acto de corrupción, criterios de evaluación, los cuatro requisitos del hecho denunciado, derivación a la STPAD, el OCI o la PP, derivación de quejas y reclamos, y la definición de reclamo de SUSALUD). `scripts/generar-normas.mjs` valida el JSON (ids únicos, fuente y tipo conocidos, texto no vacío) y genera `src/services/analisis-ia/normas/fragmentos-normas.data.ts`; correrlo después de editar el JSON.
+
+- **El Anexo C está transcrito a ojo** desde dos imágenes EMF del Word, sin OCR, y **no se ha cotejado con el documento oficial**: el JSON lo dice (`transcripcionAnexoCCotejada: false`) y el paquete lo repite. Los fragmentos de la ayuda memoria salen del texto del Word, con sus erratas («JAFAS», «fe los servicios»).
+- `citaAutomatica: false` en el cohecho activo (III-a): no se cita contra quien cuenta que pagó una coima.
+- El mapa señal → supuesto está en `src/services/analisis-ia/normas/mapa-senal-fragmento.ts`; se corrige como datos. Sin regla por ahora: II-b, III-a y III-g.
+- Cobertura de referencia (reglas solas, sin modelo, `desarrollo-v2`): de 109 corrupciones que las reglas proponen, 89 reciben al menos un supuesto y 20 dicen «no se encontró». El mapa no se ajustó mirando esos datos; no mide si la cita es la que OTRANS aplicaría.
+
 ## Contrato del peso del modelo (`peso_corrupcion`)
 
 El modelo **no decide** la categoría: da un peso que se **suma** al puntaje de las reglas (`combinarReglasConIa` en `src/services/filtro-corrupcion/combinar-reglas-con-ia.ts`).

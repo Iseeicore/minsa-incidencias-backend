@@ -8,6 +8,7 @@ import type {
 } from "@/enums/analisis-ia.enum.js";
 import type { SenalSensible } from "@/enums/filtro-corrupcion.enum.js";
 import type { SalidaIa } from "@/services/analisis-ia/esquema-salida.js";
+import type { TrazabilidadNormas } from "@/services/analisis-ia/normas/normas.types.js";
 import type {
   ContextoEvaluacion,
   ReferenciaDerivacion,
@@ -94,6 +95,11 @@ export interface PaqueteAnalisis {
   /** `true` si queja y reclamo quedaron empatados y se propuso Reclamo. */
   empateQuejaReclamo: boolean;
   variante: VarianteIa | null;
+  /**
+   * Trazabilidad con la norma (Directiva N° 002-2023-PCM-SIP, Anexo C, y ayuda memoria de OTRANS), hecha por el código con las señales de
+   * las reglas: el modelo no escribe citas. Referencia orientativa; la califica OTRANS.
+   */
+  trazabilidadNormas: TrazabilidadNormas;
   reglas: ResultadoCorrupcion;
   combinacion: ResultadoCombinacion;
   /** Lo que respondió el modelo, validado (completa o compacta); `null` si no se consultó o falló. */

@@ -27,6 +27,7 @@ import {
   fundamentosDeReglas,
   informacionFaltanteDeReglas,
 } from "@/services/analisis-ia/plantillas-paquete.js";
+import { construirTrazabilidadNormas } from "@/services/analisis-ia/normas/citar-normas.js";
 import { construirPeticion } from "@/services/analisis-ia/prompts.js";
 import {
   combinarReglasConIa,
@@ -207,6 +208,11 @@ export async function analizarMensaje(
     empateQuejaReclamo: categoria.empate,
     sinDesempateQuejaReclamo: compacta && salida !== null,
     variante: reglas.aplica ? variante : null,
+    trazabilidadNormas: construirTrazabilidadNormas({
+      reglas,
+      propuesta: categoria.propuesta,
+      propuestaCorrupcion: combinacion.propuestaCorrupcion,
+    }),
     reglas,
     combinacion,
     salidaModelo: salida,

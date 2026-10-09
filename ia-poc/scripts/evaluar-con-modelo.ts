@@ -1,8 +1,9 @@
 // Evalúa reglas + modelo local (Ollama) contra un conjunto de mensajes etiquetados (JSON Lines).
 // Uso (desde la raíz del repo):
-//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3|V2C --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache] [--ids-de=V2]
+//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3|V2C|V2R --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache] [--ids-de=V2]
 // Una sola GPU: se consulta de a un mensaje. Cada respuesta válida se guarda en `ia-poc/evaluacion/cache/modelo-<variante>-<conjunto>.jsonl`
 // (por variante e id) y una corrida cortada se reanuda sola. El resumen se guarda SIN textos en `ia-poc/evaluacion/resultados/modelo-<variante>-<conjunto>.json`.
+// V2R (casos revisados con pg_trgm): antes hay que correr `ia-poc/scripts/preparar-vecinos.ts` para el mismo conjunto; esta corrida no usa la base.
 // Antes de correr: `node ia-poc/scripts/precalentar.mjs` (la primera llamada en frío tarda unos 2 minutos).
 import {
   appendFileSync,
@@ -18,6 +19,7 @@ import {
   analizarMensaje,
   pesoEfectivoDelModelo,
 } from "@/services/analisis-ia/analizar-mensaje.js";
+import type { CasoSimilar } from "@/services/analisis-ia/casos/casos.types.js";
 import type {
   ClienteModelo,
   MetricasModelo,
@@ -40,6 +42,14 @@ interface LineaDeCache {
   variante: VarianteIa;
   salida: SalidaIa;
   metricas: MetricasModelo;
+  /** Solo V2R: los ids de los casos que se le mostraron al modelo (una respuesta cacheada con otros casos no vale). */
+  vecinos?: string[];
+}
+
+interface LineaDeVecinos {
+  id: string;
+  vecinos: { id: string; categoria: string; similitud: number }[];
+  casiDuplicadosDescartados: number;
 }
 
 interface Metricas {
@@ -128,9 +138,45 @@ const clienteOllama = crearClienteOllama({
   opciones: parametros.options,
 });
 
+// V2R: los vecinos y los textos del banco salen de `preparar-vecinos.ts` y de los conjuntos del banco; la corrida no usa la base.
+const BANCO_V2R = [
+  "ia-poc/evaluacion/desarrollo.jsonl",
+  "ia-poc/evaluacion/prueba-t1.jsonl",
+];
+const vecinosDe = new Map<string, LineaDeVecinos>();
+const textoDelBanco = new Map<string, string>();
+if (variante === VarianteIa.V2R) {
+  const rutaVecinos = resolve(
+    carpetaEvaluacion,
+    "cache",
+    `vecinos-${nombreConjunto}.jsonl`,
+  );
+  if (!existsSync(rutaVecinos)) {
+    console.error(
+      `Falta ${rutaVecinos}: corre antes ia-poc/scripts/preparar-vecinos.ts para este conjunto.`,
+    );
+    process.exit(2);
+  }
+  for (const l of leerLineas<LineaDeVecinos>(rutaVecinos))
+    vecinosDe.set(l.id, l);
+  for (const ruta of BANCO_V2R)
+    for (const c of leerLineas<{ id: string; texto: string }>(resolve(ruta)))
+      textoDelBanco.set(c.id, c.texto);
+}
+const idsDeVecinos = (id: string): string[] =>
+  (vecinosDe.get(id)?.vecinos ?? []).map((v) => v.id);
+const mismosVecinos = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
 const cache = new Map(
   leerLineas<LineaDeCache>(rutaCache)
     .filter((l) => l.variante === variante)
+    // V2R: una respuesta guardada con otros casos (otro banco, otros parámetros) se descarta y se vuelve a consultar.
+    .filter(
+      (l) =>
+        variante !== VarianteIa.V2R ||
+        mismosVecinos(l.vecinos ?? [], idsDeVecinos(l.id)),
+    )
     .map((l) => [l.id, l]),
 );
 const todos = leerLineas<Mensaje>(resolve(rutaConjunto));
@@ -201,6 +247,7 @@ const clienteCacheado = (id: string): ClienteModelo => ({
         variante: variante as VarianteIa,
         salida: resultado.salida,
         metricas: resultado.metricas,
+        ...(variante === VarianteIa.V2R ? { vecinos: idsDeVecinos(id) } : {}),
       };
       cache.set(id, linea);
       appendFileSync(rutaCache, JSON.stringify(linea) + "\n");
@@ -255,6 +302,30 @@ const percentil = (ordenados: readonly number[], p: number): number | null => {
 const media = (v: readonly number[]): number | null =>
   v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length;
 
+/** Los casos que `preparar-vecinos.ts` ya recuperó para este mensaje, con su texto del banco (el texto va al prompt, nunca al informe). */
+function recuperacionDe(id: string): {
+  casos: CasoSimilar[];
+  casiDuplicadosDescartados: number;
+} {
+  const linea = vecinosDe.get(id);
+  return {
+    casos: (linea?.vecinos ?? []).flatMap((v) => {
+      const texto = textoDelBanco.get(v.id);
+      return texto === undefined
+        ? []
+        : [
+            {
+              id: v.id,
+              categoria: v.categoria as CasoSimilar["categoria"],
+              similitud: v.similitud,
+              texto,
+            },
+          ];
+    }),
+    casiDuplicadosDescartados: linea?.casiDuplicadosDescartados ?? 0,
+  };
+}
+
 const inicio = Date.now();
 const filas: Fila[] = [];
 let cortadoPorTiempo = false;
@@ -273,7 +344,13 @@ for (const [indice, mensaje] of mensajes.entries()) {
   const paquete = await analizarMensaje(
     mensaje.texto,
     {},
-    { variante, cliente: clienteCacheado(mensaje.id) },
+    {
+      variante,
+      cliente: clienteCacheado(mensaje.id),
+      ...(variante === VarianteIa.V2R
+        ? { recuperarCasos: async () => recuperacionDe(mensaje.id) }
+        : {}),
+    },
   );
   if (!estabaEnCache) consultasNuevas++;
   filas.push({

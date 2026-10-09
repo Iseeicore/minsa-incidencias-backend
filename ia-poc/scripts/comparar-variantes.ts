@@ -7,6 +7,8 @@
 //   --universo-b=conjunto (por defecto)  B se mide sobre todo el conjunto (desarrollo completo).
 //   --universo-b=ids-de-a                B se mide sobre los ids que A tiene en su caché (prueba: los mismos 119 ids de V2).
 //   --desarrollo=<json>                  agrega el veredicto final combinando este conjunto con el de desarrollo (sección 21: Q1 en los dos).
+//   --criterios=21 (por defecto)         criterios de la sección 21 (V2C frente a V2).
+//   --criterios=25                       criterios de la sección 25 (V2R frente a V2C, RAG de casos revisados); pide antes `preparar-vecinos.ts`.
 // Los criterios y el veredicto salen de `src/services/analisis-ia/comparacion-variantes.ts` (umbrales de la sección 21 del vault).
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
@@ -29,6 +31,14 @@ import {
   type MedidasParaCriterios,
   type ResultadoCriterio,
 } from "@/services/analisis-ia/comparacion-variantes.js";
+import {
+  decidirVeredictoSeccion25,
+  evaluarCriteriosSeccion25,
+  gananciaNeta,
+  IdCriterio25,
+  UMBRALES_SECCION_25,
+  type MedidasSeccion25,
+} from "@/services/analisis-ia/comparacion-casos.js";
 import type { SalidaIa } from "@/services/analisis-ia/esquema-salida.js";
 import { combinarReglasConIa } from "@/services/filtro-corrupcion/combinar-reglas-con-ia.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
@@ -67,6 +77,7 @@ const varianteB = valorDe("b") as VarianteIa | undefined;
 const rutaConjunto = valorDe("conjunto");
 const universoB = valorDe("universo-b") ?? "conjunto";
 const rutaDesarrollo = valorDe("desarrollo");
+const seccion25 = valorDe("criterios") === "25";
 const variantesValidas: string[] = Object.values(VarianteIa);
 
 if (
@@ -164,7 +175,9 @@ function corrupcion(
 function categorias(filas: readonly Fila[], cache: Cache) {
   const conSalida = filas.filter((f) => cache.has(f.mensaje.id));
   const acierta = conSalida.filter(
-    (f) => cache.get(f.mensaje.id)?.salida.categoria === f.mensaje.categoria_esperada,
+    (f) =>
+      cache.get(f.mensaje.id)?.salida.categoria ===
+      f.mensaje.categoria_esperada,
   ).length;
   const esQR = (c: string | undefined): boolean => c === QUEJA || c === RECLAMO;
   const qr = conSalida.filter(
@@ -174,7 +187,8 @@ function categorias(filas: readonly Fila[], cache: Cache) {
   );
   const acuerdoQR = qr.filter(
     (f) =>
-      cache.get(f.mensaje.id)?.salida.categoria === f.mensaje.categoria_esperada,
+      cache.get(f.mensaje.id)?.salida.categoria ===
+      f.mensaje.categoria_esperada,
   ).length;
   return {
     exactitud4Categorias: razon(acierta, conSalida.length),
@@ -248,19 +262,17 @@ const resumenBUniverso = resumenDe(universo, cacheB, primeraB);
 const marcaDelModelo = (cache: Cache, f: Fila): boolean =>
   cache.get(f.mensaje.id)?.salida.posible_corrupcion ?? false;
 const paresDeMarca = (marca: (cache: Cache, f: Fila) => boolean) =>
-  pares.map(
-    (f): MarcaPareada => ({
-      id: f.mensaje.id,
-      tipoCaso: f.mensaje.tipo_caso ?? null,
-      marcaA: marca(cacheA, f),
-      marcaB: marca(cacheB, f),
-      esperadoCorrupcion: f.esperadoCorrupcion,
-    }),
-  );
+  pares.map((f): MarcaPareada => ({
+    id: f.mensaje.id,
+    tipoCaso: f.mensaje.tipo_caso ?? null,
+    marcaA: marca(cacheA, f),
+    marcaB: marca(cacheB, f),
+    esperadoCorrupcion: f.esperadoCorrupcion,
+  }));
 const paresModelo = paresDeMarca(marcaDelModelo);
 const paresFinal = paresDeMarca((cache, f) => propone(f, cache, piso));
 
-const medidas: MedidasParaCriterios = {
+const medidas21: MedidasParaCriterios = {
   recallB: resumenBUniverso.reglasMasModeloConPiso.recall,
   recallParesA: resumenA.reglasMasModeloConPiso.recall,
   recallParesB: resumenBPares.reglasMasModeloConPiso.recall,
@@ -277,17 +289,106 @@ const medidas: MedidasParaCriterios = {
   latenciaMediaParesA: resumenA.latencia.mediaMs,
   latenciaMediaParesB: resumenBPares.latencia.mediaMs,
 };
-const criterios = evaluarCriterios(medidas);
-const veredicto = decidirVeredicto(criterios);
 
-let veredictoFinal: ReturnType<typeof decidirVeredicto> | null = null;
+// Sección 25 (V2R frente a V2C): categorías por mensaje, ganancia neta y chequeos de higiene (H1 a H3).
+const aciertaCategoria = (cache: Cache, f: Fila): boolean =>
+  cache.get(f.mensaje.id)?.salida.categoria === f.mensaje.categoria_esperada;
+const paresDeCategoria = pares.map((f) => ({
+  id: f.mensaje.id,
+  tipoCaso: f.mensaje.tipo_caso ?? null,
+  aciertaR: aciertaCategoria(cacheB, f),
+  aciertaBase: aciertaCategoria(cacheA, f),
+}));
+const rutaVecinos = resolve(
+  carpeta,
+  "resultados",
+  `vecinos-${nombreConjunto}.json`,
+);
+if (seccion25 && !existsSync(rutaVecinos)) {
+  console.error(
+    `Falta ${rutaVecinos}: corre antes ia-poc/scripts/preparar-vecinos.ts.`,
+  );
+  process.exit(2);
+}
+const vecinos = seccion25
+  ? (JSON.parse(readFileSync(rutaVecinos, "utf8")) as {
+      higiene: {
+        H1_casosDelBancoEnElConjunto: number;
+        H2_paresCasiDuplicadoEnElPrompt: number;
+      };
+    })
+  : null;
+const medidas25 = (textosEnElInforme: number): MedidasSeccion25 => ({
+  umbralGananciaNeta:
+    nombreConjunto === "prueba-v2"
+      ? UMBRALES_SECCION_25.M1_GANANCIA_NETA_PRUEBA
+      : UMBRALES_SECCION_25.M1_GANANCIA_NETA_DESARROLLO,
+  recallR: resumenBUniverso.reglasMasModeloConPiso.recall,
+  falsosNegativosR: Number(resumenBPares.reglasMasModeloConPiso.fn),
+  falsosNegativosBase: Number(resumenA.reglasMasModeloConPiso.fn),
+  fpR: resumenBUniverso.reglasMasModeloConPiso.tasaFp,
+  fpParesR: resumenBPares.reglasMasModeloConPiso.tasaFp,
+  fpParesBase: resumenA.reglasMasModeloConPiso.tasaFp,
+  jsonPrimerIntentoR: resumenBUniverso.jsonPrimerIntento.tasa,
+  latenciaMediaR: resumenBUniverso.latencia.mediaMs,
+  latenciaMediaBase: resumenA.latencia.mediaMs,
+  p90R: resumenBUniverso.latencia.p90Ms,
+  gananciaNetaCategoria:
+    pares.length === 0 ? null : gananciaNeta(paresDeCategoria),
+  acuerdoQuejaReclamoR: resumenBUniverso.categorias.acuerdoQuejaReclamo,
+  acuerdoQuejaReclamoBase: resumenA.categorias.acuerdoQuejaReclamo,
+  exactitudR: resumenBPares.categorias.exactitud4Categorias,
+  exactitudBase: resumenA.categorias.exactitud4Categorias,
+  casosDelBancoEnElConjunto: vecinos?.higiene.H1_casosDelBancoEnElConjunto ?? 0,
+  paresCasiDuplicadoEnElPrompt:
+    vecinos?.higiene.H2_paresCasiDuplicadoEnElPrompt ?? 0,
+  textosEnElInforme,
+});
+
+/** H3: cuenta cuántos textos de mensajes (del conjunto y del banco) aparecen dentro del informe serializado. Debe ser 0. */
+const textosDeBanco = seccion25
+  ? [
+      "ia-poc/evaluacion/desarrollo.jsonl",
+      "ia-poc/evaluacion/prueba-t1.jsonl",
+    ].flatMap((r) => leerLineas<Mensaje>(resolve(r)).map((m) => m.texto))
+  : [];
+const contarTextosEn = (informe: string): number =>
+  [...mensajes.map((m) => m.texto), ...textosDeBanco].filter(
+    (t) => t.trim().length > 20 && informe.includes(t),
+  ).length;
+
+type Veredictos = { veredicto: string; motivo: string };
+let medidas: object = medidas21;
+let criterios: ResultadoCriterio[];
+let veredicto: Veredictos;
+if (seccion25) {
+  const sinTextos = medidas25(0);
+  const cuerpo = JSON.stringify({
+    pareado: [resumenA, resumenBPares],
+    absoluto: resumenBUniverso,
+    sinTextos,
+  });
+  medidas = medidas25(contarTextosEn(cuerpo));
+  criterios = evaluarCriteriosSeccion25(medidas as MedidasSeccion25);
+  veredicto = decidirVeredictoSeccion25(criterios);
+} else {
+  criterios = evaluarCriterios(medidas21);
+  veredicto = decidirVeredicto(criterios);
+}
+
+let veredictoFinal: Veredictos | null = null;
 let criteriosFinales: ResultadoCriterio[] | null = null;
 if (rutaDesarrollo) {
   const previo = JSON.parse(readFileSync(resolve(rutaDesarrollo), "utf8")) as {
     criterios: ResultadoCriterio[];
   };
-  criteriosFinales = combinarCriterios([previo.criterios, criterios]);
-  veredictoFinal = decidirVeredicto(criteriosFinales);
+  criteriosFinales = combinarCriterios(
+    [previo.criterios, criterios],
+    seccion25 ? Object.values(IdCriterio25) : undefined,
+  );
+  veredictoFinal = seccion25
+    ? decidirVeredictoSeccion25(criteriosFinales)
+    : decidirVeredicto(criteriosFinales);
 }
 
 const resultado = {
@@ -313,6 +414,21 @@ const resultado = {
     marcaDelModelo: paresDiscordantes(paresModelo),
     propuestaFinal: paresDiscordantes(paresFinal),
   },
+  ...(seccion25
+    ? {
+        seccion: 25,
+        gananciaNetaCategoria: {
+          neta: gananciaNeta(paresDeCategoria),
+          soloR: paresDeCategoria
+            .filter((x) => x.aciertaR && !x.aciertaBase)
+            .map((x) => ({ id: x.id, tipoCaso: x.tipoCaso })),
+          soloBase: paresDeCategoria
+            .filter((x) => !x.aciertaR && x.aciertaBase)
+            .map((x) => ({ id: x.id, tipoCaso: x.tipoCaso })),
+        },
+        higiene: vecinos?.higiene ?? null,
+      }
+    : { seccion: 21 }),
   medidas,
   criterios,
   veredicto,
@@ -354,7 +470,9 @@ for (const c of criterios)
   console.log(
     `  ${c.id}: ${c.cumple ? "cumple" : `NO cumple (falta ${c.faltaPuntos ?? "sin dato"})`} ${c.subcondiciones.map((s) => `${s.nombre}=${s.valor === null ? "n/d" : redondear(s.valor, 4)}`).join("; ")}`,
   );
-console.log(`Veredicto (${nombreConjunto}): ${veredicto.veredicto}. ${veredicto.motivo}`);
+console.log(
+  `Veredicto (${nombreConjunto}): ${veredicto.veredicto}. ${veredicto.motivo}`,
+);
 if (veredictoFinal)
   console.log(
     `Veredicto FINAL (desarrollo + ${nombreConjunto}): ${veredictoFinal.veredicto}. ${veredictoFinal.motivo}`,

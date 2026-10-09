@@ -1,0 +1,131 @@
+# Plataforma completa en local: PostgreSQL, migraciones y padron del bot, backend, frontend y (opcional) el clasificador.
+# Uso (ver "Levantar toda la plataforma" en el README):
+#   crear .env.stack (ignorado por git) con POSTGRES_PASSWORD y COOKIE_SECRET; el resto de variables esta en el README
+#   docker compose --env-file .env.stack -f docker-compose.stack.yml up -d --build --wait
+# Orden: postgres (sano) -> migrar (termina bien) -> backend (sano) -> frontend. El clasificador es un perfil aparte.
+name: minsa-stack
+
+x-backend-build: &backend-build
+  context: .
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  PORT: "3033"
+  COOKIE_SECRET: ${COOKIE_SECRET:?defina COOKIE_SECRET en .env.stack}
+  DATABASE_URL: postgresql://${POSTGRES_USUARIO:-minsa}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env.stack}@postgres:5432/${POSTGRES_BASE:-minsa_gestion_dev}
+  CORS_ORIGINS: http://localhost:${FRONTEND_PUERTO:-4010}
+  # Una sola variable para el plazo de vigencia: el backend la lee como VIGENCIA_RESOLUCION_DIAS y el frontend la recibe
+  # al construir como PLAZO_VIGENCIA_RESOLUCION_DIAS (ver el servicio frontend).
+  PLAZO_ATENCION_DIAS: ${PLAZO_ATENCION_DIAS:-3}
+  VIGENCIA_RESOLUCION_DIAS: ${VIGENCIA_RESOLUCION_DIAS:-3}
+  PLAZO_AVISO_HORAS: ${PLAZO_AVISO_HORAS:-24}
+  OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+
+x-registro: &registro
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    # La imagen oficial trae las extensiones pg_trgm y unaccent (contrib); la migracion inicial las crea.
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USUARIO:-minsa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env.stack}
+      POSTGRES_DB: ${POSTGRES_BASE:-minsa_gestion_dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PUERTO:-54320}:5432"
+    volumes:
+      - datos-postgres:/var/lib/postgresql
+    logging: *registro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+
+  # Aplica las migraciones Prisma del bot (dueno del esquema) y carga el padron de establecimientos con la misma
+  # secuencia que el entrypoint del bot y `npm run db:seed:eess`. Es idempotente: se puede relanzar.
+  migrar:
+    build:
+      context: .
+      dockerfile: docker/migrador.Dockerfile
+      additional_contexts:
+        bot: ${BOT_DIR:-../minsa-citas-whatsapp-bot}
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USUARIO:-minsa}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env.stack}@postgres:5432/${POSTGRES_BASE:-minsa_gestion_dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *registro
+
+  backend:
+    build: *backend-build
+    image: minsa-stack-backend:local
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PUERTO:-3033}:3033"
+    environment: *backend-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    logging: *registro
+    healthcheck:
+      # /salud/listo exige conexion a la base: el frontend no arranca hasta que la API de verdad sirva.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3033/salud/listo"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 6
+
+  frontend:
+    build:
+      context: ${FRONTEND_DIR:-../minsa-incidencias-frontend}
+      args:
+        # Se fijan al construir la imagen: cambiarlos exige `up --build`.
+        API_URL: http://localhost:${BACKEND_PUERTO:-3033}
+        PLAZO_ATENCION_DIAS: ${PLAZO_ATENCION_DIAS:-3}
+        PLAZO_VIGENCIA_RESOLUCION_DIAS: ${VIGENCIA_RESOLUCION_DIAS:-3}
+        PLAZO_AVISO_HORAS: ${PLAZO_AVISO_HORAS:-24}
+        WHATSAPP_NUMERO: ${WHATSAPP_NUMERO:-51944023973}
+    image: minsa-stack-frontend:local
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PUERTO:-4010}:4010"
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *registro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4010/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+
+  # Opcional: `--profile clasificador`. Misma imagen del backend, contra la misma base y el Ollama del host.
+  clasificador:
+    profiles: ["clasificador"]
+    build: *backend-build
+    image: minsa-stack-backend:local
+    restart: unless-stopped
+    command: ["node", "dist/scripts/clasificador.js"]
+    environment: *backend-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrar:
+        condition: service_completed_successfully
+    # El trabajador termina el caso en curso al recibir SIGTERM (el modelo se acota a 60 s dentro de la transaccion).
+    stop_grace_period: 75s
+    logging: *registro
+
+volumes:
+  datos-postgres:

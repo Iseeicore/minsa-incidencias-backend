@@ -29,7 +29,9 @@ for (const senal of ["SIGINT", "SIGTERM"] as const)
 const dormir = (ms: number): Promise<void> =>
   new Promise((resolver) => setTimeout(resolver, ms));
 
-const { analizar, modelo } = crearAnalizadorDeProduccion();
+const { analizar, modelo } = crearAnalizadorDeProduccion({
+  url: env.OLLAMA_URL,
+});
 const clasificador = new ClasificadorIncidencias({
   database,
   analizar,

@@ -50,6 +50,81 @@ Detalles de la imagen:
 
 > **Una sola instancia.** Las cubetas del límite de peticiones viven en la memoria del proceso. Con más de una réplica hará falta un almacén compartido (Redis o PostgreSQL) detrás de `TokenBucketLimiter`.
 
+## Levantar toda la plataforma en local (stack conjunto)
+
+`docker-compose.stack.yml` levanta **PostgreSQL + migraciones y padrón del bot + backend + frontend** con un solo comando, y el clasificador como servicio opcional. Es para desarrollo y demostraciones en tu máquina; el `docker-compose.yml` de siempre sigue siendo el de la API sola.
+
+**Diseño (por qué así):** un solo archivo en este repo, con los repos hermanos como contextos de build (el bot y el frontend se construyen con su propio `Dockerfile`, sin copiar nada). El esquema lo sigue poniendo el bot: un servicio `migrar` corre su `prisma migrate deploy` y su `db-seed-eess.mjs` (el mismo mecanismo del entrypoint del bot y de `npm run db:seed:eess`) desde `docker/migrador.Dockerfile`, que toma esos archivos del repo del bot. Orden determinista: `postgres` sano → `migrar` termina bien → `backend` sano (`/salud/listo`, que exige base) → `frontend`.
+
+### Levantar de cero
+
+1. Deja los tres repos como carpetas hermanas, los dos ajenos **en `main`** (el esquema con áreas y establecimientos ya está en el `main` del bot): `minsa-citas-whatsapp-bot`, `minsa-incidencias-frontend` y este. Si están en otro lugar, usa `BOT_DIR` y `FRONTEND_DIR`.
+2. Crea `.env.stack` junto al compose (ignorado por git; nunca lo subas). Solo las dos primeras son obligatorias:
+
+   ```bash
+   POSTGRES_PASSWORD=<solo letras y números: va dentro de la URL de la base>
+   COOKIE_SECRET=<mínimo 32 caracteres aleatorios: openssl rand -hex 32>
+   # Opcionales, con estos valores por defecto:
+   POSTGRES_USUARIO=minsa
+   POSTGRES_BASE=minsa_gestion_dev      # debe terminar en _dev, _desechable o _local
+   POSTGRES_PUERTO=54320                # publicado solo en 127.0.0.1
+   BACKEND_PUERTO=3033
+   FRONTEND_PUERTO=4010
+   BOT_DIR=../minsa-citas-whatsapp-bot
+   FRONTEND_DIR=../minsa-incidencias-frontend
+   PLAZO_ATENCION_DIAS=3
+   VIGENCIA_RESOLUCION_DIAS=3           # una sola variable: el backend la lee así y el frontend como PLAZO_VIGENCIA_RESOLUCION_DIAS
+   PLAZO_AVISO_HORAS=24
+   WHATSAPP_NUMERO=51944023973
+   OLLAMA_URL=http://host.docker.internal:11434
+   ```
+
+3. Levanta y espera a que todo esté sano:
+
+   ```bash
+   docker compose --env-file .env.stack -f docker-compose.stack.yml up -d --build --wait
+   curl http://localhost:3033/salud/listo     # {"estado":"ok","baseDeDatos":"ok"}
+   ```
+
+   El frontend queda en `http://localhost:4010`. Para correr **otra copia** al lado de una existente, cambia el nombre del proyecto y los puertos: `docker compose -p otra --env-file .env.stack -f docker-compose.stack.yml ...` con otros `*_PUERTO`.
+4. Apagar: `docker compose --env-file .env.stack -f docker-compose.stack.yml down` (conserva los datos) o `down -v` (borra la base).
+
+Las variables del frontend (`API_URL`, plazos, `WHATSAPP_NUMERO`) se **fijan al construir** su imagen: si las cambias, repite `up -d --build`. `API_URL` y `CORS_ORIGINS` salen de `BACKEND_PUERTO` y `FRONTEND_PUERTO`.
+
+### Crear el administrador y los usuarios de prueba dentro del stack
+
+La base del stack termina en `_dev`, así que se pueden usar ambos scripts (la clave la eliges tú, de 12 o más caracteres; no la guardes en el repositorio):
+
+```bash
+C="docker compose --env-file .env.stack -f docker-compose.stack.yml"
+$C run --rm -e ADMIN_NOMBRE="Admin Local" -e ADMIN_CORREO="admin@prueba.local" \
+  -e ADMIN_PASSWORD="<clave-de-12-o-mas>" backend node dist/scripts/crear-admin.js
+$C run --rm -e USUARIO_NOMBRE="Gestora de Prueba" -e USUARIO_CORREO="gestor@prueba.local" \
+  -e USUARIO_PASSWORD="<clave-de-12-o-mas>" -e USUARIO_ROL="GESTOR" -e USUARIO_AREA="EESS-6206" \
+  backend node dist/scripts/crear-usuario-prueba.js
+```
+
+`GESTOR`, `ESTABLECIMIENTO` y `OTRANS` exigen `USUARIO_AREA` (`EESS-<renipress>` del padrón cargado, u `OTRANS`). Más detalle en [Crear usuarios sintéticos para probar cada rol](#crear-usuarios-sintéticos-para-probar-cada-rol).
+
+### Activar el clasificador
+
+Corre en un perfil aparte porque necesita Ollama (modelo `qwen3.5-9b-local`) en **tu máquina**, no en el stack:
+
+```bash
+docker compose --env-file .env.stack -f docker-compose.stack.yml --profile clasificador up -d
+docker compose --env-file .env.stack -f docker-compose.stack.yml --profile clasificador logs -f clasificador
+```
+
+Usa la misma imagen y base del backend y llega a Ollama por `host.docker.internal:11434` (`OLLAMA_URL`). Sin Ollama no falla: degrada a solo reglas (`version_clasificador` dice `solo-reglas`). Para una sola pasada: `$C --profile clasificador run --rm clasificador node dist/scripts/clasificador.js --una-vez`.
+
+### Qué no cubre
+
+- **Vercel / Neon y cualquier despliegue en la nube**: fuera de alcance; esto es solo para tu máquina.
+- **HTTPS y dominios**: la cookie de sesión es `Secure` + `SameSite=Strict` (el compose fija `NODE_ENV=production`). Los navegadores la aceptan en `http://localhost`, pero **fuera de `localhost` (otra máquina, una IP, un dominio sin HTTPS) el login no guardará la sesión**. Frontend y API deben ser del mismo sitio.
+- **Ollama**: no se incluye; corre en el host.
+- **Datos de ejemplo** de casos (`db:seed:dev` del bot) y **el bot de WhatsApp**: no forman parte del stack.
+- **Producción**: contraseñas de ejemplo, una sola réplica y una base dentro de un volumen Docker; no es para producción.
+
 ## Desarrollo local
 
 Requiere Node `^24.15` (campo `engines` de `package.json`).
@@ -335,6 +410,7 @@ El frontend (puerto 4010) llama a esta API (puerto 3033) desde otro origen, así
 | `PLAZO_ATENCION_DIAS` | `3` | Días que tiene un caso para atenderse, contados **desde que llega**. Pasado el plazo, el caso se archiva solo |
 | `VIGENCIA_RESOLUCION_DIAS` | `3` | Días que dura una resolución antes de archivarse sola, contados **desde que se resuelve** |
 | `PLAZO_AVISO_HORAS` | `24` | Horas antes de vencer el plazo de atención desde las que un caso cuenta como "por vencer" |
+| `OLLAMA_URL` | `http://localhost:11434` | Origen de Ollama para el trabajador clasificador. En Docker el host es `http://host.docker.internal:11434` (el stack ya lo fija). No afecta a `POST /ia-poc/analizar`, que sigue usando `localhost` |
 | `IA_POC_HABILITADA` | `false` | `true` enciende `POST /ia-poc/analizar` (PoC de IA local, solo ADMINISTRADOR); apagada, la ruta responde 404 |
 | `HOST_PORT` | `3033` | Solo Docker: puerto publicado en el servidor |
 

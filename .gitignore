@@ -9,6 +9,9 @@ coverage
 
 docker-compose.override.yml
 
+# Respuestas del modelo por mensaje (reanudar la evaluación): derivan de los textos, no se versionan.
+ia-poc/evaluacion/cache/
+
 .vscode/
 .idea/
 .DS_Store

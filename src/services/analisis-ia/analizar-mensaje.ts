@@ -134,9 +134,11 @@ export async function analizarMensaje(
 ): Promise<PaqueteAnalisis> {
   const variante = opciones.variante ?? VARIANTE_POR_DEFECTO;
   const cliente = opciones.cliente ?? crearClienteOllama();
+  // `null` explícito significa "sin piso"; solo `undefined` toma el valor por defecto.
   const piso =
-    opciones.pisoPesoPosibleCorrupcion ??
-    PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO;
+    opciones.pisoPesoPosibleCorrupcion === undefined
+      ? PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO
+      : opciones.pisoPesoPosibleCorrupcion;
   const reglas = evaluarTextoCorrupcion(texto, {
     entidades: contexto.entidades,
     establecimientoConocido: contexto.establecimientoConocido,

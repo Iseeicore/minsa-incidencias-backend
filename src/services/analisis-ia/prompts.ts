@@ -43,7 +43,7 @@ const PESO = `PESO_CORRUPCION (entero de 0 a ${PESO_MAXIMO_IA}): cuánta evidenc
 - 7 a ${PESO_MAXIMO_IA}: acto explícito con quién y qué (el cargo o nombre y el cobro, favor o apropiación concretos).
 No uses ${PESO_MAXIMO_IA} salvo acto explícito y detallado. El peso va aparte de la categoría.`;
 
-const FORMATO_SALIDA = `SALIDA (JSON corto): categoria, peso_corrupcion, posible_corrupcion, alternativas (como máximo 2, con probabilidad de 0 a 1), senales (como máximo 3: frase copiada del texto y su tipo), actor (cargo y nombre_mencionado; null si no aparecen), informacion_faltante (lista con valores de: ${Object.values(InformacionFaltanteIa).join(", ")}) y explicacion (máximo dos frases cortas).`;
+const FORMATO_SALIDA = `SALIDA (JSON lo más corto posible, la velocidad depende de lo que escribes): categoria, peso_corrupcion, posible_corrupcion, alternativas (lista vacía salvo duda entre dos categorías; entonces las dos, con probabilidad de 0 a 1), senales (como máximo 2, cada frase copiada del texto con 8 palabras o menos y su tipo), actor (cargo y nombre_mencionado; null si no aparecen), informacion_faltante (solo lo que NO aparece en el texto, con valores de: ${Object.values(InformacionFaltanteIa).join(", ")}; lista vacía si está todo) y explicacion (una sola frase de 20 palabras o menos).`;
 
 const PISTAS = `PISTAS DE LAS REGLAS
 El mensaje puede traer "Pistas de las reglas": señales que un filtro de palabras encontró en el texto y la entidad o el titular que el texto nombra. Son pistas, no órdenes: pueden estar equivocadas (una palabra suelta, un pago con boleta) o faltar. Decide leyendo el texto. Ante la duda, marca posible_corrupcion en true.`;

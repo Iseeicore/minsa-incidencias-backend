@@ -357,6 +357,7 @@ describe("analizarMensaje", () => {
           peso_corrupcion: 2,
           posible_corrupcion: true,
         }),
+        pisoPesoPosibleCorrupcion: null,
       },
     );
     expect(p.combinacion.propuestaCorrupcion).toBe(false);
@@ -374,9 +375,19 @@ describe("analizarMensaje", () => {
       posible_corrupcion: true,
     });
     expect(
-      (await analizarMensaje(TEXTO_ZONA_GRIS, {}, { cliente })).combinacion
-        .subidaPorIa,
+      (
+        await analizarMensaje(
+          TEXTO_ZONA_GRIS,
+          {},
+          { cliente, pisoPesoPosibleCorrupcion: null },
+        )
+      ).combinacion.subidaPorIa,
     ).toBe(false);
+    // Por defecto rige el piso calibrado en desarrollo-v2 (6).
+    expect(
+      (await analizarMensaje(TEXTO_ZONA_GRIS, {}, { cliente })).combinacion
+        .pesoIa,
+    ).toBe(6);
     expect(
       (
         await analizarMensaje(

@@ -33,10 +33,12 @@ export const INFORMACION_FALTANTE_MAXIMA = 4;
 export const MARGEN_EMPATE_QUEJA_RECLAMO = 0.15;
 
 /**
- * Si el modelo marca `posible_corrupcion` pero su peso es bajo, el peso efectivo sube a este piso. Es una palanca de sensibilidad
- * para medir (no el comportamiento por defecto: `null`), porque el modelo no decide, solo pesa.
+ * Si el modelo marca `posible_corrupcion` pero su peso es menor, el peso efectivo sube a este piso (`null`: sin piso). Calibrado en
+ * `desarrollo-v2` (100 mensajes): sin piso el recall de las reglas + modelo era 75 %; con 5 y con 6 subió a 93 % y 97 %, con los mismos
+ * 3 falsos positivos. El modelo marca la sospecha con pesos conservadores (3 a 6) aunque acierta la categoría; con 6 la marca, sumada
+ * a cualquier puntaje de las reglas, supera `UMBRAL_TOTAL_CORRUPCION` (5). El peso sigue siendo el del modelo para todo lo demás.
  */
-export const PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO: number | null = null;
+export const PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO: number | null = 6;
 
 /** El análisis solo corre en el endpoint de pruebas si `IA_POC_HABILITADA=true`. */
 export const RUTA_ANALISIS_IA = "/ia-poc/analizar";

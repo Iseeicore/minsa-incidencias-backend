@@ -6,8 +6,18 @@ export const VarianteIa = {
   V2: "V2",
   /** V2 más ejemplos resueltos (casos límite del léxico y ejemplos inventados). */
   V3: "V3",
+  /** V2 con salida compacta: el modelo solo escribe categoría, peso y marca; lo demás lo arman las reglas con plantillas. */
+  V2C: "V2C",
 } as const;
 export type VarianteIa = (typeof VarianteIa)[keyof typeof VarianteIa];
+
+/** Qué escribe el modelo: todos los campos (V1 a V3) o solo los tres que deciden (V2C). Cambia el esquema, el tope de tokens y el prompt. */
+export const FormatoSalidaIa = {
+  COMPLETA: "COMPLETA",
+  COMPACTA: "COMPACTA",
+} as const;
+export type FormatoSalidaIa =
+  (typeof FormatoSalidaIa)[keyof typeof FormatoSalidaIa];
 
 /** Lista fija de lo que el modelo puede decir que falta para poder derivar (plan de cierre, sección 3c). */
 export const InformacionFaltanteIa = {

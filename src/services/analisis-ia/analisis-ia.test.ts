@@ -120,7 +120,9 @@ describe("prompts", () => {
   it("V3 agrega ejemplos resueltos y las tres variantes son distintas", () => {
     expect(PROMPT_SISTEMA.V3).toContain("EJEMPLOS RESUELTOS");
     expect(PROMPT_SISTEMA.V2).not.toContain("EJEMPLOS RESUELTOS");
-    expect(new Set(Object.values(PROMPT_SISTEMA)).size).toBe(3);
+    expect(
+      new Set([PROMPT_SISTEMA.V1, PROMPT_SISTEMA.V2, PROMPT_SISTEMA.V3]).size,
+    ).toBe(3);
   });
 });
 

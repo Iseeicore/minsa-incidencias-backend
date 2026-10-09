@@ -1,4 +1,4 @@
-import { VarianteIa } from "@/enums/analisis-ia.enum.js";
+import { FormatoSalidaIa, VarianteIa } from "@/enums/analisis-ia.enum.js";
 
 /**
  * Parámetros fijos del modelo local. Copian `ia-poc/modelo/parametros.json` (que queda fuera de `src` y por eso no se importa);
@@ -20,6 +20,22 @@ export const REINTENTOS_MODELO = 1;
 
 /** Variante que usa el análisis si no se pide otra. Se fija con las mediciones de desarrollo (ia-poc/README.md). */
 export const VARIANTE_POR_DEFECTO: VarianteIa = VarianteIa.V2;
+
+/** Formato de salida que pide cada variante. Solo V2C es compacta. */
+export const FORMATO_SALIDA_POR_VARIANTE: Readonly<
+  Record<VarianteIa, FormatoSalidaIa>
+> = {
+  [VarianteIa.V1]: FormatoSalidaIa.COMPLETA,
+  [VarianteIa.V2]: FormatoSalidaIa.COMPLETA,
+  [VarianteIa.V3]: FormatoSalidaIa.COMPLETA,
+  [VarianteIa.V2C]: FormatoSalidaIa.COMPACTA,
+};
+
+/**
+ * Tope de tokens que el modelo puede escribir con la salida compacta (`num_predict` de Ollama). El JSON compacto mide ~38 tokens: 80 deja
+ * margen y corta una salida que se desboca; un JSON cortado no valida y sigue el camino de reintento y degradado de siempre.
+ */
+export const NUM_PREDICT_SALIDA_COMPACTA = 80;
 
 /** Límites de la salida del modelo: una salida corta es lo que más baja la latencia (unos 15 tokens por segundo). */
 export const EXPLICACION_MAXIMA_CARACTERES = 400;

@@ -1,12 +1,13 @@
 import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import type {
+  FormatoSalidaIa,
   InformacionFaltanteIa,
   MotivoFalloIa,
   OrigenFundamento,
   VarianteIa,
 } from "@/enums/analisis-ia.enum.js";
 import type { SenalSensible } from "@/enums/filtro-corrupcion.enum.js";
-import type { SalidaModelo } from "@/services/analisis-ia/esquema-salida.js";
+import type { SalidaIa } from "@/services/analisis-ia/esquema-salida.js";
 import type {
   ContextoEvaluacion,
   ReferenciaDerivacion,
@@ -18,6 +19,8 @@ import type {
 export interface PeticionModelo {
   sistema: string;
   usuario: string;
+  /** Qué debe escribir el modelo. Sin dato rige `COMPLETA` (V1 a V3). */
+  formato?: FormatoSalidaIa;
 }
 
 /** Tiempos y tokens de una consulta (Ollama los informa en nanosegundos; aquí todo en milisegundos). Nunca llevan texto. */
@@ -36,7 +39,7 @@ export interface MetricasModelo {
 }
 
 export type ResultadoConsulta =
-  | { ok: true; salida: SalidaModelo; metricas: MetricasModelo }
+  | { ok: true; salida: SalidaIa; metricas: MetricasModelo }
   | { ok: false; motivo: MotivoFalloIa; metricas: MetricasModelo };
 
 /** El modelo detrás de una interfaz: en producción es Ollama; en las pruebas, un simulado sin red. Nunca lanza. */
@@ -93,7 +96,12 @@ export interface PaqueteAnalisis {
   variante: VarianteIa | null;
   reglas: ResultadoCorrupcion;
   combinacion: ResultadoCombinacion;
-  /** Lo que respondió el modelo, validado; `null` si no se consultó o falló. */
-  salidaModelo: SalidaModelo | null;
+  /** Lo que respondió el modelo, validado (completa o compacta); `null` si no se consultó o falló. */
+  salidaModelo: SalidaIa | null;
+  /**
+   * `true` si el modelo respondió con la salida compacta (V2C): no entrega alternativas y por eso no se puede detectar el empate entre
+   * queja y reclamo del modelo. Pérdida conocida; la propuesta sigue siendo de una persona.
+   */
+  sinDesempateQuejaReclamo: boolean;
   metricas: MetricasModelo | null;
 }

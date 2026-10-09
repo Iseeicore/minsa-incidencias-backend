@@ -1,15 +1,15 @@
 import {
+  FORMATO_SALIDA_POR_VARIANTE,
   MARGEN_EMPATE_QUEJA_RECLAMO,
   PISO_PESO_POSIBLE_CORRUPCION_POR_DEFECTO,
   VARIANTE_POR_DEFECTO,
 } from "@/constants/analisis-ia.js";
 import {
-  InformacionFaltanteIa,
+  FormatoSalidaIa,
   MotivoFalloIa,
   OrigenFundamento,
 } from "@/enums/analisis-ia.enum.js";
 import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
-import { FaltanteCorrupcion } from "@/enums/filtro-corrupcion.enum.js";
 import type {
   ContextoAnalisis,
   Fundamento,
@@ -18,7 +18,15 @@ import type {
   PaqueteAnalisis,
 } from "@/services/analisis-ia/analisis-ia.types.js";
 import { crearClienteOllama } from "@/services/analisis-ia/cliente-ollama.js";
-import type { SalidaModelo } from "@/services/analisis-ia/esquema-salida.js";
+import {
+  esSalidaCompleta,
+  type SalidaIa,
+} from "@/services/analisis-ia/esquema-salida.js";
+import {
+  construirExplicacionDeterminista,
+  fundamentosDeReglas,
+  informacionFaltanteDeReglas,
+} from "@/services/analisis-ia/plantillas-paquete.js";
 import { construirPeticion } from "@/services/analisis-ia/prompts.js";
 import {
   combinarReglasConIa,
@@ -32,19 +40,9 @@ const { DENUNCIA_CORRUPCION, QUEJA, RECLAMO, OTRO } = CategoriaIncidencia;
 /** Con empate o duda la confianza no pasa de aquí: es una propuesta que decide una persona. */
 const CONFIANZA_MAXIMA_CON_DUDA = 55;
 
-const FALTANTE_DE_REGLAS: Readonly<
-  Record<FaltanteCorrupcion, InformacionFaltanteIa>
-> = {
-  [FaltanteCorrupcion.DATOS_INSUFICIENTES]:
-    InformacionFaltanteIa.HECHO_DETALLADO,
-  [FaltanteCorrupcion.AUTOR_O_CARGO]: InformacionFaltanteIa.AUTOR_O_CARGO,
-  [FaltanteCorrupcion.ENTIDAD]: InformacionFaltanteIa.ENTIDAD_O_UNIDAD,
-  [FaltanteCorrupcion.PRUEBAS]: InformacionFaltanteIa.PRUEBAS,
-};
-
 /** Peso efectivo del modelo: su peso, o el piso si marcó `posible_corrupcion` y se configuró uno. Función pura. */
 export function pesoEfectivoDelModelo(
-  salida: SalidaModelo,
+  salida: SalidaIa,
   piso: number | null,
 ): number {
   const peso = normalizarPesoIa(salida.peso_corrupcion) ?? 0;
@@ -55,7 +53,8 @@ export function pesoEfectivoDelModelo(
 }
 
 /** Queja y reclamo empatados: el modelo da a la otra categoría una probabilidad que difiere de la suya menos que el margen. */
-export function hayEmpateQuejaReclamo(salida: SalidaModelo): boolean {
+export function hayEmpateQuejaReclamo(salida: SalidaIa): boolean {
+  if (!esSalidaCompleta(salida)) return false;
   if (salida.categoria !== QUEJA && salida.categoria !== RECLAMO) return false;
   const otra = salida.categoria === QUEJA ? RECLAMO : QUEJA;
   const probabilidadOtra = salida.alternativas.find(
@@ -71,15 +70,8 @@ export function hayEmpateQuejaReclamo(salida: SalidaModelo): boolean {
   );
 }
 
-const fundamentosDeReglas = (reglas: ResultadoCorrupcion): Fundamento[] =>
-  reglas.senales.map((s) => ({
-    origen: OrigenFundamento.REGLAS,
-    frase: s.frase,
-    tipo: s.tipo,
-  }));
-
-const fundamentosDelModelo = (salida: SalidaModelo | null): Fundamento[] =>
-  (salida?.senales ?? []).map((s) => ({
+const fundamentosDelModelo = (salida: SalidaIa | null): Fundamento[] =>
+  (salida && esSalidaCompleta(salida) ? salida.senales : []).map((s) => ({
     origen: OrigenFundamento.MODELO,
     frase: s.frase,
     tipo: s.tipo,
@@ -95,7 +87,7 @@ interface Categoria {
 /** Categoría final según la combinación, el modelo y las señales sensibles de las reglas. Función pura. */
 function decidirCategoria(
   reglas: ResultadoCorrupcion,
-  salida: SalidaModelo | null,
+  salida: SalidaIa | null,
   corrupcion: boolean,
 ): Categoria {
   if (corrupcion)
@@ -145,7 +137,7 @@ export async function analizarMensaje(
     tieneArchivos: contexto.tieneArchivos,
   });
 
-  let salida: SalidaModelo | null = null;
+  let salida: SalidaIa | null = null;
   let metricas: MetricasModelo | null = null;
   let motivo: MotivoFalloIa | null = null;
   if (reglas.aplica) {
@@ -174,18 +166,32 @@ export async function analizarMensaje(
       ? Math.min(combinacion.confianza, CONFIANZA_MAXIMA_CON_DUDA)
       : combinacion.confianza;
 
+  // V2C: el modelo no entrega explicación ni faltantes; salen de las reglas con plantillas deterministas (también si el modelo falló).
+  const compacta =
+    reglas.aplica &&
+    FORMATO_SALIDA_POR_VARIANTE[variante] === FormatoSalidaIa.COMPACTA;
+  const completa = salida && esSalidaCompleta(salida) ? salida : null;
+  const explicacion = compacta
+    ? construirExplicacionDeterminista({
+        reglas,
+        salida,
+        combinacion,
+        revisionOtrans,
+      })
+    : (completa?.explicacion ?? null);
+
   return {
     propuesta: categoria.propuesta,
     confianza,
     pesoIa: combinacion.pesoIa,
-    explicacion: salida?.explicacion ?? null,
+    explicacion,
     fundamentos: [
       ...fundamentosDeReglas(reglas),
       ...fundamentosDelModelo(salida),
     ],
-    informacionFaltante: salida
-      ? [...salida.informacion_faltante]
-      : reglas.faltantes.map((f) => FALTANTE_DE_REGLAS[f]),
+    informacionFaltante: completa
+      ? [...completa.informacion_faltante]
+      : informacionFaltanteDeReglas(reglas),
     fichaDerivacion: reglas.referenciaDerivacion,
     degradado,
     motivoDegradado: degradado ? motivo : null,
@@ -199,6 +205,7 @@ export async function analizarMensaje(
     escalarAOtrans: reglas.escalarAOtrans,
     senalSensible: reglas.senalSensible,
     empateQuejaReclamo: categoria.empate,
+    sinDesempateQuejaReclamo: compacta && salida !== null,
     variante: reglas.aplica ? variante : null,
     reglas,
     combinacion,

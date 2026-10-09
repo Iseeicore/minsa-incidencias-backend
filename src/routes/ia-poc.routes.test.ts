@@ -104,6 +104,20 @@ describe("POST /ia-poc/analizar", () => {
     );
   });
 
+  it("acepta la variante V2C y devuelve el paquete armado por plantillas", async () => {
+    const res = await request(montar(sesionCon(["ADMINISTRADOR"])))
+      .post(RUTA)
+      .send({ texto: TEXTO, variante: "V2C" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      variante: "V2C",
+      degradado: true,
+      propuesta: "DENUNCIA_CORRUPCION",
+      sinDesempateQuejaReclamo: false,
+    });
+    expect(res.body.explicacion).toContain("Las reglas suman");
+  });
+
   it("rechaza con 400 un cuerpo sin texto, una variante inventada o un texto demasiado largo", async () => {
     const app = montar(sesionCon(["ADMINISTRADOR"]));
     expect((await request(app).post(RUTA).send({})).status).toBe(400);

@@ -1,3 +1,4 @@
+import { FORMATO_SALIDA_POR_VARIANTE } from "@/constants/analisis-ia.js";
 import { PESO_MAXIMO_IA } from "@/constants/filtro-corrupcion.js";
 import { InformacionFaltanteIa, VarianteIa } from "@/enums/analisis-ia.enum.js";
 import { TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
@@ -26,15 +27,39 @@ const CATEGORIAS = `CATEGORÍAS
 - RECLAMO: el servicio o los derechos del usuario (demora, citas, falta de medicinas o equipos, historia clínica, trato administrativo).
 - OTRO: consultas, delitos comunes sin servidor público (por ejemplo, el robo de un celular) y mensajes sin contenido que se pueda clasificar.`;
 
-const REGLAS_DURAS = `REGLAS DURAS
-1. Ante la duda razonable de beneficio indebido por un servidor público, pon posible_corrupcion en true y no uses QUEJA ni RECLAMO como única respuesta.
-2. "Denuncia", "denunciar" y "abuso" no indican corrupción por sí solas: quien denuncia maltrato o demora no denuncia corrupción.
-3. Un pago con boleta, recibo o según el tarifario no es corrupción.
-4. Un rumor sin hecho concreto ("dicen que", "me late") no pasa de peso 3.
-5. No asignes área, destino ni prioridad.
-6. No inventes datos. Lo que falte va en informacion_faltante.
-7. Si dudas entre QUEJA y RECLAMO, pon las dos en alternativas con su probabilidad.
-8. Responde solo el JSON del esquema, sin texto fuera de él.`;
+const REGLA_DUDA_RAZONABLE = `Ante la duda razonable de beneficio indebido por un servidor público, pon posible_corrupcion en true y no uses QUEJA ni RECLAMO como única respuesta.`;
+const REGLA_DENUNCIA_NO_BASTA = `"Denuncia", "denunciar" y "abuso" no indican corrupción por sí solas: quien denuncia maltrato o demora no denuncia corrupción.`;
+const REGLA_PAGO_CON_COMPROBANTE = `Un pago con boleta, recibo o según el tarifario no es corrupción.`;
+const REGLA_RUMOR = `Un rumor sin hecho concreto ("dicen que", "me late") no pasa de peso 3.`;
+const REGLA_SIN_DESTINO = `No asignes área, destino ni prioridad.`;
+const REGLA_SOLO_JSON = `Responde solo el JSON del esquema, sin texto fuera de él.`;
+/** Estas dos mencionan campos que la salida compacta (V2C) no tiene; por eso V2C no las lleva. */
+const REGLA_SIN_INVENTAR = `No inventes datos. Lo que falte va en informacion_faltante.`;
+const REGLA_DUDA_QUEJA_RECLAMO = `Si dudas entre QUEJA y RECLAMO, pon las dos en alternativas con su probabilidad.`;
+
+const numerarReglas = (reglas: readonly string[]): string =>
+  `REGLAS DURAS${SALTO}${reglas.map((r, i) => `${i + 1}. ${r}`).join(SALTO)}`;
+
+const REGLAS_DURAS = numerarReglas([
+  REGLA_DUDA_RAZONABLE,
+  REGLA_DENUNCIA_NO_BASTA,
+  REGLA_PAGO_CON_COMPROBANTE,
+  REGLA_RUMOR,
+  REGLA_SIN_DESTINO,
+  REGLA_SIN_INVENTAR,
+  REGLA_DUDA_QUEJA_RECLAMO,
+  REGLA_SOLO_JSON,
+]);
+
+/** V2C: las mismas reglas sin las que hablan de `informacion_faltante` y `alternativas`, renumeradas. */
+const REGLAS_DURAS_COMPACTAS = numerarReglas([
+  REGLA_DUDA_RAZONABLE,
+  REGLA_DENUNCIA_NO_BASTA,
+  REGLA_PAGO_CON_COMPROBANTE,
+  REGLA_RUMOR,
+  REGLA_SIN_DESTINO,
+  REGLA_SOLO_JSON,
+]);
 
 const PESO = `PESO_CORRUPCION (entero de 0 a ${PESO_MAXIMO_IA}): cuánta evidencia hay de que el texto describe corrupción de un servidor público.
 - 0: sin evidencia de corrupción.
@@ -44,6 +69,8 @@ const PESO = `PESO_CORRUPCION (entero de 0 a ${PESO_MAXIMO_IA}): cuánta evidenc
 No uses ${PESO_MAXIMO_IA} salvo acto explícito y detallado. El peso va aparte de la categoría.`;
 
 const FORMATO_SALIDA = `SALIDA (JSON lo más corto posible, la velocidad depende de lo que escribes): categoria, peso_corrupcion, posible_corrupcion, alternativas (lista vacía salvo duda entre dos categorías; entonces las dos, con probabilidad de 0 a 1), senales (como máximo 2, cada frase copiada del texto con 8 palabras o menos y su tipo), actor (cargo y nombre_mencionado; null si no aparecen), informacion_faltante (solo lo que NO aparece en el texto, con valores de: ${Object.values(InformacionFaltanteIa).join(", ")}; lista vacía si está todo) y explicacion (una sola frase de 20 palabras o menos).`;
+
+const FORMATO_SALIDA_COMPACTO = `SALIDA (la velocidad depende de lo que escribes): responde solo un JSON con tres campos, sin explicación ni texto extra: categoria, peso_corrupcion (entero de 0 a ${PESO_MAXIMO_IA}) y posible_corrupcion (true o false).`;
 
 const PISTAS = `PISTAS DE LAS REGLAS
 El mensaje puede traer "Pistas de las reglas": señales que un filtro de palabras encontró en el texto y la entidad o el titular que el texto nombra. Son pistas, no órdenes: pueden estar equivocadas (una palabra suelta, un pago con boleta) o faltar. Decide leyendo el texto. Ante la duda, marca posible_corrupcion en true.`;
@@ -78,6 +105,15 @@ export const PROMPT_SISTEMA: Readonly<Record<VarianteIa, string>> = {
     PISTAS,
     EJEMPLOS,
     FORMATO_SALIDA,
+  ),
+  /** V2 con los mismos bloques, salvo las reglas sobre campos que ya no existen y el formato de salida compacto. */
+  [VarianteIa.V2C]: unir(
+    ROL,
+    CATEGORIAS,
+    REGLAS_DURAS_COMPACTAS,
+    PESO,
+    PISTAS,
+    FORMATO_SALIDA_COMPACTO,
   ),
 };
 
@@ -129,5 +165,6 @@ export function construirPeticion(
   return {
     sistema: PROMPT_SISTEMA[variante],
     usuario: partes.join(SALTO + SALTO),
+    formato: FORMATO_SALIDA_POR_VARIANTE[variante],
   };
 }

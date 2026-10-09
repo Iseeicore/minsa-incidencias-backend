@@ -9,6 +9,7 @@ import {
 } from "@/constants/analisis-ia.js";
 import { PESO_MAXIMO_IA } from "@/constants/filtro-corrupcion.js";
 import {
+  FormatoSalidaIa,
   InformacionFaltanteIa,
   TipoSenalModelo,
 } from "@/enums/analisis-ia.enum.js";
@@ -65,13 +66,50 @@ export const esquemaSalidaModelo = z.object({
 
 export type SalidaModelo = z.infer<typeof esquemaSalidaModelo>;
 
+/**
+ * Salida compacta (V2C): solo lo que decide. Es lo que el modelo escribe en ~38 tokens (~3 s) en lugar de ~215 (~15 s). La explicación,
+ * las señales, la información faltante y la ficha las arman las reglas con plantillas (`plantillas-paquete.ts`).
+ */
+export const esquemaSalidaCompacta = z.object({
+  categoria: z.enum(CATEGORIAS),
+  peso_corrupcion: z.number().int().min(0).max(PESO_MAXIMO_IA),
+  posible_corrupcion: z.boolean(),
+});
+
+export type SalidaCompacta = z.infer<typeof esquemaSalidaCompacta>;
+
+/** Lo que puede devolver el cliente: la salida completa (V1 a V3) o la compacta (V2C). La completa incluye los tres campos de la compacta. */
+export type SalidaIa = SalidaCompacta | SalidaModelo;
+
+/** `true` si la salida trae los campos de la completa (explicación, señales, alternativas...). */
+export const esSalidaCompleta = (salida: SalidaIa): salida is SalidaModelo =>
+  "explicacion" in salida;
+
+function aJsonSchema(esquema: z.ZodType): Record<string, unknown> {
+  const jsonSchema: Record<string, unknown> = {
+    ...z.toJSONSchema(esquema, { target: "draft-7" }),
+  };
+  delete jsonSchema.$schema;
+  return jsonSchema;
+}
+
 /** El mismo esquema en formato JSON Schema, para el campo `format` de Ollama (salida estructurada). Sin `$schema`. */
 export function esquemaSalidaJson(): Record<string, unknown> {
-  const esquema: Record<string, unknown> = {
-    ...z.toJSONSchema(esquemaSalidaModelo, { target: "draft-7" }),
-  };
-  delete esquema.$schema;
-  return esquema;
+  return aJsonSchema(esquemaSalidaModelo);
+}
+
+/** El esquema compacto en JSON Schema (enum de categorías, entero de 0 a 10 y booleano) para el campo `format` de Ollama. */
+export function esquemaSalidaCompactaJson(): Record<string, unknown> {
+  return aJsonSchema(esquemaSalidaCompacta);
+}
+
+/** El JSON Schema que corresponde a cada formato de salida. */
+export function esquemaJsonPorFormato(
+  formato: FormatoSalidaIa,
+): Record<string, unknown> {
+  return formato === FormatoSalidaIa.COMPACTA
+    ? esquemaSalidaCompactaJson()
+    : esquemaSalidaJson();
 }
 
 const esRegistro = (valor: unknown): valor is Record<string, unknown> =>
@@ -125,11 +163,46 @@ export function normalizarSalidaCruda(cruda: unknown): unknown {
   };
 }
 
+/** Tolerancia de la salida compacta: solo el peso se recorta (a 0..10) y un decimal se redondea. */
+export function normalizarSalidaCompactaCruda(cruda: unknown): unknown {
+  if (!esRegistro(cruda)) return cruda;
+  return {
+    ...cruda,
+    peso_corrupcion:
+      typeof cruda.peso_corrupcion === "number"
+        ? normalizarPesoIa(cruda.peso_corrupcion)
+        : cruda.peso_corrupcion,
+  };
+}
+
 export type ResultadoValidacion =
   { ok: true; salida: SalidaModelo } | { ok: false };
+
+export type ResultadoValidacionCompacta =
+  { ok: true; salida: SalidaCompacta } | { ok: false };
 
 /** Valida una salida ya convertida de JSON (con la tolerancia de `normalizarSalidaCruda`). */
 export function validarSalidaModelo(cruda: unknown): ResultadoValidacion {
   const analisis = esquemaSalidaModelo.safeParse(normalizarSalidaCruda(cruda));
   return analisis.success ? { ok: true, salida: analisis.data } : { ok: false };
+}
+
+/** Valida una salida compacta ya convertida de JSON (con la tolerancia de `normalizarSalidaCompactaCruda`). */
+export function validarSalidaCompacta(
+  cruda: unknown,
+): ResultadoValidacionCompacta {
+  const analisis = esquemaSalidaCompacta.safeParse(
+    normalizarSalidaCompactaCruda(cruda),
+  );
+  return analisis.success ? { ok: true, salida: analisis.data } : { ok: false };
+}
+
+/** Valida según el formato pedido. */
+export function validarSalidaPorFormato(
+  formato: FormatoSalidaIa,
+  cruda: unknown,
+): { ok: true; salida: SalidaIa } | { ok: false } {
+  return formato === FormatoSalidaIa.COMPACTA
+    ? validarSalidaCompacta(cruda)
+    : validarSalidaModelo(cruda);
 }

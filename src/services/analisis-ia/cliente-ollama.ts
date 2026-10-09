@@ -3,10 +3,11 @@ import {
   OLLAMA_KEEP_ALIVE_POR_DEFECTO,
   OLLAMA_OPCIONES_POR_DEFECTO,
   OLLAMA_URL_POR_DEFECTO,
+  NUM_PREDICT_SALIDA_COMPACTA,
   REINTENTOS_MODELO,
   TIEMPO_MAXIMO_MODELO_MS,
 } from "@/constants/analisis-ia.js";
-import { MotivoFalloIa } from "@/enums/analisis-ia.enum.js";
+import { FormatoSalidaIa, MotivoFalloIa } from "@/enums/analisis-ia.enum.js";
 import type {
   ClienteModelo,
   MetricasModelo,
@@ -14,8 +15,8 @@ import type {
   ResultadoConsulta,
 } from "@/services/analisis-ia/analisis-ia.types.js";
 import {
-  esquemaSalidaJson,
-  validarSalidaModelo,
+  esquemaJsonPorFormato,
+  validarSalidaPorFormato,
 } from "@/services/analisis-ia/esquema-salida.js";
 
 export interface ConfiguracionOllama {
@@ -77,10 +78,20 @@ function metricasDeRespuesta(
   };
 }
 
+/** Con la salida compacta se acota lo que el modelo puede escribir (`num_predict`); un JSON cortado no valida y se reintenta. */
+const opcionesPorFormato = (
+  opciones: Readonly<Record<string, number>>,
+  formato: FormatoSalidaIa,
+): Readonly<Record<string, number>> =>
+  formato === FormatoSalidaIa.COMPACTA
+    ? { ...opciones, num_predict: NUM_PREDICT_SALIDA_COMPACTA }
+    : opciones;
+
 /** Una llamada a `/api/chat`. Nunca lanza: todo fallo vuelve como motivo. */
 async function unIntento(
   config: ConfiguracionOllama,
   peticion: PeticionModelo,
+  formato: FormatoSalidaIa,
   esquema: Record<string, unknown>,
 ): Promise<Intento> {
   let respuesta: Response;
@@ -95,7 +106,7 @@ async function unIntento(
         think: false,
         keep_alive: config.keepAlive,
         format: esquema,
-        options: config.opciones,
+        options: opcionesPorFormato(config.opciones, formato),
         messages: [
           { role: "system", content: peticion.sistema },
           { role: "user", content: peticion.usuario },
@@ -164,7 +175,7 @@ async function unIntento(
       metricas,
     };
   }
-  const validacion = validarSalidaModelo(cruda);
+  const validacion = validarSalidaPorFormato(formato, cruda);
   if (!validacion.ok)
     return {
       ok: false,
@@ -201,16 +212,17 @@ export function crearClienteOllama(
     ...CONFIGURACION_OLLAMA_POR_DEFECTO,
     ...parcial,
   };
-  const esquema = esquemaSalidaJson();
   return {
     async consultar(peticion) {
+      const formato = peticion.formato ?? FormatoSalidaIa.COMPLETA;
+      const esquema = esquemaJsonPorFormato(formato);
       const inicio = Date.now();
       let intentos = 0;
       let ultimo: Intento | null = null;
       try {
         while (intentos <= config.reintentos) {
           intentos++;
-          ultimo = await unIntento(config, peticion, esquema);
+          ultimo = await unIntento(config, peticion, formato, esquema);
           if (ultimo.ok || !ultimo.reintentable) break;
         }
       } catch {

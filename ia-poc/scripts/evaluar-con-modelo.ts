@@ -1,6 +1,6 @@
 // Evalúa reglas + modelo local (Ollama) contra un conjunto de mensajes etiquetados (JSON Lines).
 // Uso (desde la raíz del repo):
-//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3 --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache]
+//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3|V2C --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache]
 // Una sola GPU: se consulta de a un mensaje. Cada respuesta válida se guarda en `ia-poc/evaluacion/cache/modelo-<variante>-<conjunto>.jsonl`
 // (por variante e id) y una corrida cortada se reanuda sola. El resumen se guarda SIN textos en `ia-poc/evaluacion/resultados/modelo-<variante>-<conjunto>.json`.
 // Antes de correr: `node ia-poc/scripts/precalentar.mjs` (la primera llamada en frío tarda unos 2 minutos).
@@ -25,7 +25,7 @@ import type {
   ResultadoConsulta,
 } from "@/services/analisis-ia/analisis-ia.types.js";
 import { crearClienteOllama } from "@/services/analisis-ia/cliente-ollama.js";
-import type { SalidaModelo } from "@/services/analisis-ia/esquema-salida.js";
+import type { SalidaIa } from "@/services/analisis-ia/esquema-salida.js";
 import { combinarReglasConIa } from "@/services/filtro-corrupcion/combinar-reglas-con-ia.js";
 
 interface Mensaje {
@@ -38,7 +38,7 @@ interface Mensaje {
 interface LineaDeCache {
   id: string;
   variante: VarianteIa;
-  salida: SalidaModelo;
+  salida: SalidaIa;
   metricas: MetricasModelo;
 }
 
@@ -85,7 +85,7 @@ if (
   !rutaConjunto
 ) {
   console.error(
-    "Uso: --variante=V1|V2|V3 --conjunto=<ruta.jsonl> [--limite=N] [--max-minutos=N] [--solo-cache]",
+    "Uso: --variante=V1|V2|V3|V2C --conjunto=<ruta.jsonl> [--limite=N] [--max-minutos=N] [--solo-cache]",
   );
   process.exit(2);
 }

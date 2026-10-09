@@ -22,3 +22,14 @@ npx tsx ia-poc/scripts/evaluar-reglas.ts ia-poc/evaluacion/desarrollo.jsonl [--j
 `evaluar-reglas.ts` corre `evaluarTextoCorrupcion` sobre cada texto (sin contexto) y reporta verdaderos positivos, falsos negativos y falsos positivos (con id y texto), recall y precisión, el desglose por dificultad, estilo y `contra_titular`, la distribución de puntajes y la zona gris. Positivo = `categoria_esperada` `DENUNCIA_CORRUPCION`; predicho = `propuestaCorrupcion`.
 
 Formato por línea: `id`, `texto`, `establecimiento`, `renipress`, `anonimo`, `cargo_mencionado`, `nombre_mencionado`, `categoria_esperada`, `destino_esperado`, `dificultad`, `estilo` (y, en `desarrollo`, `entidad_mencionada`, `sigla`, `contra_titular`, `destino_titular_esperado`, `ubicacion_mencionada`). Las categorías son las 4 de `catalogo.categoria_incidencia`.
+
+## Resultados (corrupción: positivo = `DENUNCIA_CORRUPCION`)
+
+| Conjunto | Reglas | VP | FN | FP | Recall | Precisión |
+|---|---|---|---|---|---|---|
+| `desarrollo` (100; se mira) | v1.1 (línea base) | 2 | 58 | 2 | 3,3 % | 50,0 % |
+| `desarrollo` | v1.2 | 49 | 11 | 1 | 81,7 % | 98,0 % |
+| `prueba-t1` (200; no se mira) | v1.1 (línea base) | 10 | 48 | 6 | 17,2 % | 62,5 % |
+| `prueba-t1` | v1.2 | 24 | 34 | 10 | 41,4 % | 70,6 % |
+
+Las cifras de `desarrollo` son optimistas porque el léxico se ajustó mirando esos mensajes. `prueba-t1` es la medida honesta, pero ya se leyeron sus falsos positivos para informar (no para ajustar): para seguir ajustando hace falta un conjunto nuevo. Los resúmenes completos (por dificultad, estilo, `contra_titular`, listas de falsos negativos y positivos) están en `resultados/`.

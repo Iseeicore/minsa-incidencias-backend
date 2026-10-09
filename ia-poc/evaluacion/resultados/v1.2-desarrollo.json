@@ -1,0 +1,219 @@
+{
+  "archivo": "ia-poc/evaluacion/desarrollo.jsonl",
+  "versionReglas": "reglas-corrupcion-v1.2",
+  "general": {
+    "total": 100,
+    "positivos": 60,
+    "vp": 49,
+    "fn": 11,
+    "fp": 1,
+    "vn": 39,
+    "recall": 0.8166666666666667,
+    "precision": 0.98
+  },
+  "porDificultad": {
+    "dificil": {
+      "total": 18,
+      "positivos": 8,
+      "vp": 3,
+      "fn": 5,
+      "fp": 1,
+      "vn": 9,
+      "recall": 0.375,
+      "precision": 0.75
+    },
+    "facil": {
+      "total": 58,
+      "positivos": 37,
+      "vp": 35,
+      "fn": 2,
+      "fp": 0,
+      "vn": 21,
+      "recall": 0.9459459459459459,
+      "precision": 1
+    },
+    "media": {
+      "total": 24,
+      "positivos": 15,
+      "vp": 11,
+      "fn": 4,
+      "fp": 0,
+      "vn": 9,
+      "recall": 0.7333333333333333,
+      "precision": 1
+    }
+  },
+  "porEstilo": {
+    "audio transcrito": {
+      "total": 3,
+      "positivos": 2,
+      "vp": 2,
+      "fn": 0,
+      "fp": 0,
+      "vn": 1,
+      "recall": 1,
+      "precision": 1
+    },
+    "engañoso": {
+      "total": 9,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 1,
+      "vn": 8,
+      "recall": null,
+      "precision": 0
+    },
+    "formal": {
+      "total": 66,
+      "positivos": 46,
+      "vp": 41,
+      "fn": 5,
+      "fp": 0,
+      "vn": 20,
+      "recall": 0.8913043478260869,
+      "precision": 1
+    },
+    "jerga": {
+      "total": 14,
+      "positivos": 11,
+      "vp": 5,
+      "fn": 6,
+      "fp": 0,
+      "vn": 3,
+      "recall": 0.45454545454545453,
+      "precision": 1
+    },
+    "mayúsculas": {
+      "total": 2,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 2,
+      "recall": null,
+      "precision": null
+    },
+    "mensaje corto": {
+      "total": 3,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 3,
+      "recall": null,
+      "precision": null
+    },
+    "otro": {
+      "total": 2,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 2,
+      "recall": null,
+      "precision": null
+    },
+    "whatsapp sin tildes": {
+      "total": 1,
+      "positivos": 1,
+      "vp": 1,
+      "fn": 0,
+      "fp": 0,
+      "vn": 0,
+      "recall": 1,
+      "precision": 1
+    }
+  },
+  "porTitular": {
+    "false": {
+      "total": 70,
+      "positivos": 30,
+      "vp": 21,
+      "fn": 9,
+      "fp": 1,
+      "vn": 39,
+      "recall": 0.7,
+      "precision": 0.9545454545454546
+    },
+    "true": {
+      "total": 30,
+      "positivos": 30,
+      "vp": 28,
+      "fn": 2,
+      "fp": 0,
+      "vn": 0,
+      "recall": 0.9333333333333333,
+      "precision": 1
+    }
+  },
+  "zonaGris": [
+    "D-091",
+    "D-098",
+    "D-100"
+  ],
+  "falsosNegativos": [
+    {
+      "id": "D-011",
+      "texto": "nelida barrera soto del fisal prioriza los casos de alto costo de gente conocida y al resto nos dicen que no hay presupuesto. a mi hijo con leucemia lo patean y al sobrino de ella lo cubrieron al toque. vivo en ate.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-026",
+      "texto": "el jefe del sis fausto ricalde poma hace que en san juan de lurigancho afilien primero a la gente que lleva una recomendacion suya, y a los demas nos botan el expediente. es uso del cargo, me lo confirmo una de afiliacion.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-045",
+      "texto": "en huaycan la cajera gladys paredes ibanez me cobro la ficha dos veces y la segunda no salio en boleta, se quedo con 10 soles. le dije y se hizo la loca.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-048",
+      "texto": "julio ancajima lora esta de apoyo en el fisal y me condiciono el medicamento de alto costo: 60 soles para que no lo observen. me lo dijo en san isidro, sin recibo. no es la directora ejecutiva.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-052",
+      "texto": "me late que en huaycan acomodan las referencias los de admision, plata no he visto, ni se quien manda. puro comentario de cola, ojala no sea vara de verdad.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-053",
+      "texto": "en el loaiza un chico de farmacia, sin chaleco con nombre, me insinuo que la medicina salia mas rapido si yo ponia de mi parte. no dijo monto ni cargo. me quede con la duda, en breña.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-054",
+      "texto": "causa en el ulloa me soplo un pata que para cama hay que conocer a alguien, no solto nombre ni plata. yo no vi nada, solo el runrun de miraflores.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-055",
+      "texto": "en el fisal comentan que algunos expedientes caminan si llevas un presente, no se si es la direccion o un tramitador. yo no vi sobre ni monto, es habladuria de san isidro.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-057",
+      "texto": "en el baldizan hay un runrun de que los informes para el colegio salen antes si caes bien con alguien de archivo. no vi plata ni cargo. santa anita, capaz es floro.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-058",
+      "texto": "alla por chosica dicen que en la diris unos de logistica se quedan con una yapa de las compras, no tengo nombre ni monto ni papel. lo escuche en la combi, no se si sera cierto.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-059",
+      "texto": "un señor del inen, no se si es medico o de limpieza, me dijo bajito que mi tomografia podia salir hoy si apoyaba con el almuerzo. no puso precio. en surquillo me quede palteado y me fui.",
+      "puntaje": 2
+    }
+  ],
+  "falsosPositivos": [
+    {
+      "id": "D-095",
+      "texto": "en el loaiza me cobraron 18 soles por una copia y si me dieron boleta, en la pared de breña decia 18. igual me parece un robo. revisen si con sis me tocaba pagar, no digo que la cajera se lo haya guardado.",
+      "puntaje": 2
+    }
+  ]
+}

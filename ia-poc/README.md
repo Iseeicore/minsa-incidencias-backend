@@ -19,7 +19,7 @@ RTX 3050 de 6 GB: el modelo se reparte 71 % GPU y 29 % CPU. Unos 15 tokens por s
 
 ## Evaluación
 
-`evaluacion/` recibirá el set de mensajes etiquetados (JSON Lines) y sus resultados. Formato por línea: `id`, `texto`, `establecimiento`, `renipress`, `anonimo`, `cargo_mencionado`, `nombre_mencionado`, `categoria_esperada`, `destino_esperado`, `dificultad`, `estilo`. Las categorías son las 4 de `catalogo.categoria_incidencia`.
+`evaluacion/` tiene los conjuntos de mensajes etiquetados (JSON Lines: `desarrollo.jsonl` para ajustar el léxico y `prueba-t1.jsonl` solo para medir) y los resultados por versión de reglas (`resultados/`); se corre con `npx tsx ia-poc/scripts/evaluar-reglas.ts <archivo.jsonl>` (ver `evaluacion/README.md`). Formato por línea: `id`, `texto`, `establecimiento`, `renipress`, `anonimo`, `cargo_mencionado`, `nombre_mencionado`, `categoria_esperada`, `destino_esperado`, `dificultad`, `estilo`. Las categorías son las 4 de `catalogo.categoria_incidencia`.
 
 ## Contrato del peso del modelo (`peso_corrupcion`)
 

@@ -1,6 +1,6 @@
 // Evalúa reglas + modelo local (Ollama) contra un conjunto de mensajes etiquetados (JSON Lines).
 // Uso (desde la raíz del repo):
-//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3|V2C --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache]
+//   npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V1|V2|V3|V2C --conjunto=ia-poc/evaluacion/desarrollo.jsonl [--limite=N [--estratificado]] [--max-minutos=35] [--solo-cache] [--ids-de=V2]
 // Una sola GPU: se consulta de a un mensaje. Cada respuesta válida se guarda en `ia-poc/evaluacion/cache/modelo-<variante>-<conjunto>.jsonl`
 // (por variante e id) y una corrida cortada se reanuda sola. El resumen se guarda SIN textos en `ia-poc/evaluacion/resultados/modelo-<variante>-<conjunto>.json`.
 // Antes de correr: `node ia-poc/scripts/precalentar.mjs` (la primera llamada en frío tarda unos 2 minutos).
@@ -76,6 +76,7 @@ const limite = valorDe("limite") ? Number(valorDe("limite")) : undefined;
 const maxMinutos = valorDe("max-minutos")
   ? Number(valorDe("max-minutos"))
   : undefined;
+const idsDe = valorDe("ids-de") as VarianteIa | undefined;
 const estratificado = argumentos.includes("--estratificado");
 const soloCache = argumentos.includes("--solo-cache");
 
@@ -159,11 +160,27 @@ function muestraEstratificada(
     .sort((a, b) => a.id.localeCompare(b.id))
     .slice(0, Math.max(cuantos, 0) + grupos.size);
 }
-const mensajes = limite
-  ? estratificado
-    ? muestraEstratificada(todos, limite)
-    : todos.slice(0, limite)
-  : todos;
+// `--ids-de=V2`: solo los ids que esa otra variante tiene en su caché del mismo conjunto (para medir los mismos mensajes por pares).
+const idsDeOtraVariante = idsDe
+  ? new Set(
+      leerLineas<LineaDeCache>(
+        resolve(
+          carpetaEvaluacion,
+          "cache",
+          `modelo-${idsDe}-${nombreConjunto}.jsonl`,
+        ),
+      )
+        .filter((l) => l.variante === idsDe)
+        .map((l) => l.id),
+    )
+  : null;
+const mensajes = idsDeOtraVariante
+  ? todos.filter((m) => idsDeOtraVariante.has(m.id))
+  : limite
+    ? estratificado
+      ? muestraEstratificada(todos, limite)
+      : todos.slice(0, limite)
+    : todos;
 
 /** Cliente que responde desde la caché y, si no hay, consulta a Ollama y guarda la respuesta válida. */
 const clienteCacheado = (id: string): ClienteModelo => ({

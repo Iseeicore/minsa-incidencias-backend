@@ -175,8 +175,9 @@ describe("prompt de V2C", () => {
       "4.",
       "5.",
       "6.",
+      "7.",
     ]);
-    expect(reglas).toContain("6. Responde solo el JSON");
+    expect(reglas).toContain("7. Responde solo el JSON");
   });
 
   it("el prefijo no varía entre mensajes: lo variable va solo en el mensaje del usuario", () => {

@@ -33,6 +33,9 @@ const REGLA_PAGO_CON_COMPROBANTE = `Un pago con boleta, recibo o según el tarif
 const REGLA_RUMOR = `Un rumor sin hecho concreto ("dicen que", "me late") no pasa de peso 3.`;
 const REGLA_SIN_DESTINO = `No asignes área, destino ni prioridad.`;
 const REGLA_SOLO_JSON = `Responde solo el JSON del esquema, sin texto fuera de él.`;
+/** Solo V2C (iteración 1 del prompt, mirando desarrollo-v2): un pago o favor para ser atendido es posible corrupción aunque falten datos. */
+const REGLA_PAGO_PARA_ATENCION = `Cobrar por un servicio gratuito, o dar plata o algo a cambio de atención rápida, de un resultado o de un trámite, es posible corrupción aunque no se sepa quién, cuánto ni a quién: pon posible_corrupcion en true y peso 4 o más. Si solo lo cuenta otra persona o es un rumor, posible_corrupcion en true y peso de 1 a 3.`;
+
 /** Estas dos mencionan campos que la salida compacta (V2C) no tiene; por eso V2C no las lleva. */
 const REGLA_SIN_INVENTAR = `No inventes datos. Lo que falte va en informacion_faltante.`;
 const REGLA_DUDA_QUEJA_RECLAMO = `Si dudas entre QUEJA y RECLAMO, pon las dos en alternativas con su probabilidad.`;
@@ -57,6 +60,7 @@ const REGLAS_DURAS_COMPACTAS = numerarReglas([
   REGLA_DENUNCIA_NO_BASTA,
   REGLA_PAGO_CON_COMPROBANTE,
   REGLA_RUMOR,
+  REGLA_PAGO_PARA_ATENCION,
   REGLA_SIN_DESTINO,
   REGLA_SOLO_JSON,
 ]);

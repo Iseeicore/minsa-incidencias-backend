@@ -1,0 +1,653 @@
+{
+  "a": "V2",
+  "b": "V2C",
+  "conjunto": "prueba-v2",
+  "pisoPesoPosibleCorrupcion": 6,
+  "universoB": "ids-de-a",
+  "ids": {
+    "pares": 119,
+    "universoB": 119,
+    "sinRespuestaDeB": 0,
+    "primeraLlamadaExcluidaA": "D2-0005",
+    "primeraLlamadaExcluidaB": "D2-0005"
+  },
+  "pareado": {
+    "V2": {
+      "soloReglas": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 46,
+        "fn": 26,
+        "fp": 4,
+        "recall": 0.638889,
+        "recallWilson95": {
+          "inferior": 0.5235248037538494,
+          "superior": 0.7401832036475271
+        },
+        "precision": 0.92,
+        "tasaFp": 0.085106,
+        "tasaFpWilson95": {
+          "inferior": 0.03359412322441163,
+          "superior": 0.19931537901751437
+        }
+      },
+      "reglasMasModeloConPiso": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 72,
+        "fn": 0,
+        "fp": 5,
+        "recall": 1,
+        "recallWilson95": {
+          "inferior": 0.9493488266449553,
+          "superior": 0.9999999999999999
+        },
+        "precision": 0.935065,
+        "tasaFp": 0.106383,
+        "tasaFpWilson95": {
+          "inferior": 0.04630478188805601,
+          "superior": 0.22594269459787378
+        }
+      },
+      "reglasMasModeloSinPiso": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 62,
+        "fn": 10,
+        "fp": 4,
+        "recall": 0.861111,
+        "recallWilson95": {
+          "inferior": 0.7628681265904589,
+          "superior": 0.9227726926531201
+        },
+        "precision": 0.939394,
+        "tasaFp": 0.085106,
+        "tasaFpWilson95": {
+          "inferior": 0.03359412322441163,
+          "superior": 0.19931537901751437
+        }
+      },
+      "categorias": {
+        "exactitud4Categorias": 0.8907563025210085,
+        "aciertos": 106,
+        "de": 119,
+        "acuerdoQuejaReclamo": 0.9117647058823529,
+        "acuerdoQuejaReclamoAciertos": 31,
+        "acuerdoQuejaReclamoDe": 34
+      },
+      "jsonPrimerIntento": {
+        "consultadas": 119,
+        "conSalidaValida": 119,
+        "sinRespuesta": 0,
+        "validosAlPrimerIntento": 119,
+        "tasa": 1
+      },
+      "latencia": {
+        "llamadas": 119,
+        "llamadasMedidas": 118,
+        "primeraLlamadaExcluida": true,
+        "mediaMs": 16261,
+        "p90Ms": 19646,
+        "tokensSalidaMedia": 214.3
+      }
+    },
+    "V2C": {
+      "soloReglas": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 46,
+        "fn": 26,
+        "fp": 4,
+        "recall": 0.638889,
+        "recallWilson95": {
+          "inferior": 0.5235248037538494,
+          "superior": 0.7401832036475271
+        },
+        "precision": 0.92,
+        "tasaFp": 0.085106,
+        "tasaFpWilson95": {
+          "inferior": 0.03359412322441163,
+          "superior": 0.19931537901751437
+        }
+      },
+      "reglasMasModeloConPiso": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 72,
+        "fn": 0,
+        "fp": 4,
+        "recall": 1,
+        "recallWilson95": {
+          "inferior": 0.9493488266449553,
+          "superior": 0.9999999999999999
+        },
+        "precision": 0.947368,
+        "tasaFp": 0.085106,
+        "tasaFpWilson95": {
+          "inferior": 0.03359412322441163,
+          "superior": 0.19931537901751437
+        }
+      },
+      "reglasMasModeloSinPiso": {
+        "mensajes": 119,
+        "corrupcionEsperada": 72,
+        "negativos": 47,
+        "vp": 57,
+        "fn": 15,
+        "fp": 4,
+        "recall": 0.791667,
+        "recallWilson95": {
+          "inferior": 0.6843073648741842,
+          "superior": 0.8694794506687065
+        },
+        "precision": 0.934426,
+        "tasaFp": 0.085106,
+        "tasaFpWilson95": {
+          "inferior": 0.03359412322441163,
+          "superior": 0.19931537901751437
+        }
+      },
+      "categorias": {
+        "exactitud4Categorias": 0.9243697478991597,
+        "aciertos": 110,
+        "de": 119,
+        "acuerdoQuejaReclamo": 0.9117647058823529,
+        "acuerdoQuejaReclamoAciertos": 31,
+        "acuerdoQuejaReclamoDe": 34
+      },
+      "jsonPrimerIntento": {
+        "consultadas": 119,
+        "conSalidaValida": 119,
+        "sinRespuesta": 0,
+        "validosAlPrimerIntento": 119,
+        "tasa": 1
+      },
+      "latencia": {
+        "llamadas": 119,
+        "llamadasMedidas": 118,
+        "primeraLlamadaExcluida": true,
+        "mediaMs": 3069,
+        "p90Ms": 3564,
+        "tokensSalidaMedia": 38.2
+      }
+    }
+  },
+  "absolutoDeB": {
+    "soloReglas": {
+      "mensajes": 119,
+      "corrupcionEsperada": 72,
+      "negativos": 47,
+      "vp": 46,
+      "fn": 26,
+      "fp": 4,
+      "recall": 0.638889,
+      "recallWilson95": {
+        "inferior": 0.5235248037538494,
+        "superior": 0.7401832036475271
+      },
+      "precision": 0.92,
+      "tasaFp": 0.085106,
+      "tasaFpWilson95": {
+        "inferior": 0.03359412322441163,
+        "superior": 0.19931537901751437
+      }
+    },
+    "reglasMasModeloConPiso": {
+      "mensajes": 119,
+      "corrupcionEsperada": 72,
+      "negativos": 47,
+      "vp": 72,
+      "fn": 0,
+      "fp": 4,
+      "recall": 1,
+      "recallWilson95": {
+        "inferior": 0.9493488266449553,
+        "superior": 0.9999999999999999
+      },
+      "precision": 0.947368,
+      "tasaFp": 0.085106,
+      "tasaFpWilson95": {
+        "inferior": 0.03359412322441163,
+        "superior": 0.19931537901751437
+      }
+    },
+    "reglasMasModeloSinPiso": {
+      "mensajes": 119,
+      "corrupcionEsperada": 72,
+      "negativos": 47,
+      "vp": 57,
+      "fn": 15,
+      "fp": 4,
+      "recall": 0.791667,
+      "recallWilson95": {
+        "inferior": 0.6843073648741842,
+        "superior": 0.8694794506687065
+      },
+      "precision": 0.934426,
+      "tasaFp": 0.085106,
+      "tasaFpWilson95": {
+        "inferior": 0.03359412322441163,
+        "superior": 0.19931537901751437
+      }
+    },
+    "categorias": {
+      "exactitud4Categorias": 0.9243697478991597,
+      "aciertos": 110,
+      "de": 119,
+      "acuerdoQuejaReclamo": 0.9117647058823529,
+      "acuerdoQuejaReclamoAciertos": 31,
+      "acuerdoQuejaReclamoDe": 34
+    },
+    "jsonPrimerIntento": {
+      "consultadas": 119,
+      "conSalidaValida": 119,
+      "sinRespuesta": 0,
+      "validosAlPrimerIntento": 119,
+      "tasa": 1
+    },
+    "latencia": {
+      "llamadas": 119,
+      "llamadasMedidas": 118,
+      "primeraLlamadaExcluida": true,
+      "mediaMs": 3069,
+      "p90Ms": 3564,
+      "tokensSalidaMedia": 38.2
+    }
+  },
+  "acuerdo": {
+    "marcaDelModelo": 0.983193,
+    "propuestaFinal": 0.991597
+  },
+  "paresDiscordantes": {
+    "marcaDelModelo": [
+      {
+        "id": "D2-0209",
+        "tipoCaso": "enganosa",
+        "lado": "SOLO_A",
+        "esperadoCorrupcion": false,
+        "acierta": "B"
+      },
+      {
+        "id": "D2-0612",
+        "tipoCaso": "reclamo",
+        "lado": "SOLO_A",
+        "esperadoCorrupcion": false,
+        "acierta": "B"
+      }
+    ],
+    "propuestaFinal": [
+      {
+        "id": "D2-0209",
+        "tipoCaso": "enganosa",
+        "lado": "SOLO_A",
+        "esperadoCorrupcion": false,
+        "acierta": "B"
+      }
+    ]
+  },
+  "medidas": {
+    "recallB": 1,
+    "recallParesA": 1,
+    "recallParesB": 1,
+    "fpB": 0.085106,
+    "fpParesA": 0.106383,
+    "fpParesB": 0.085106,
+    "acuerdoMarca": 0.9831932773109243,
+    "exactitudParesA": 0.8907563025210085,
+    "exactitudParesB": 0.9243697478991597,
+    "acuerdoQuejaReclamoB": 0.9117647058823529,
+    "jsonPrimerIntentoB": 1,
+    "latenciaMediaB": 3069,
+    "p90B": 3564,
+    "latenciaMediaParesA": 16261,
+    "latenciaMediaParesB": 3069
+  },
+  "criterios": [
+    {
+      "id": "Q1",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "recall de B (reglas + modelo)",
+          "valor": 1,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "recall de B menos recall de A, por pares",
+          "valor": 0,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q2",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "falsos positivos de B sobre negativos",
+          "valor": 0.085106,
+          "umbral": 0.15,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "FP de B menos FP de A, por pares",
+          "valor": -0.021277000000000004,
+          "umbral": 0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q3",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "acuerdo en la marca de corrupción",
+          "valor": 0.9831932773109243,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q4",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "exactitud de B menos exactitud de A, por pares",
+          "valor": 0.03361344537815125,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "acuerdo de B entre queja y reclamo",
+          "valor": 0.9117647058823529,
+          "umbral": 0.85,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q5",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "JSON válido al primer intento",
+          "valor": 1,
+          "umbral": 0.99,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "S1",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "latencia media de B (ms)",
+          "valor": 3069,
+          "umbral": 5000,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "veces más rápida que A",
+          "valor": 5.298468556533073,
+          "umbral": 3,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "percentil 90 de B (ms)",
+          "valor": 3564,
+          "umbral": 8000,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    }
+  ],
+  "veredicto": {
+    "veredicto": "Viable",
+    "motivo": "Cumple Q1 a Q5, S1 y S2.",
+    "casoNoPrevistoPorLaSeccion": false
+  },
+  "criteriosFinales": [
+    {
+      "id": "Q1",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "recall de B (reglas + modelo)",
+          "valor": 0.972678,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "recall de B menos recall de A, por pares",
+          "valor": 0.033332999999999946,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "recall de B (reglas + modelo)",
+          "valor": 1,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "recall de B menos recall de A, por pares",
+          "valor": 0,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q2",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "falsos positivos de B sobre negativos",
+          "valor": 0.075,
+          "umbral": 0.15,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "FP de B menos FP de A, por pares",
+          "valor": 0,
+          "umbral": 0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "falsos positivos de B sobre negativos",
+          "valor": 0.085106,
+          "umbral": 0.15,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "FP de B menos FP de A, por pares",
+          "valor": -0.021277000000000004,
+          "umbral": 0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q3",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "acuerdo en la marca de corrupción",
+          "valor": 0.9797979797979798,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "acuerdo en la marca de corrupción",
+          "valor": 0.9831932773109243,
+          "umbral": 0.95,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q4",
+      "cumple": false,
+      "faltaPuntos": 0.116,
+      "subcondiciones": [
+        {
+          "nombre": "exactitud de B menos exactitud de A, por pares",
+          "valor": 0.010101010101010055,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "acuerdo de B entre queja y reclamo",
+          "valor": 0.8488372093023255,
+          "umbral": 0.85,
+          "cumple": false,
+          "faltaPuntos": 0.116
+        },
+        {
+          "nombre": "exactitud de B menos exactitud de A, por pares",
+          "valor": 0.03361344537815125,
+          "umbral": -0.03,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "acuerdo de B entre queja y reclamo",
+          "valor": 0.9117647058823529,
+          "umbral": 0.85,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "Q5",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "JSON válido al primer intento",
+          "valor": 1,
+          "umbral": 0.99,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "JSON válido al primer intento",
+          "valor": 1,
+          "umbral": 0.99,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "S1",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "latencia media de B (ms)",
+          "valor": 3137,
+          "umbral": 5000,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "veces más rápida que A",
+          "valor": 4.74294670846395,
+          "umbral": 3,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "latencia media de B (ms)",
+          "valor": 3069,
+          "umbral": 5000,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "veces más rápida que A",
+          "valor": 5.298468556533073,
+          "umbral": 3,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    },
+    {
+      "id": "S2",
+      "cumple": true,
+      "faltaPuntos": 0,
+      "subcondiciones": [
+        {
+          "nombre": "percentil 90 de B (ms)",
+          "valor": 3763,
+          "umbral": 8000,
+          "cumple": true,
+          "faltaPuntos": 0
+        },
+        {
+          "nombre": "percentil 90 de B (ms)",
+          "valor": 3564,
+          "umbral": 8000,
+          "cumple": true,
+          "faltaPuntos": 0
+        }
+      ]
+    }
+  ],
+  "veredictoFinal": {
+    "veredicto": "Viable con reservas",
+    "motivo": "Cumple Q1 y Q5 y falla por poco Q4 (falta 0.116 puntos).",
+    "casoNoPrevistoPorLaSeccion": false
+  }
+}

@@ -69,3 +69,9 @@ export const HuecoCatalogo = {
   DIRECTORIO_INCOMPLETO: "DIRECTORIO_INCOMPLETO",
 } as const;
 export type HuecoCatalogo = (typeof HuecoCatalogo)[keyof typeof HuecoCatalogo];
+
+/** Señal que no es corrupción pero merece trato aparte (separada del puntaje de corrupción). */
+export const SenalSensible = {
+  ACOSO: "ACOSO",
+} as const;
+export type SenalSensible = (typeof SenalSensible)[keyof typeof SenalSensible];

@@ -42,7 +42,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Flavio Javier Aquize Díaz", cargo: "Jefe del OCI", correo: "faquize@sis.gob.pe" }],
@@ -84,7 +84,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Karin Sánchez Dávila", cargo: "Jefa del OCI", correo: "ksanchez@ins.gob.pe" }],
@@ -102,7 +102,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     titular: { cargo: "Superintendente", cargosEquivalentes: ["Jefe Institucional"], nombre: "Martin Alonso Tantalean Del Aguila" },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Ximenna Marcela Chino Salas", cargo: "Jefa del OCI", correo: "xchino@susalud.gob.pe" }],
@@ -124,7 +124,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: { OCI: null, SECRETARIA_TECNICA_PAD: null, INTEGRIDAD: null, PROCURADOR: null },
     huecos: [
@@ -147,7 +147,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Carlos Ruben Moreno Leyva", cargo: "Jefe del OCI", correo: "cmoreno@iemp.gob.pe" }],
@@ -169,7 +169,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Ronal Antonio Rivera Huaman", cargo: "Jefe del OCI", correo: "rrivera@insm.gob.pe" }],
@@ -191,7 +191,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Julio César Balbín Mendoza", cargo: "Jefe del OCI", correo: "oci@inr.gob.pe" }],
@@ -213,7 +213,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Julia Soledad Luján Calvo", cargo: "Jefa del OCI", correo: "jlujan@insnsb.gob.pe" }],
@@ -235,7 +235,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Yury Hugo Dávila Briceño", cargo: "Jefe del OCI", correo: "OCI-INCN@incn.gob.pe" }],
@@ -263,7 +263,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Paola Rossana Gonzales Albornoz", cargo: "Jefa del OCI", correo: "pgonzalesa@insn.gob.pe" }],
@@ -285,7 +285,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Ericka Andrea Gómez Hidalgo", cargo: "Jefa del OCI", correo: null }],
@@ -681,7 +681,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Livia Militza Calizaya De La Sota", cargo: "Jefa del OCI", correo: "lcalizaya@contraloria.gob.pe" }],
@@ -707,7 +707,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     titular: { cargo: "Coordinador General", cargosEquivalentes: ["Director Ejecutivo"], nombre: "David Guillermo Miranda Herrera" },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Jesús Enrique Echavarria Pomalaza", cargo: "Jefe del OCI", correo: null }],
@@ -725,7 +725,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     titular: { cargo: "DIRECTOR GENERAL", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Norberto Yamunaqué Asanza" },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Katia Fabiola Ortiz Yañez", cargo: "Jefa del OCI", correo: "kortiz@dirislimaeste.gob.pe" }],
@@ -747,7 +747,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Elizabeth Ruth Ríos Chuquinaupa", cargo: "Jefa del OCI", correo: "elizabeth.rios@dirisln.gob.pe" }],
@@ -771,7 +771,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     titular: { cargo: "Director General", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Julio Miguel Flores Retuerto" },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Lisbeth Carolina Lopez Peña", cargo: "Jefa del OCI", correo: "oci@dirislimacentro.gob.pe" }],
@@ -789,7 +789,7 @@ export const CATALOGO_ENTIDADES: readonly EntidadCatalogo[] = [
     titular: { cargo: "Director General", cargosEquivalentes: ["Director de la DIRIS"], nombre: "Mario Eduardo Izquierdo Hernández" },
     destinoSiTitular: {
       texto: "ST PAD MINSA (Secretaría Técnica del Procedimiento Administrativo Disciplinario del MINSA)",
-      entidadDestinoCodigo: "minsa",
+      entidadDestinoCodigo: "st-pad-minsa",
     },
     contactos: {
       OCI: [{ nombre: "Merici De Los Ángeles Huertas Navarro", cargo: "Jefa del OCI", correo: "mhuertas@dirislimasur.gob.pe" }],

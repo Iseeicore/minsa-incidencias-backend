@@ -57,7 +57,7 @@ describe("POST /filtro-corrupcion/evaluar", () => {
       puntaje: 4,
       certeza: "ALTA",
       propuestaCorrupcion: true,
-      versionReglas: "reglas-corrupcion-v1.1",
+      versionReglas: "reglas-corrupcion-v1.2",
       requiereOtrans: true,
       referenciaDerivacion: null,
       entidad: null,
@@ -81,10 +81,10 @@ describe("POST /filtro-corrupcion/evaluar", () => {
       referenciaDerivacion: {
         codigoEntidad: "sis",
         contactosDisponibles: ["OCI", "PROCURADOR"],
-        destinoSiTitular: { entidadDestinoCodigo: "minsa" },
+        destinoSiTitular: { entidadDestinoCodigo: "st-pad-minsa" },
         aplicaAlTitular: true,
       },
-      versionReglas: "reglas-corrupcion-v1.1",
+      versionReglas: "reglas-corrupcion-v1.2",
     });
     expect(Object.keys(res.body).sort()).toEqual(
       [
@@ -96,13 +96,46 @@ describe("POST /filtro-corrupcion/evaluar", () => {
         "nombreMencionado",
         "propuestaCorrupcion",
         "puntaje",
+        "categoriaSugerida",
+        "escalarAOtrans",
         "referenciaDerivacion",
         "requiereOtrans",
+        "requiereSegundaOpinion",
+        "senalSensible",
         "senales",
         "titular",
         "versionReglas",
       ].sort(),
     );
+  });
+
+  it("devuelve los campos de zona gris y acoso: la zona gris pide segunda opinión sin proponer; el acoso contra un cargo mayor escala", async () => {
+    const app = montar(sesionCon(["OTRANS"]));
+    const gris = await request(app)
+      .post(RUTA)
+      .send({ texto: "El director del Hospital Dos de Mayo pide cosas a los pacientes que llegan" });
+    expect(gris.body).toMatchObject({
+      propuestaCorrupcion: false,
+      requiereSegundaOpinion: true,
+      senalSensible: null,
+      categoriaSugerida: null,
+      escalarAOtrans: false,
+    });
+    const acoso = await request(app).post(RUTA).send({ texto: "El director me acoso y me hizo propuestas indecentes en su oficina" });
+    expect(acoso.body).toMatchObject({
+      propuestaCorrupcion: false,
+      requiereSegundaOpinion: false,
+      senalSensible: "ACOSO",
+      categoriaSugerida: "RECLAMO",
+      escalarAOtrans: true,
+    });
+  });
+
+  it("detecta el cobro generalizado por la ruta: el jefe del FISSAL que pide plata a los proveedores", async () => {
+    const res = await request(montar(sesionCon(["GESTOR"])))
+      .post(RUTA)
+      .send({ texto: "El jefe del FISSAL le pide plata a los proveedores para firmar los pagos" });
+    expect(res.body).toMatchObject({ propuestaCorrupcion: true, requiereOtrans: true, entidad: { codigo: "fissal" } });
   });
 
   it("usa el catálogo y el contexto que recibe", async () => {

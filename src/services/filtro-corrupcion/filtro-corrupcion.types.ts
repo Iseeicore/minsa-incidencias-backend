@@ -1,8 +1,10 @@
+import type { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
 import type {
   CertezaCorrupcion,
   FaltanteCorrupcion,
   HuecoCatalogo,
   NivelCargo,
+  SenalSensible,
   TipoContacto,
   TipoEntidad,
   TipoSenal,
@@ -31,7 +33,10 @@ export interface TitularCatalogo {
 export interface DestinoSiTitular {
   /** Texto tal cual de la fuente, p. ej. "SIS (Sistema Integrado de Salud, según la nota (2*) de la lista)". */
   texto: string;
-  /** `codigo` de la entidad del catálogo a la que apunta (ST PAD MINSA apunta a `minsa`); `null` si el destino no es una entidad del catálogo. */
+  /**
+   * `codigo` de la entidad del catálogo a la que apunta, o el código de destino especial `st-pad-minsa` (ST PAD MINSA no es una
+   * entidad del catálogo: es un órgano del MINSA). `null` si el destino es solo texto.
+   */
   entidadDestinoCodigo: string | null;
 }
 
@@ -123,5 +128,16 @@ export interface ResultadoCorrupcion {
   requiereOtrans: boolean;
   /** Solo si se propone corrupción y la entidad está en el catálogo; si no, `null` (no se busca ni se inventa). */
   referenciaDerivacion: ReferenciaDerivacion | null;
+  /**
+   * Zona gris: el texto nombra una entidad del catálogo y a su titular (o un cargo de jefatura) junto a un verbo de cobro, pero
+   * ninguna frase del léxico lo confirma. No propone corrupción por sí mismo: pide la segunda opinión de la IA, o de OTRANS si no hay IA.
+   */
+  requiereSegundaOpinion: boolean;
+  /** Señal que no es corrupción pero es sensible (hoy solo acoso, hostigamiento o tocamientos). No suma al puntaje. */
+  senalSensible: SenalSensible | null;
+  /** Categoría que se sugiere cuando hay una señal sensible (acoso: `RECLAMO`; decide una persona). */
+  categoriaSugerida: CategoriaIncidencia | null;
+  /** Acoso contra un cargo mayor (director, jefe, administrador, titular o equivalente): conviene que OTRANS lo evalúe o reasigne. */
+  escalarAOtrans: boolean;
   versionReglas: string;
 }

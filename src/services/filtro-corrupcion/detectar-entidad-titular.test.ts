@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CODIGO_DESTINO_ST_PAD_MINSA } from "@/constants/filtro-corrupcion.js";
 import { CertezaCorrupcion as C, TipoContacto, TipoEntidad } from "@/enums/filtro-corrupcion.enum.js";
 import { CATALOGO_ENTIDADES } from "@/services/filtro-corrupcion/catalogo-entidades.data.js";
 import { evaluarTextoCorrupcion } from "@/services/filtro-corrupcion/evaluar-texto-corrupcion.js";
@@ -230,7 +231,7 @@ describe("destino sugerido", () => {
       contactosDisponibles: ["OCI", "PROCURADOR"],
       destinoSiTitular: {
         texto: DESTINO_ST_PAD,
-        entidadDestinoCodigo: "minsa",
+        entidadDestinoCodigo: "st-pad-minsa",
       },
       aplicaAlTitular: false,
     });
@@ -273,17 +274,25 @@ const DIRIS_CENTRO = "DIRIS LIMA CENTRO (Dirección de Redes Integradas de Salud
 const DESTINO_SIS = "SIS (Sistema Integrado de Salud, según la nota (2*) de la lista)";
 
 describe("destino si la denuncia es contra el titular (catálogo)", () => {
-  it("las 37 entidades de la nota traen destino, y el código al que apuntan existe en el catálogo", () => {
-    const codigos = new Set(CATALOGO_ENTIDADES.map(({ codigo }) => codigo));
+  it("las 37 entidades de la nota traen destino, y el código al que apuntan existe en el catálogo o es el destino especial st-pad-minsa", () => {
+    const codigos = new Set([...CATALOGO_ENTIDADES.map(({ codigo }) => codigo), CODIGO_DESTINO_ST_PAD_MINSA]);
     for (const { codigo, destinoSiTitular } of CATALOGO_ENTIDADES) {
       expect(destinoSiTitular?.texto, codigo).toBeTruthy();
       if (destinoSiTitular?.entidadDestinoCodigo) expect(codigos.has(destinoSiTitular.entidadDestinoCodigo), codigo).toBe(true);
     }
   });
 
+  it("st-pad-minsa no es una entidad del catálogo: ninguna entidad se llama así, y las del ST PAD apuntan a él y no a minsa", () => {
+    expect(CATALOGO_ENTIDADES.some(({ codigo }) => codigo === CODIGO_DESTINO_ST_PAD_MINSA)).toBe(false);
+    const delStPad = CATALOGO_ENTIDADES.filter(({ destinoSiTitular }) => destinoSiTitular?.texto.startsWith("ST PAD MINSA"));
+    expect(delStPad.length).toBeGreaterThan(0);
+    for (const { codigo, destinoSiTitular } of delStPad)
+      expect(destinoSiTitular?.entidadDestinoCodigo, codigo).toBe(CODIGO_DESTINO_ST_PAD_MINSA);
+  });
+
   it.each([
     ["fissal", DESTINO_SIS, "sis"],
-    ["inen", DESTINO_ST_PAD, "minsa"],
+    ["inen", DESTINO_ST_PAD, "st-pad-minsa"],
     ["hhv", DIRIS_ESTE, "diris-le"],
     ["hh", DIRIS_ESTE, "diris-le"],
     ["hjatch", DIRIS_ESTE, "diris-le"],
@@ -315,7 +324,7 @@ describe("destino si la denuncia es contra el titular (catálogo)", () => {
 describe("referenciaDerivacion con destino si es el titular", () => {
   const casos = [
     ["SIS (FISSAL)", "El jefe institucional del FISSAL me pidió coima para atenderme", "fissal", DESTINO_SIS, "sis"],
-    ["ST PAD MINSA (INEN)", "El jefe institucional del INEN me pidió coima para atenderme", "inen", DESTINO_ST_PAD, "minsa"],
+    ["ST PAD MINSA (INEN)", "El jefe institucional del INEN me pidió coima para atenderme", "inen", DESTINO_ST_PAD, "st-pad-minsa"],
     [
       "DIRIS Lima Este (Hermilio Valdizán)",
       "El director general del Hospital Hermilio Valdizan me pidió coima",

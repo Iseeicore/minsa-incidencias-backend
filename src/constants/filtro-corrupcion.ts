@@ -1,7 +1,20 @@
 import { TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
 
-/** v1.1: el filtro usa el catálogo oficial de entidades y titulares (detecta entidad, titular y referencia de derivación). */
-export const VERSION_REGLAS_CORRUPCION = "reglas-corrupcion-v1.1";
+/**
+ * v1.1: el filtro usa el catálogo oficial de entidades y titulares (detecta entidad, titular y referencia de derivación).
+ * v1.2: patrones generalizables de cobro (verbo × objeto × complemento), negación del cobro, zona gris (`requiereSegundaOpinion`),
+ * señal sensible de acoso y destino especial `st-pad-minsa`.
+ */
+export const VERSION_REGLAS_CORRUPCION = "reglas-corrupcion-v1.2";
+
+/** Código de destino especial (no es una entidad del catálogo): la Secretaría Técnica del PAD del MINSA. */
+export const CODIGO_DESTINO_ST_PAD_MINSA = "st-pad-minsa";
+
+/** En el texto normalizado, un monto de dinero ("50 soles", "s/ 20") se reemplaza por esta palabra: sirve de objeto del cobro. */
+export const PALABRA_DE_MONTO = "monto";
+
+/** Cuántas palabras antes de una frase de cobro se miran para ver si la niegan ("no me pidió plata", "nadie me cobró"). */
+export const VENTANA_DE_NEGACION = 2;
 
 /** Desde este largo (con trim) un texto entra al filtro; menos es "datos insuficientes" (plan de cierre, 3 y 3b). */
 export const LONGITUD_MINIMA_TEXTO_CORRUPCION = 20;

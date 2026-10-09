@@ -55,7 +55,7 @@ describe("ejemplo del ministro (plan de cierre, 3b)", () => {
   const texto =
     "he presenciado un caso de corrupción en el área del Ministerio del Perú, vi al ministro de salud Luis Williams Dyer Fernández y lo vi recibiendo coimas";
 
-  it('v1.1: "Ministerio" suelto ya no es el MINSA: suma coimas (+3), corrupción (+1) y ministro de salud (+1) = 5, certeza alta', () => {
+  it('v1.2: "Ministerio" suelto ya no es el MINSA: suma coimas (+3), corrupción (+1) y ministro de salud (+1) = 5, certeza alta', () => {
     const resultado = evaluarTextoCorrupcion(texto);
     expect(resultado.puntaje).toBe(5);
     expect(resultado.certeza).toBe(C.ALTA);
@@ -69,7 +69,7 @@ describe("ejemplo del ministro (plan de cierre, 3b)", () => {
     expect(resultado.titular).toEqual({ cargo: "ministro de salud", esEquivalenteDelMaximo: true, nombreCoincide: false });
     expect(resultado.entidad).toBeNull();
     expect(resultado.nombreMencionado).toBe("Luis Williams Dyer Fernández");
-    expect(resultado.versionReglas).toBe("reglas-corrupcion-v1.1");
+    expect(resultado.versionReglas).toBe("reglas-corrupcion-v1.2");
   });
 
   it('si el texto dice "Ministerio de Salud" o MINSA, sí suma la entidad (+1 = 6)', () => {
@@ -124,7 +124,7 @@ describe("texto corto", () => {
       propuestaCorrupcion: false,
       senales: [],
       faltantes: [F.DATOS_INSUFICIENTES],
-      versionReglas: "reglas-corrupcion-v1.1",
+      versionReglas: "reglas-corrupcion-v1.2",
     });
   });
 

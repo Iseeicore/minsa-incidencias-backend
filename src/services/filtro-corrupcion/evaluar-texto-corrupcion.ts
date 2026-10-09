@@ -7,9 +7,19 @@ import {
   TITULOS_ESTANDAR_DEL_CARGO_MAXIMO,
   UMBRAL_CERTEZA_ALTA,
   UMBRAL_CERTEZA_MEDIA,
+  VENTANA_DE_NEGACION,
   VERSION_REGLAS_CORRUPCION,
 } from "@/constants/filtro-corrupcion.js";
-import { CertezaCorrupcion, FaltanteCorrupcion, NivelCargo, TipoContacto, TipoSenal } from "@/enums/filtro-corrupcion.enum.js";
+import { CategoriaIncidencia } from "@/enums/categoria-incidencia.enum.js";
+import {
+  CertezaCorrupcion,
+  FaltanteCorrupcion,
+  NivelCargo,
+  SenalSensible,
+  TipoContacto,
+  TipoSenal,
+} from "@/enums/filtro-corrupcion.enum.js";
+import { CLASES } from "@/services/filtro-corrupcion/clases-lexico.js";
 import { CATALOGO_ENTIDADES } from "@/services/filtro-corrupcion/catalogo-entidades.data.js";
 import {
   buscarCoincidencias,
@@ -33,20 +43,31 @@ import type {
 } from "@/services/filtro-corrupcion/filtro-corrupcion.types.js";
 import {
   CARGOS,
+  FRASES_DE_ACOSO,
   FRASES_DEBILES,
   FRASES_DE_PRUEBAS,
   FRASES_FUERTES,
   FRASES_MEDIAS,
   FRASES_NEGATIVAS_DECISIVAS,
   FRASES_NEGATIVAS_LEVES,
+  INICIOS_QUE_YA_NIEGAN,
+  NEGADORES_DE_COBRO,
+  NEGADORES_DENTRO_DEL_COBRO,
+  PALABRAS_DE_JEFATURA,
   PALABRAS_QUE_ENGANAN,
   PALABRAS_QUE_NIEGAN,
+  PLANTILLAS_DE_LA_FAMILIA_DE_COBRO,
 } from "@/services/filtro-corrupcion/lexico.js";
-import { quitarMontos, tokenizar } from "@/services/filtro-corrupcion/normalizar-texto.js";
+import { FRASES_DEBILES_DE_COBRO, FRASES_FUERTES_DE_COBRO, FRASES_MEDIAS_DE_COBRO } from "@/services/filtro-corrupcion/lexico-cobro.js";
+import { marcarMontos, tokenizar } from "@/services/filtro-corrupcion/normalizar-texto.js";
 
 interface EntradaDeSenal extends EntradaPonderada {
   tipo: TipoSenal;
+  /** Una negación delante ("no me pidió plata") la anula. Solo los patrones generalizables de cobro. */
+  negable: boolean;
 }
+
+const FAMILIA_DE_COBRO = "cobro";
 interface EntradaDeCargo extends EntradaPonderada {
   nivel: NivelCargo;
 }
@@ -66,21 +87,52 @@ function compilar<T extends EntradaPonderada>(plantillas: readonly string[], ent
 }
 
 const entradasDeSenal = (plantillas: readonly string[], tipo: TipoSenal) =>
-  compilar<EntradaDeSenal>(plantillas, (grupo) => ({ tipo, peso: PESO_POR_TIPO[tipo], grupo }));
+  compilar<EntradaDeSenal>(plantillas, (grupo) => ({
+    tipo,
+    peso: PESO_POR_TIPO[tipo],
+    grupo,
+    negable: false,
+    familia: PLANTILLAS_DE_LA_FAMILIA_DE_COBRO.has(grupo) ? FAMILIA_DE_COBRO : undefined,
+  }));
+
+/** Los patrones generalizables de cobro: todos de la familia de cobro y anulados por una negación. */
+const entradasGeneralizadas = (plantillas: readonly string[], tipo: TipoSenal) =>
+  compilar<EntradaDeSenal>(plantillas, (grupo) => ({
+    tipo,
+    peso: PESO_POR_TIPO[tipo],
+    grupo,
+    negable: true,
+    familia: FAMILIA_DE_COBRO,
+  }));
 
 const INDICE_DE_SENALES = crearIndice<EntradaDeSenal>([
   ...entradasDeSenal(FRASES_FUERTES, TipoSenal.FUERTE),
   ...entradasDeSenal(FRASES_MEDIAS, TipoSenal.MEDIA),
   ...entradasDeSenal(FRASES_DEBILES, TipoSenal.DEBIL),
+  ...entradasGeneralizadas(FRASES_FUERTES_DE_COBRO, TipoSenal.FUERTE),
+  ...entradasGeneralizadas(FRASES_MEDIAS_DE_COBRO, TipoSenal.MEDIA),
+  ...entradasGeneralizadas(FRASES_DEBILES_DE_COBRO, TipoSenal.DEBIL),
   ...entradasDeSenal(FRASES_NEGATIVAS_DECISIVAS, TipoSenal.NEGATIVA_DECISIVA),
   ...entradasDeSenal(FRASES_NEGATIVAS_LEVES, TipoSenal.NEGATIVA_LEVE),
 ]);
 
+const INDICE_DE_ACOSO = crearIndice(compilar<EntradaPonderada>(FRASES_DE_ACOSO, (grupo) => ({ peso: 0, grupo })));
+const VERBOS_DE_COBRO: ReadonlySet<string> = new Set([...(CLASES.get("verbo_cobro") ?? []), "cobro", "solicito"]);
+
 const ENTRADAS_DE_CARGO = CARGOS.flatMap(({ plantilla, nivel }) =>
-  compilar<EntradaDeCargo>([plantilla], (grupo) => ({ nivel, peso: PESO_POR_TIPO[TipoSenal.ACTOR], grupo })),
+  compilar<EntradaDeCargo>([plantilla], (grupo) => ({
+    nivel,
+    peso: PESO_POR_TIPO[TipoSenal.ACTOR],
+    grupo,
+  })),
 );
 const INDICE_DE_CARGOS = crearIndice(ENTRADAS_DE_CARGO);
-const INDICE_DE_PRUEBAS = crearIndice(compilar<EntradaPonderada>(FRASES_DE_PRUEBAS, (grupo) => ({ peso: 0, grupo })));
+const INDICE_DE_PRUEBAS = crearIndice(
+  compilar<EntradaPonderada>(FRASES_DE_PRUEBAS, (grupo) => ({
+    peso: 0,
+    grupo,
+  })),
+);
 
 const PRIORIDAD_DE_CARGO: Record<NivelCargo, number> = {
   [NivelCargo.CARGO_MAXIMO]: 0,
@@ -111,13 +163,24 @@ const textoDe = (palabras: readonly string[], c: { inicio: number; fin: number }
 
 /** Un pago legítimo negado ("no me dieron boleta") no resta. */
 function esNegativaNegada(c: Coincidencia<EntradaDeSenal>, palabras: readonly string[]): boolean {
-  if (c.entrada.tipo !== TipoSenal.NEGATIVA_DECISIVA || c.patron[0] === "no") return false;
+  if (c.entrada.tipo !== TipoSenal.NEGATIVA_DECISIVA || INICIOS_QUE_YA_NIEGAN.has(c.patron[0] ?? "")) return false;
   return PALABRAS_QUE_NIEGAN.has(palabras[c.inicio - 1] ?? "");
+}
+
+/** Una frase de cobro negada ("no me pidió plata", "nadie me cobró", "no me condicionó ningún pago") no cuenta como señal. */
+function estaNegadaLaFrase(inicio: number, fin: number, palabras: readonly string[]): boolean {
+  const antes = palabras.slice(Math.max(0, inicio - VENTANA_DE_NEGACION), inicio);
+  return (
+    antes.some((palabra) => NEGADORES_DE_COBRO.has(palabra)) ||
+    palabras.slice(inicio, fin).some((palabra) => NEGADORES_DENTRO_DEL_COBRO.has(palabra))
+  );
 }
 
 /** Las negativas restan una vez por tipo: dos frases de pago legítimo ("pagué en caja" y "me dieron boleta") son un solo descuento. */
 function detectarSenales(palabras: readonly string[]): SenalDetectada[] {
-  const encontradas = buscarCoincidencias(palabras, INDICE_DE_SENALES).filter((c) => !esNegativaNegada(c, palabras));
+  const encontradas = buscarCoincidencias(palabras, INDICE_DE_SENALES).filter(
+    (c) => !esNegativaNegada(c, palabras) && !(c.entrada.negable && estaNegadaLaFrase(c.inicio, c.fin, palabras)),
+  );
   const negativasVistas = new Set<TipoSenal>();
   return resolverChoques(encontradas)
     .filter((c) => {
@@ -127,7 +190,11 @@ function detectarSenales(palabras: readonly string[]): SenalDetectada[] {
       negativasVistas.add(tipo);
       return true;
     })
-    .map((c) => ({ frase: textoDe(palabras, c), tipo: c.entrada.tipo, peso: c.entrada.peso }));
+    .map((c) => ({
+      frase: textoDe(palabras, c),
+      tipo: c.entrada.tipo,
+      peso: c.entrada.peso,
+    }));
 }
 
 /** El cargo de mayor nivel; a igual nivel, el que aparece primero. */
@@ -137,7 +204,10 @@ function detectarActor(palabras: readonly string[]): { actor: ActorDetectado; se
   );
   if (!mejor) return null;
   const cargo = textoDe(palabras, mejor);
-  return { actor: { cargo, nivel: mejor.entrada.nivel }, senal: { frase: cargo, tipo: TipoSenal.ACTOR, peso: mejor.entrada.peso } };
+  return {
+    actor: { cargo, nivel: mejor.entrada.nivel },
+    senal: { frase: cargo, tipo: TipoSenal.ACTOR, peso: mejor.entrada.peso },
+  };
 }
 
 interface EntradaDeEntidad extends EntradaPonderada {
@@ -162,7 +232,11 @@ function indiceDeEntidades(entidades: readonly EntidadCatalogo[]): IndiceDeEntid
       .filter((patron) => patron.length > 0)
       .map((patron) => ({
         patron,
-        entrada: { entidad, peso: PESO_POR_TIPO[TipoSenal.ENTIDAD], grupo: entidad.codigo } satisfies EntradaDeEntidad,
+        entrada: {
+          entidad,
+          peso: PESO_POR_TIPO[TipoSenal.ENTIDAD],
+          grupo: entidad.codigo,
+        } satisfies EntradaDeEntidad,
       })),
   );
   const creado = { entradas, indice: crearIndice(entradas) };
@@ -195,7 +269,11 @@ function esAmbigua(c: Coincidencia<EntradaDeEntidad>, palabras: readonly string[
 function detectarEntidad(
   palabras: readonly string[],
   entidades: readonly EntidadCatalogo[],
-): { entidad: EntidadDetectada; catalogo: EntidadCatalogo; senal: SenalDetectada } | null {
+): {
+  entidad: EntidadDetectada;
+  catalogo: EntidadCatalogo;
+  senal: SenalDetectada;
+} | null {
   const { entradas, indice } = indiceDeEntidades(entidades);
   const [mejor] = buscarCoincidencias(palabras, indice)
     .filter((c) => !esAmbigua(c, palabras, entradas))
@@ -205,7 +283,11 @@ function detectarEntidad(
   return {
     entidad: { codigo, nombre, tipo },
     catalogo: mejor.entrada.entidad,
-    senal: { frase: textoDe(palabras, mejor), tipo: TipoSenal.ENTIDAD, peso: mejor.entrada.peso },
+    senal: {
+      frase: textoDe(palabras, mejor),
+      tipo: TipoSenal.ENTIDAD,
+      peso: mejor.entrada.peso,
+    },
   };
 }
 
@@ -259,13 +341,60 @@ function detectarNombreMencionado(texto: string): string | null {
   return null;
 }
 
+const esJefatura = (palabras: readonly string[]): boolean => palabras.some((palabra) => PALABRAS_DE_JEFATURA.has(palabra));
+
+/** Hay un verbo de cobro ("pide", "cobra", "exige"...) que nadie niega: basta para la zona gris, aunque no cierre una frase del léxico. */
+function hayVerboDeCobro(palabras: readonly string[]): boolean {
+  return palabras.some((palabra, i) => VERBOS_DE_COBRO.has(palabra) && !estaNegadaLaFrase(i, i + 1, palabras));
+}
+
+/**
+ * Zona gris (decisión del 2026-10-08): entidad del catálogo + su titular o un cargo de jefatura + verbo de cobro, y las reglas no
+ * confirman corrupción. No propone nada: solo pide segunda opinión (IA, o OTRANS si la IA no está).
+ */
+function esZonaGris(
+  propuestaCorrupcion: boolean,
+  hayEntidad: boolean,
+  titular: TitularDetectado | null,
+  actor: ActorDetectado | null,
+  palabras: readonly string[],
+): boolean {
+  if (propuestaCorrupcion || !hayEntidad) return false;
+  const nombraJefatura = titular !== null || actor?.nivel === NivelCargo.CARGO_MAXIMO || esJefatura(palabras);
+  return nombraJefatura && hayVerboDeCobro(palabras);
+}
+
+interface AcosoDetectado {
+  senalSensible: SenalSensible | null;
+  categoriaSugerida: CategoriaIncidencia | null;
+  escalarAOtrans: boolean;
+}
+
+const SIN_ACOSO: AcosoDetectado = {
+  senalSensible: null,
+  categoriaSugerida: null,
+  escalarAOtrans: false,
+};
+
+/** Acoso, hostigamiento o tocamientos: aparte del puntaje de corrupción. Escala a OTRANS si acusa a un cargo mayor o a un titular. */
+function detectarAcoso(palabras: readonly string[], actor: ActorDetectado | null, titular: TitularDetectado | null): AcosoDetectado {
+  const hayAcoso = buscarCoincidencias(palabras, INDICE_DE_ACOSO).some((c) => !estaNegadaLaFrase(c.inicio, c.fin, palabras));
+  if (!hayAcoso) return SIN_ACOSO;
+  const cargoMayor = titular !== null || actor?.nivel === NivelCargo.CARGO_MAXIMO || esJefatura(palabras);
+  return {
+    senalSensible: SenalSensible.ACOSO,
+    categoriaSugerida: CategoriaIncidencia.RECLAMO,
+    escalarAOtrans: cargoMayor,
+  };
+}
+
 function certezaDe(puntaje: number, propuestaCorrupcion: boolean): CertezaCorrupcion {
   if (!propuestaCorrupcion) return CertezaCorrupcion.BAJA;
   return puntaje >= UMBRAL_CERTEZA_ALTA ? CertezaCorrupcion.ALTA : CertezaCorrupcion.MEDIA;
 }
 
 /**
- * Filtro de corrupción v1.1 por reglas (sin IA, sin base de datos, sin red). Suma señales del léxico, el actor y la
+ * Filtro de corrupción v1.2 por reglas (sin IA, sin base de datos, sin red). Suma señales del léxico, el actor y la
  * entidad del catálogo (por defecto el oficial generado en `catalogo-entidades.data.ts`), y resta las negativas; devuelve una PROPUESTA con su certeza. Quien revisa siempre confirma o corrige, y el
  * destino de la incidencia no sale de aquí. Sin ninguna señal de corrupción (fuerte, media o débil) nunca se propone
  * corrupción, aunque el actor y la entidad sumen.
@@ -286,11 +415,13 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
       faltantes: [FaltanteCorrupcion.DATOS_INSUFICIENTES],
       requiereOtrans: false,
       referenciaDerivacion: null,
+      requiereSegundaOpinion: false,
+      ...SIN_ACOSO,
       versionReglas: VERSION_REGLAS_CORRUPCION,
     };
   }
 
-  const palabras = quitarMontos(tokenizar(recortado));
+  const palabras = marcarMontos(tokenizar(recortado));
   const actor = detectarActor(palabras);
   const entidad = detectarEntidad(palabras, contexto.entidades ?? CATALOGO_ENTIDADES);
   const titular = detectarTitular(actor?.actor ?? null, entidad?.catalogo, palabras);
@@ -322,6 +453,8 @@ export function evaluarTextoCorrupcion(texto: string, contexto: ContextoEvaluaci
     faltantes,
     requiereOtrans: propuestaCorrupcion,
     referenciaDerivacion: propuestaCorrupcion && entidad ? referenciaDe(entidad.catalogo, titular) : null,
+    requiereSegundaOpinion: esZonaGris(propuestaCorrupcion, entidad !== null, titular, actor?.actor ?? null, palabras),
+    ...detectarAcoso(palabras, actor?.actor ?? null, titular),
     versionReglas: VERSION_REGLAS_CORRUPCION,
   };
 }

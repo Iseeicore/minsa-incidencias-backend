@@ -53,13 +53,21 @@ const TIPOS_POR_NOMBRE = [
 ];
 
 /**
+ * Códigos de destino válidos que no son una entidad del catálogo: apuntan a un órgano. Deben coincidir con
+ * `CODIGO_DESTINO_ST_PAD_MINSA` de `src/constants/filtro-corrupcion.ts`.
+ */
+const CODIGO_DESTINO_ST_PAD_MINSA = "st-pad-minsa";
+const DESTINOS_ESPECIALES = new Set([CODIGO_DESTINO_ST_PAD_MINSA]);
+
+/**
  * Destino de la denuncia contra el titular (nota, sección 1): prefijo del texto, normalizado, y entidad del catálogo a la
- * que apunta. ST PAD MINSA es un órgano del MINSA, no una entidad del catálogo: apunta a `minsa`. El destino del MINSA
+ * que apunta. ST PAD MINSA es un órgano del MINSA, no una entidad del catálogo: tiene su propio código de destino especial
+ * (`st-pad-minsa`, decisión del 2026-10-08) en vez de apuntar a `minsa`. El destino del MINSA
  * ("Servidores y funcionarios de todos los órganos...") no es una entidad: solo texto. Un destino sin regla detiene el generador.
  */
 const DESTINOS_TITULAR = [
   [/^sis\b/, "sis"],
-  [/^st pad minsa\b/, "minsa"],
+  [/^st pad minsa\b/, CODIGO_DESTINO_ST_PAD_MINSA],
   [/^diris lima este\b/, "diris-le"],
   [/^diris lima norte\b/, "diris-ln"],
   [/^diris lima centro\b/, "diris-lc"],
@@ -217,8 +225,8 @@ for (const { codigo, nombre, alias } of entidades) {
 if (new Set(entidades.map(({ codigo }) => codigo)).size !== entidades.length) falla("hay códigos repetidos");
 const codigos = new Set(entidades.map(({ codigo }) => codigo));
 for (const { codigo, destinoSiTitular: d } of entidades)
-  if (d?.entidadDestinoCodigo && !codigos.has(d.entidadDestinoCodigo))
-    falla(`el destino de ${codigo} apunta a "${d.entidadDestinoCodigo}", que no está en el catálogo`);
+  if (d?.entidadDestinoCodigo && !codigos.has(d.entidadDestinoCodigo) && !DESTINOS_ESPECIALES.has(d.entidadDestinoCodigo))
+    falla(`el destino de ${codigo} apunta a "${d.entidadDestinoCodigo}", que no está en el catálogo ni es un destino especial`);
 
 const literal = (valor) => JSON.stringify(valor);
 const entidadComoTs = ({ codigo, nombre, tipo, alias, titular, destinoSiTitular: destino, contactos, huecos }) => `{

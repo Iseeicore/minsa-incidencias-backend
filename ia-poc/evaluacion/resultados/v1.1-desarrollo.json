@@ -1,0 +1,457 @@
+{
+  "archivo": "ia-poc/evaluacion/desarrollo.jsonl",
+  "versionReglas": "reglas-corrupcion-v1.1",
+  "general": {
+    "total": 100,
+    "positivos": 60,
+    "vp": 2,
+    "fn": 58,
+    "fp": 2,
+    "vn": 38,
+    "recall": 0.03333333333333333,
+    "precision": 0.5
+  },
+  "porDificultad": {
+    "dificil": {
+      "total": 18,
+      "positivos": 8,
+      "vp": 0,
+      "fn": 8,
+      "fp": 2,
+      "vn": 8,
+      "recall": 0,
+      "precision": 0
+    },
+    "facil": {
+      "total": 58,
+      "positivos": 37,
+      "vp": 2,
+      "fn": 35,
+      "fp": 0,
+      "vn": 21,
+      "recall": 0.05405405405405406,
+      "precision": 1
+    },
+    "media": {
+      "total": 24,
+      "positivos": 15,
+      "vp": 0,
+      "fn": 15,
+      "fp": 0,
+      "vn": 9,
+      "recall": 0,
+      "precision": null
+    }
+  },
+  "porEstilo": {
+    "audio transcrito": {
+      "total": 3,
+      "positivos": 2,
+      "vp": 0,
+      "fn": 2,
+      "fp": 0,
+      "vn": 1,
+      "recall": 0,
+      "precision": null
+    },
+    "engañoso": {
+      "total": 9,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 1,
+      "vn": 8,
+      "recall": null,
+      "precision": 0
+    },
+    "formal": {
+      "total": 66,
+      "positivos": 46,
+      "vp": 2,
+      "fn": 44,
+      "fp": 0,
+      "vn": 20,
+      "recall": 0.043478260869565216,
+      "precision": 1
+    },
+    "jerga": {
+      "total": 14,
+      "positivos": 11,
+      "vp": 0,
+      "fn": 11,
+      "fp": 0,
+      "vn": 3,
+      "recall": 0,
+      "precision": null
+    },
+    "mayúsculas": {
+      "total": 2,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 2,
+      "recall": null,
+      "precision": null
+    },
+    "mensaje corto": {
+      "total": 3,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 0,
+      "vn": 3,
+      "recall": null,
+      "precision": null
+    },
+    "otro": {
+      "total": 2,
+      "positivos": 0,
+      "vp": 0,
+      "fn": 0,
+      "fp": 1,
+      "vn": 1,
+      "recall": null,
+      "precision": 0
+    },
+    "whatsapp sin tildes": {
+      "total": 1,
+      "positivos": 1,
+      "vp": 0,
+      "fn": 1,
+      "fp": 0,
+      "vn": 0,
+      "recall": 0,
+      "precision": null
+    }
+  },
+  "porTitular": {
+    "false": {
+      "total": 70,
+      "positivos": 30,
+      "vp": 2,
+      "fn": 28,
+      "fp": 2,
+      "vn": 38,
+      "recall": 0.06666666666666667,
+      "precision": 0.5
+    },
+    "true": {
+      "total": 30,
+      "positivos": 30,
+      "vp": 0,
+      "fn": 30,
+      "fp": 0,
+      "vn": 0,
+      "recall": 0,
+      "precision": null
+    }
+  },
+  "zonaGris": [
+    "D-098"
+  ],
+  "falsosNegativos": [
+    {
+      "id": "D-001",
+      "texto": "en la diris de lima este la directora patricia soria benavides hizo pasar la compra de ambulancias a la empresa de su hermano, cotizaba mas caro y ella firmo igual. lo vi en el acta la semana pasada.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-002",
+      "texto": "el jefe del sis fausto ricalde poma le dijo a mi prima que su cobertura de cancer salia antes si le dejaba 500 soles por fuera, sin boleta ni tramite. fue en la oficina del sis, no en el puesto.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-003",
+      "texto": "en el fisal la señora nelida barrera soto autoriza nomas a la clinica de su cuñado para la hemodialisis, aunque hay otra mas barata. mi vecino de chosica recien consigue cupo ahi, rara la cosa.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-004",
+      "texto": "la jefa del inen carmen ochoa villanueva me pidio 300 soles para adelantar la quimio de mi mama, dijo que si no le dejaba recien habia hueco en dos meses. sin recibo, en surquillo.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-005",
+      "texto": "el director del hermilio baldizan, emilio sangama rios, metio a su sobrino en seguridad sin concurso ni examen. en santa anita es cantado, puro vara.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-006",
+      "texto": "el director del loaiza hector cahuana beltran manda las compras de medicinas a un laboratorio de su compadre, yo hice practica ahi y vi los cuadros firmados por el. en breña nadie dice nada.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-007",
+      "texto": "en el ulloa la directora luzmila taipe condori me pidio 200 soles para soltar una cama de observacion, me lo dijo ella misma en emergencia. sin boleta, en miraflores, anoche.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-008",
+      "texto": "el director del hospital de huaycan rolando yucra mamani le cobra a los proveedores 100 soles por factura para dejarlos entrar al almacen. a mi me lo pidio la semana pasada, sin recibo.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-009",
+      "texto": "patricia soria benavides, la de la diris lima este, firmo un adicional de obra con la constructora de su concuñado para el puesto de santa anita. la otra empresa estaba mas baja y quedo fuera.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-010",
+      "texto": "el jefe del sis fausto ricalde poma condiciona el pago a las clinicas: me entere que una ipress le deja un porcentaje y recien ahi sueltan la transferencia. yo lo escuche en san isidro, en su antesala.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-011",
+      "texto": "nelida barrera soto del fisal prioriza los casos de alto costo de gente conocida y al resto nos dicen que no hay presupuesto. a mi hijo con leucemia lo patean y al sobrino de ella lo cubrieron al toque. vivo en ate.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-012",
+      "texto": "en el inen la jefa carmen ochoa villanueva dejo que contraten a su hija en estadistica sin convocatoria. me lo mostro una enfermera de surquillo, la resolucion salio con su visto bueno.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-013",
+      "texto": "el director emilio sangama rios del baldizan vende los descansos de salud mental a 80 soles con sello del hospital, sin que pases por caja. me lo ofrecio su secretaria diciendo que era orden de el.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-014",
+      "texto": "hector cahuana beltran, director del loaiza, se llevo equipos donados de un laboratorio a una clinica particular de su familia. salieron en cajas el domingo, sin guia, por la puerta de breña.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-015",
+      "texto": "la directora del ulloa luzmila taipe condori le dio el servicio de comida de pacientes a un restaurante de su hermana, mas caro que las otras propuestas. ella misma firmo, me lo conto un nutricionista.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-016",
+      "texto": "en huaycan el director rolando yucra mamani hace pagar 50 soles por fuera para que te adelanten la referencia al hospital grande. me lo dijo en su oficina, sin boleta, sino esperaba un mes.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-017",
+      "texto": "la directora de la diris patricia soria benavides autorizo combustible de mas para camionetas que usan sus allegados alla por chosica, no es para las campañas. vi los vales repetidos con su firma.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-018",
+      "texto": "fausto ricalde poma, jefe del sis, le pidio a mi empleador un aporte aparte para no observar la afiliacion de los obreros. 200 soles por padron, me lo dijo el mismo, sin documento.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-019",
+      "texto": "en san isidro la de fissal, nelida barrera soto, hace que los convenios de cancer salgan solo con clinicas que le devuelven un favor. a la nuestra la observaron tres veces y a la de su entorno no.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-020",
+      "texto": "carmen ochoa villanueva del inen cobra por el informe de junta medica, 150 soles si lo quieres esta semana, si no te quedas en cola. me lo planteo su asistente como cosa de ella, sin recibo, en surquillo.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-021",
+      "texto": "sangama rios, el director del hermilio baldizan, acomoda las camas de hospitalizacion para sus paisanos y al resto nos dejan en emergencia. no vi plata, pero el beneficio es para los suyos y el da la orden.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-022",
+      "texto": "el director del loaiza me dijo clarito que el expediente de mi reclamacion avanzaba si le alcanzaba un sobre con 100 soles. hector cahuana beltran, en su despacho de breña, sin boleta.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-023",
+      "texto": "luzmila taipe condori, directora del ulloa, dejo entrar a una empresa de ambulancias privadas de su primo para los traslados que deberia cubrir el hospital. el paciente pone 80 soles y ella autoriza.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-024",
+      "texto": "el director de huaycan rolando yucra mamani contrato jardinero y vigilancia a puro familiar, sin concurso. las plazas salieron con su firma, me lo enseno un administrativo del hospital.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-025",
+      "texto": "en el agustino comentan con papeles que patricia soria, directora de la diris, recibe un presente de los que ganan la compra de medicinas del primer nivel. yo vi un sobre a su nombre en logistica, no era correspondencia.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-026",
+      "texto": "el jefe del sis fausto ricalde poma hace que en san juan de lurigancho afilien primero a la gente que lleva una recomendacion suya, y a los demas nos botan el expediente. es uso del cargo, me lo confirmo una de afiliacion.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-027",
+      "texto": "desde vitarte nos mandan al fisal y nelida barrera soto, la directora, pide un pago extra para destrabar el financiamient de trasplante. 1000 soles me dijeron en su mesa de partes, por fuera.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-028",
+      "texto": "la jefa institucional del inen, carmen ochoa, cambio el resultado de una compra de reactivos para que gane la firma de su concuño. el cuadro comparativo no cuadraba y aun asi salio su firma.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-029",
+      "texto": "en el baldizan el director emilio sangama cobra por los informes psiquiatricos para el juzgado, 120 soles el folio y el sello sale el mismo dia. si no pagas, el informe duerme un mes. me lo ofrecieron como tramite de direccion.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-030",
+      "texto": "hector cahuana, director del loaiza, obliga a los internos a poner plata para la guardia y el se queda con una parte, 20 soles por noche segun me dijeron los chicos. el da la orden en breña.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-031",
+      "texto": "en el inen el jefe de farmacia julio ancajima lora me vendio la medicina del seguro a 40 soles por fuera, dijo que del stock del estado no habia pero el tenia en su cajon. sin boleta, en surquillo.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-032",
+      "texto": "la cajera gladys paredes ibanez del loaiza me cobro 15 soles de mas y se los echo al bolsillo, la boleta salio por menos. le reclame y me dijo que asi era, en breña.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-033",
+      "texto": "el chofer pedro alvarado de la ambulancia del ulloa me pidio 60 soles pa el peaje si queria que lleve a mi hermano a otro hospital. si no ponia, no arrancaba. en miraflores, de madrugada, sin recibo.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-034",
+      "texto": "en el hermilio baldizan el tecnico ruben condor me dijo que la curacion salia bien solo si le dejaba 25 soles en la mano, sino me atendia a la rapida. sin boleta, santa anita.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-036",
+      "texto": "el jefe de emergencia del ulloa, walter huanca peralta, me pidio 100 soles para que mi papa pase de pasillo a una camilla de trauma. lo dijo el, no la directora. sin boleta.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-037",
+      "texto": "el administrador luis fernando tello cruz del hospital de huaycan le cobra 50 soles al mes a las señoras que venden desayuno en la puerta, dice que si no pagan no entran. no da recibo.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-038",
+      "texto": "carlos mendiola rey, jefe de logistica de la diris lima este, saco cajas de guantes del almacen de ate para una clinica de un primo. lo vi el sabado, sin guia. no es la directora, es el de logistica.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-039",
+      "texto": "en la oficina del sis de san juan una señorita de afiliacion, no se su nombre ni si es jefa, me pidio 20 soles para colar mi expediente hoy. sin boleta. el jefe del sis ni aparecio.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-040",
+      "texto": "un tramitador del fisal, no es la directora, me dijo en san isidro que por 80 soles me aceleraba el expediente de alto costo. me mostro un yape y dijo que era suyo, no de la institucion.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-041",
+      "texto": "una enfermera del inen, no la jefa, me pidio 50 soles para separarme cama de quimio de un dia para otro. si no le daba, decia que no habia. fue en surquillo, sin recibo.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-042",
+      "texto": "en el loaiza el jefe de logistica carlos mendiola rey compro gasas a la empresa de su cuñado mas caras, el firmo el cuadro. el director no salio en ese papel, fue el de logistica. en breña.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-043",
+      "texto": "la obstetra mariela salinas, que rota en el baldizan, me pidio 40 soles para darme el informe prenatal el mismo dia, dijo que si no le pagaba lo dejaba para la otra semana. sin boleta.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-044",
+      "texto": "ruben condor, tecnico del ulloa, me cobro 20 soles por una ferula que en el hospital es del paciente asegurado, se lo guardo y no me dio ticket. en miraflores.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-045",
+      "texto": "en huaycan la cajera gladys paredes ibanez me cobro la ficha dos veces y la segunda no salio en boleta, se quedo con 10 soles. le dije y se hizo la loca.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-046",
+      "texto": "el chofer de la diris, pedro alvarado, me pidio 30 soles para llevar la campaña de vacunas hasta el anexo de chosica, dijo que si no habia propina no subia el equipo. no es la directora, es el chofer.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-047",
+      "texto": "en el sis la de la ventanilla me dijo que mi constancia de cobertura salia hoy si le yapeaba 25 soles a ella, no a la institucion. no quiso dar nombre. sin boleta.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-048",
+      "texto": "julio ancajima lora esta de apoyo en el fisal y me condiciono el medicamento de alto costo: 60 soles para que no lo observen. me lo dijo en san isidro, sin recibo. no es la directora ejecutiva.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-050",
+      "texto": "rosa elena quispe marin en admision del loaiza vende los turnos de traumatologia a 35 soles, me lo pidio bajito en breña. si no pagaba, sistema caido hasta el otro mes. sin boleta.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-051",
+      "texto": "ehh o sea en el inen en surquillo decian decian que para que te adelanten la quimio hay que caerle con un detallito a alguien de adentro, no se a quien ni cuanto, capaz es floro.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-052",
+      "texto": "me late que en huaycan acomodan las referencias los de admision, plata no he visto, ni se quien manda. puro comentario de cola, ojala no sea vara de verdad.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-053",
+      "texto": "en el loaiza un chico de farmacia, sin chaleco con nombre, me insinuo que la medicina salia mas rapido si yo ponia de mi parte. no dijo monto ni cargo. me quede con la duda, en breña.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-054",
+      "texto": "causa en el ulloa me soplo un pata que para cama hay que conocer a alguien, no solto nombre ni plata. yo no vi nada, solo el runrun de miraflores.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-055",
+      "texto": "en el fisal comentan que algunos expedientes caminan si llevas un presente, no se si es la direccion o un tramitador. yo no vi sobre ni monto, es habladuria de san isidro.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-056",
+      "texto": "ehh este en el sis me dijeron me dijeron que a veces piden una colaboracion para soltar la cobertura, no me dijeron quien ni cuanto. o sea yo no pague nada, solo les cuento el comentario.",
+      "puntaje": 1
+    },
+    {
+      "id": "D-057",
+      "texto": "en el baldizan hay un runrun de que los informes para el colegio salen antes si caes bien con alguien de archivo. no vi plata ni cargo. santa anita, capaz es floro.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-058",
+      "texto": "alla por chosica dicen que en la diris unos de logistica se quedan con una yapa de las compras, no tengo nombre ni monto ni papel. lo escuche en la combi, no se si sera cierto.",
+      "puntaje": 0
+    },
+    {
+      "id": "D-059",
+      "texto": "un señor del inen, no se si es medico o de limpieza, me dijo bajito que mi tomografia podia salir hoy si apoyaba con el almuerzo. no puso precio. en surquillo me quede palteado y me fui.",
+      "puntaje": 2
+    },
+    {
+      "id": "D-060",
+      "texto": "en huaycan varios en la cola repiten que el de la garita hace pasar primero a sus conocidos. plata no le vi. no se si es el director o un vigilante. puro comentario.",
+      "puntaje": 1
+    }
+  ],
+  "falsosPositivos": [
+    {
+      "id": "D-091",
+      "texto": "quiero denunciar corrupcion en el inen porque el doctor ni me saludo y atendio con la puerta abierta, todo surquillo oia lo de mi diagnostico. no me pidio dinero ni favor, fue falta de respeto.",
+      "puntaje": 3
+    },
+    {
+      "id": "D-100",
+      "texto": "mira les escribo todo junto porque sigo brava en el inen de surquillo el doctor salio a las 11 cuando mi cita era a las 8 y cuando le dije que mi viejo no escuchaba me contesto que entonces pa que viene y se rio con la enfermera yo le dije que es adulto mayor y me dijo que si queria clinica de surco me fuera para alla o sea pa mi eso es corrupcion del trato aunque no nos pidio plata ni yape ni vara solo nos dejo palteados quiero que lo orienten nomas",
+      "puntaje": 3
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 // Validación básica de un archivo de mensajes de prueba en JSON Lines (un objeto por línea).
-// Uso: node ia-poc/scripts/validar-mensajes.mjs ruta/al/archivo.jsonl [ruta/de/salida-limpia.jsonl] [--reasignar-ids=PREFIJO]
+// Uso: node ia-poc/scripts/validar-mensajes.mjs ruta/al/archivo.jsonl [ruta/de/salida-limpia.jsonl] [--reasignar-ids=PREFIJO] [--excluir-textos-de=otro.jsonl]
+// Con --excluir-textos-de descarta los mensajes cuyo texto ya está en el otro archivo (evita que la prueba se cuele en desarrollo).
 // Tolera objetos pegados en una misma línea (los modelos chicos a veces omiten el salto de línea) y bloques con texto extra.
 // Con --reasignar-ids=PREFIJO numera los mensajes válidos como PREFIJO-001, PREFIJO-002… (los ids repetidos entre tandas no son un error grave).
 // Comprueba formato, categorías, coherencia del destino, duplicados y que el RENIPRESS exista en la lista conocida.
@@ -23,6 +24,7 @@ const normalizar = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0
 
 const argumentos = process.argv.slice(2);
 const prefijoIds = argumentos.find((a) => a.startsWith("--reasignar-ids="))?.split("=")[1] ?? null;
+const archivoAExcluir = argumentos.find((a) => a.startsWith("--excluir-textos-de="))?.split("=")[1] ?? null;
 const [entrada, salida] = argumentos.filter((a) => !a.startsWith("--"));
 if (!entrada) {
   console.error("Falta la ruta del archivo .jsonl");
@@ -64,6 +66,19 @@ const problemas = [];
 const vistosId = new Map();
 let idsRepetidos = 0;
 const vistosTexto = new Map();
+// Textos que ya pertenecen a otro conjunto (p. ej. la prueba): un mensaje repetido allí no puede estar también en desarrollo.
+const textosAExcluir = new Set(
+  archivoAExcluir
+    ? extraerObjetos(readFileSync(archivoAExcluir, "utf8")).flatMap((crudo) => {
+        try {
+          return [normalizar(JSON.parse(crudo).texto ?? "")];
+        } catch {
+          return [];
+        }
+      })
+    : [],
+);
+let excluidosPorRepetidos = 0;
 
 lineas.forEach(({ n, crudo: linea }) => {
   let m;
@@ -71,6 +86,10 @@ lineas.forEach(({ n, crudo: linea }) => {
     m = JSON.parse(linea);
   } catch {
     problemas.push([n, "JSON inválido (línea cortada, texto extra o comillas)", linea.slice(0, 60)]);
+    return;
+  }
+  if (textosAExcluir.has(normalizar(m.texto ?? ""))) {
+    excluidosPorRepetidos++;
     return;
   }
   const falla = [];
@@ -96,6 +115,7 @@ lineas.forEach(({ n, crudo: linea }) => {
 
 const cuenta = (campo, lista) => lista.reduce((a, m) => ((a[m[campo] ?? "(vacío)"] = (a[m[campo] ?? "(vacío)"] ?? 0) + 1), a), {});
 console.log(`Líneas con contenido: ${lineasPorSalto} | objetos JSON encontrados: ${lineas.length}${lineas.length !== lineasPorSalto ? " (hay objetos pegados en una línea)" : ""} | válidos: ${validos.length} | con problemas: ${problemas.length}`);
+if (archivoAExcluir) console.log(`Excluidos por estar también en ${archivoAExcluir}: ${excluidosPorRepetidos}`);
 console.log("Categorías (válidas):", JSON.stringify(cuenta("categoria_esperada", validos)));
 console.log("Dificultad:", JSON.stringify(cuenta("dificultad", validos)));
 console.log("Anónimos:", validos.filter((m) => m.anonimo).length, "| con cargo mencionado:", validos.filter((m) => m.cargo_mencionado).length, "| con nombre mencionado:", validos.filter((m) => m.nombre_mencionado).length);
@@ -107,6 +127,9 @@ if (problemas.length) {
   if (problemas.length > 40) console.log(`  … y ${problemas.length - 40} más`);
 }
 if (salida) {
-  writeFileSync(salida, validos.map((m) => JSON.stringify(m)).join("\n") + "\n");
+  const aGuardar = prefijoIds
+    ? validos.map((m, i) => ({ ...m, id: `${prefijoIds}-${String(i + 1).padStart(Math.max(3, String(validos.length).length), "0")}` }))
+    : validos;
+  writeFileSync(salida, aGuardar.map((m) => JSON.stringify(m)).join("\n") + "\n");
   console.log(`\nVálidas guardadas en ${salida}`);
 }

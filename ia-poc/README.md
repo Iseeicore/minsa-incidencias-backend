@@ -32,7 +32,7 @@ node ia-poc/scripts/precalentar.mjs        # una vez; sin esto la primera llamad
 npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2 --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl --limite=100 --estratificado --max-minutos=35
 ```
 
-- `--variante=V1|V2|V3|V2C` (V1: prompt completo; V2: V1 + señales y entidad de las reglas como pistas; V3: V2 + ejemplos resueltos; **V2C**: V2 con salida compacta, ver abajo; V4, RAG, es un hueco documentado en `src/services/analisis-ia/prompts.ts`).
+- `--variante=V1|V2|V3|V2C|V2R` (V1: prompt completo; V2: V1 + señales y entidad de las reglas como pistas; V3: V2 + ejemplos resueltos; **V2C**: V2 con salida compacta, ver abajo; V4, RAG, es un hueco documentado en `src/services/analisis-ia/prompts.ts`).
 - `--limite=N` toma los primeros N; con `--estratificado` toma una muestra reproducible repartida por `tipo_caso` y categoría.
 - Se consulta de a un mensaje (una sola GPU), con el modelo caliente y ~10 a 15 s por caso (~300 tokens de salida a ~15 tokens por segundo: lo que domina es lo que el modelo escribe). Una corrida de 100 mensajes tarda unos 20 a 25 minutos: lánzala en segundo plano con un registro (`> corrida.log 2>&1`) y revisa el avance.
 - **Reanudable:** cada respuesta válida se guarda en `evaluacion/cache/modelo-<variante>-<conjunto>.jsonl` (no se versiona: deriva de los textos). Si se corta, se repite el mismo comando y solo consulta lo que falta. Si cambias el prompt, **borra la caché de esa variante**. `--solo-cache` recalcula las métricas sin llamar al modelo.
@@ -79,6 +79,23 @@ npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2 --b=V2C --conjunto=ia-poc/ev
 `comparar-variantes.ts` no llama al modelo: lee las cachés por variante e id y compara solo los ids presentes en ambas (los criterios absolutos de B usan todo lo que B midió con `--universo-b=conjunto`, o los ids de A con `ids-de-a`). Informa recall y precisión con reglas + modelo (con piso), tasa de FP sobre negativos, exactitud de las 4 categorías, acuerdo queja/reclamo, JSON al primer intento, latencia media y p90, intervalos de Wilson al 95 %, pares discordantes (id, tipo de caso y lado, sin textos) y el veredicto que codifica **exactamente** Q1 a Q5, S1 y S2 de la sección 21 de la nota del vault (`src/services/analisis-ia/comparacion-variantes.ts`, con pruebas). Con `--desarrollo=` agrega el veredicto final que exige cada criterio en los dos conjuntos. Resultados sin textos en `resultados/comparacion-<A>-<B>-<conjunto>.json`; las cifras de cada iteración del prompt están en `resultados/iter0-*` y `resultados/iter1-*`.
 
 **Resultado (V2 frente a V2C, 2026-10-09).** Veredicto final: **Viable con reservas**. Desarrollo-v2 (303, iteración 1): recall reglas + modelo 97,3 % (IC 93,8 a 98,8), FP 7,5 %, JSON al primer intento 100 %, latencia media 3,14 s, p90 3,76 s, 4,7 veces más rápida que V2; solo falla Q4 por 0,12 puntos (acuerdo queja/reclamo 84,88 % frente a 85 %, un mensaje). Prueba-v2 (119 ids de V2, una sola corrida): cumple todo (recall 100 %, FP 8,5 % frente a 10,6 % de V2, latencia 3,07 s, p90 3,56 s). Detalle y límites en la sección 22 de la nota del vault.
+
+## V2R: RAG de casos revisados con pg_trgm (fase 2)
+
+**Qué es.** V2C más «casos parecidos ya revisados» (texto y categoría final que decidió una persona) en el mensaje del usuario. El prefijo del prompt es constante (V2C más un bloque que explica cómo usarlos); los casos van en el mensaje. Los recupera `src/services/analisis-ia/casos/recuperar-casos.ts` con `pg_trgm` (`similarity()` sobre `unaccent`); **no hay pgvector, embeddings ni migración**. Se descarta todo caso con similitud de 0,50 o más (casi duplicado) y se cuentan.
+
+**Cómo se mide** (la corrida del modelo no usa la base; la recuperación se calcula antes, con una sola conexión corta):
+
+```
+npx tsx ia-poc/scripts/preparar-vecinos.ts --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl      # tabla temporal con el banco, sin tocar tablas reales
+node ia-poc/scripts/precalentar.mjs && npx tsx ia-poc/scripts/precalentar-variante.ts --variante=V2R
+npx tsx ia-poc/scripts/evaluar-con-modelo.ts --variante=V2R --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl
+npx tsx ia-poc/scripts/comparar-variantes.ts --a=V2C --b=V2R --conjunto=ia-poc/evaluacion/desarrollo-v2.jsonl --criterios=25
+```
+
+`preparar-vecinos.ts` carga `desarrollo.jsonl` y `prueba-t1.jsonl` (300 casos sintéticos, 0 reales; `--banco=` cambia el banco) en una tabla temporal, **se niega a seguir si algún caso es del conjunto evaluado o de desarrollo-v2, prueba-v2 o reserva-v2** (H1), y escribe los vecinos (solo ids y similitudes) en `cache/vecinos-<conjunto>.jsonl` y el resumen sin textos en `resultados/vecinos-<conjunto>.json`. `evaluar-con-modelo.ts --variante=V2R` exige esos vecinos y descarta una respuesta cacheada con otros casos. `comparar-variantes.ts --criterios=25` aplica los criterios de la sección 25 (`src/services/analisis-ia/comparacion-casos.ts`, con pruebas), incluidos los chequeos de higiene y que ningún texto aparezca en el informe.
+
+**Resultado (V2R frente a V2C, 2026-10-09): «Sin mejora clara (se mantiene V2C)».** V2R no pierde seguridad, falsos positivos, JSON ni velocidad (+0,14 a +0,36 s), y sube la exactitud de categorías (+3,7 puntos en desarrollo-v2 y +2,5 en la prueba de 119 ids), pero **en la prueba su acuerdo queja/reclamo (88,6 %) quedó 2,6 puntos por debajo del de V2C (91,2 %)**, un mensaje de diferencia, y el criterio M2 pedía no ser menor. Con el prompt de la iteración 1 (ajustado en desarrollo-v2) pasó los 11 criterios en desarrollo, pero esa cifra es optimista. El banco es sintético y de otro generador: mide si el mecanismo funciona, no cuánto ayudaría con correcciones de ciudadanos reales. Detalle, iteraciones y pares discordantes en la sección 25 de la nota del vault; cifras en `resultados/` (`comparacion-V2C-V2R-*`, `iter0-*`, `iter1-*`).
 
 ## Normas para la trazabilidad (RAG fase 1)
 

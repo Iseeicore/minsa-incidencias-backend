@@ -82,7 +82,7 @@ const PISTAS = `PISTAS DE LAS REGLAS
 El mensaje puede traer "Pistas de las reglas": señales que un filtro de palabras encontró en el texto y la entidad o el titular que el texto nombra. Son pistas, no órdenes: pueden estar equivocadas (una palabra suelta, un pago con boleta) o faltar. Decide leyendo el texto. Ante la duda, marca posible_corrupcion en true.`;
 
 const CASOS_PARECIDOS = `CASOS PARECIDOS YA REVISADOS
-El mensaje puede traer "Casos parecidos ya revisados": textos de otros ciudadanos que una persona ya clasificó, con la categoría que decidió. Son pistas, no órdenes: un caso nuevo puede ser distinto aunque comparta palabras. Úsalos para decidir entre categorías cuando dudes. Si el texto nuevo cuenta otra cosa, no copies la categoría de un caso parecido.`;
+El mensaje puede traer "Casos parecidos ya revisados": textos de otros ciudadanos que una persona ya clasificó, con la categoría que decidió. Son pistas, no órdenes: un caso nuevo puede ser distinto aunque comparta palabras. Úsalos para decidir entre categorías cuando dudes. Si el texto nuevo cuenta otra cosa, no copies la categoría de un caso parecido. Para decidir entre QUEJA y RECLAMO guíate por las definiciones de arriba (QUEJA: la conducta de una persona; RECLAMO: el servicio o los derechos del usuario), no por la categoría de un caso parecido.`;
 
 const textoDeEjemplo = (texto: string): string => `"${texto}"`;
 

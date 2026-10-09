@@ -1,0 +1,64 @@
+{
+  "conjunto": "desarrollo-v2",
+  "mensajesEvaluados": 303,
+  "parametros": {
+    "maximo": 3,
+    "similitudMinima": 0.15,
+    "similitudCasiDuplicado": 0.5
+  },
+  "banco": {
+    "casos": 300,
+    "origen": [
+      {
+        "archivo": "desarrollo.jsonl",
+        "casos": 100,
+        "tipo": "sintetico"
+      },
+      {
+        "archivo": "prueba-t1.jsonl",
+        "casos": 200,
+        "tipo": "sintetico"
+      }
+    ],
+    "reales": 0,
+    "porCategoria": {
+      "DENUNCIA_CORRUPCION": 118,
+      "QUEJA": 65,
+      "RECLAMO": 77,
+      "OTRO": 40
+    },
+    "excluidosPorDiseno": [
+      "desarrollo-v2.jsonl",
+      "prueba-v2.jsonl",
+      "reserva-v2.jsonl",
+      "ia.entrenamiento_categoria de la base desechable (32 filas de pruebas y semillas, no son revisiones reales)"
+    ]
+  },
+  "recuperacion": {
+    "mensajesConEjemplos": 300,
+    "ejemplosPorMensaje": {
+      "0": 3,
+      "1": 2,
+      "2": 5,
+      "3": 293
+    },
+    "similitud": {
+      "minima": 0.15,
+      "mediana": 0.2525,
+      "p90": 0.2948,
+      "maxima": 0.4516
+    },
+    "categoriaDeLosEjemplos": {
+      "QUEJA": 182,
+      "OTRO": 149,
+      "RECLAMO": 220,
+      "DENUNCIA_CORRUPCION": 340
+    },
+    "mensajesConCasiDuplicadosDescartados": 1,
+    "casiDuplicadosDescartados": 1
+  },
+  "higiene": {
+    "H1_casosDelBancoEnElConjunto": 0,
+    "H2_paresCasiDuplicadoEnElPrompt": 0
+  }
+}
